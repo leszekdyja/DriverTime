@@ -6,6 +6,8 @@ public class Driver : BaseEntity
 {
     public Guid CompanyId { get; set; }
 
+    public Company? Company { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
 
     public string LastName { get; set; } = string.Empty;
