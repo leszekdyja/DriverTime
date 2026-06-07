@@ -17,4 +17,8 @@ public class Company : BaseEntity
     public ICollection<Driver> Drivers { get; set; } = new List<Driver>();
 
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
+
+    public ICollection<ImportFile> ImportFiles { get; set; } = new List<ImportFile>();
+
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }
