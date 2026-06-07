@@ -6,6 +6,8 @@ public class Vehicle : BaseEntity
 {
     public Guid CompanyId { get; set; }
 
+    public Company? Company { get; set; }
+
     public string RegistrationNumber { get; set; } = string.Empty;
 
     public string Vin { get; set; } = string.Empty;
