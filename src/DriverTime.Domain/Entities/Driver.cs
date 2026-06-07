@@ -17,4 +17,8 @@ public class Driver : BaseEntity
     public string DrivingLicenseNumber { get; set; } = string.Empty;
 
     public bool Active { get; set; } = true;
+
+    public ICollection<DriverActivity> Activities { get; set; } = new List<DriverActivity>();
+
+    public ICollection<Violation> Violations { get; set; } = new List<Violation>();
 }
