@@ -13,4 +13,6 @@ public class Vehicle : BaseEntity
     public string Vin { get; set; } = string.Empty;
 
     public bool Active { get; set; } = true;
+
+    public ICollection<DriverActivity> Activities { get; set; } = new List<DriverActivity>();
 }
