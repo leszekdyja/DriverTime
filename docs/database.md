@@ -1,6 +1,19 @@
 DriverTime Database Design
 
-Core Tables
+Overview
+
+DriverTime uses PostgreSQL as the primary database.
+
+The database is designed for:
+
+* Multi-company support
+* DDD file processing
+* Driver activity storage
+* Violation analysis
+* Reporting
+* Audit logging
+
+⸻
 
 companies
 
@@ -13,6 +26,24 @@ Columns:
 * vat_number
 * address
 * active
+* created_at
+
+⸻
+
+company_settings
+
+Stores company-specific settings.
+
+Columns:
+
+* id
+* company_id
+* timezone
+* country
+* language
+* report_settings
+
+⸻
 
 users
 
@@ -26,6 +57,9 @@ Columns:
 * password_hash
 * role
 * active
+* created_at
+
+⸻
 
 drivers
 
@@ -40,6 +74,24 @@ Columns:
 * driver_card_number
 * driving_license_number
 * active
+* created_at
+
+⸻
+
+driver_cards
+
+Stores driver card history.
+
+Columns:
+
+* id
+* driver_id
+* card_number
+* issue_date
+* expiry_date
+* status
+
+⸻
 
 vehicles
 
@@ -51,8 +103,25 @@ Columns:
 * company_id
 * registration_number
 * vin
-* tachograph_serial
 * active
+* created_at
+
+⸻
+
+tachographs
+
+Stores tachograph devices.
+
+Columns:
+
+* id
+* vehicle_id
+* serial_number
+* manufacturer
+* calibration_date
+* next_calibration_date
+
+⸻
 
 driver_documents
 
@@ -67,6 +136,8 @@ Columns:
 * valid_from
 * valid_to
 
+⸻
+
 import_files
 
 Stores uploaded DDD files.
@@ -79,10 +150,20 @@ Columns:
 * stored_file_name
 * file_size
 * status
+* uploaded_at
+
+Status Values:
+
+* Pending
+* Processing
+* Completed
+* Failed
+
+⸻
 
 driver_activities
 
-Stores normalized activities from DDD files.
+Stores normalized activities extracted from DDD files.
 
 Columns:
 
@@ -92,6 +173,17 @@ Columns:
 * start_time
 * end_time
 * activity_type
+* source_file_id
+
+Activity Types:
+
+* Driving
+* Break
+* Rest
+* Availability
+* Work
+
+⸻
 
 violations
 
@@ -101,14 +193,26 @@ Columns:
 
 * id
 * driver_id
-* code
+* violation_type
+* regulation_reference
 * severity
+* duration_minutes
 * violation_start
 * violation_end
+* calculated_at
+
+Severity Values:
+
+* Low
+* Medium
+* High
+* Critical
+
+⸻
 
 notifications
 
-Stores user notifications.
+Stores system notifications.
 
 Columns:
 
@@ -116,11 +220,14 @@ Columns:
 * company_id
 * title
 * message
+* is_read
 * created_at
+
+⸻
 
 audit_log
 
-Stores system audit history.
+Stores audit history.
 
 Columns:
 
@@ -130,3 +237,48 @@ Columns:
 * entity_name
 * entity_id
 * created_at
+
+⸻
+
+Relationships
+
+Company
+
+* Company → Users
+* Company → Drivers
+* Company → Vehicles
+* Company → Import Files
+* Company → Notifications
+
+Driver
+
+* Driver → Driver Cards
+* Driver → Driver Documents
+* Driver → Driver Activities
+* Driver → Violations
+
+Vehicle
+
+* Vehicle → Tachographs
+* Vehicle → Driver Activities
+
+Import File
+
+* Import File → Driver Activities
+
+User
+
+* User → Audit Log
+
+⸻
+
+Future Tables
+
+Planned for future releases:
+
+* gps_positions
+* fleet_dashboard_metrics
+* report_templates
+* report_exports
+* mobile_devices
+* driver_portal_accounts
