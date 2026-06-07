@@ -12,6 +12,10 @@ public class DriverActivity : BaseEntity
 
     public Vehicle? Vehicle { get; set; }
 
+    public Guid? ImportFileId { get; set; }
+
+    public ImportFile? ImportFile { get; set; }
+
     public DateTime StartTime { get; set; }
 
     public DateTime EndTime { get; set; }
