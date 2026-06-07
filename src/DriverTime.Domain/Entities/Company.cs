@@ -1,9 +1,9 @@
+using DriverTime.Domain.Common;
+
 namespace DriverTime.Domain.Entities;
 
-public class Company
+public class Company : BaseEntity
 {
-    public Guid Id { get; set; }
-
     public string Name { get; set; } = string.Empty;
 
     public string VatNumber { get; set; } = string.Empty;
@@ -11,6 +11,4 @@ public class Company
     public string Address { get; set; } = string.Empty;
 
     public bool Active { get; set; } = true;
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
