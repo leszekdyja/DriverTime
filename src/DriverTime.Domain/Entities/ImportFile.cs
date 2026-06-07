@@ -17,4 +17,6 @@ public class ImportFile : BaseEntity
     public string Status { get; set; } = string.Empty;
 
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
+
+    public ICollection<DriverActivity> Activities { get; set; } = new List<DriverActivity>();
 }
