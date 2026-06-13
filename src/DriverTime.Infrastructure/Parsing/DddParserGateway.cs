@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using DriverTime.Application.DDD;
 using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using Microsoft.Extensions.Options;
@@ -52,13 +51,81 @@ public sealed class DddParserGateway : IDddParserGateway
         if (process.ExitCode != 0)
             throw new InvalidOperationException($"DDD parser failed: {stderr}");
 
-        var result = JsonSerializer.Deserialize<DddParseResultDto>(
-            stdout,
-            new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+        if (string.IsNullOrWhiteSpace(stdout))
+            throw new InvalidOperationException("DDD parser returned empty output.");
 
-        return result ?? throw new InvalidOperationException("DDD parser returned invalid JSON.");
+        var json = ExtractJson(stdout);
+
+        using var document = JsonDocument.Parse(json);
+
+        var source = FindDataElement(document.RootElement);
+
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var parsed = JsonSerializer.Deserialize<DddParseResultDto>(
+            source.GetRawText(),
+            options);
+
+        return parsed ?? throw new InvalidOperationException("DDD parser returned invalid JSON.");
+    }
+
+    private static string ExtractJson(string text)
+    {
+        var firstBrace = text.IndexOf('{');
+        var lastBrace = text.LastIndexOf('}');
+
+        if (firstBrace < 0 || lastBrace < 0 || lastBrace <= firstBrace)
+            throw new InvalidOperationException("DDD parser output does not contain JSON object.");
+
+        return text.Substring(firstBrace, lastBrace - firstBrace + 1);
+    }
+
+    private static JsonElement FindDataElement(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("activities", out _) ||
+                element.TryGetProperty("vehicle_uses", out _) ||
+                element.TryGetProperty("country_code_entries", out _))
+            {
+                return element;
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                var found = TryFindDataElement(property.Value);
+
+                if (found.HasValue)
+                    return found.Value;
+            }
+        }
+
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var found = TryFindDataElement(item);
+
+                if (found.HasValue)
+                    return found.Value;
+            }
+        }
+
+        throw new InvalidOperationException("DDD parser JSON does not contain tachograph data.");
+    }
+
+    private static JsonElement? TryFindDataElement(JsonElement element)
+    {
+        try
+        {
+            return FindDataElement(element);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

@@ -1,12 +1,18 @@
+using System.Text.Json.Serialization;
+
 namespace DriverTime.Application.DDD.DTOs;
 
 public class ParsedVehicleUseDto
 {
-    public DateTime Start { get; set; }
+    [JsonPropertyName("start")]
+    public string Start { get; set; } = string.Empty;
 
-    public DateTime End { get; set; }
+    [JsonPropertyName("end")]
+    public string End { get; set; } = string.Empty;
 
+    [JsonPropertyName("vehicle_registration")]
     public string VehicleRegistration { get; set; } = string.Empty;
 
+    [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
 }

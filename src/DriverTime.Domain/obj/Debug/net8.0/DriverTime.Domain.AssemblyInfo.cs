@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DriverTime.Domain")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fda253761c97db1f168983351d121c52010db23c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+478a4564d4c5b372fa8382f3e834839fd235f171")]
 [assembly: System.Reflection.AssemblyProductAttribute("DriverTime.Domain")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DriverTime.Domain")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
