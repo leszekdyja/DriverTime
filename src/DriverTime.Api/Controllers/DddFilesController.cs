@@ -16,18 +16,22 @@ public class DddFilesController : ControllerBase
 
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload(IFormFile file, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload(
+        IFormFile file,
+        CancellationToken cancellationToken)
     {
         if (file == null || file.Length == 0)
             return BadRequest("No file uploaded.");
 
-        if (!Path.GetExtension(file.FileName).Equals(".ddd", StringComparison.OrdinalIgnoreCase))
+        if (!Path.GetExtension(file.FileName)
+            .Equals(".ddd", StringComparison.OrdinalIgnoreCase))
+        {
             return BadRequest("Only .ddd files are supported.");
+        }
 
         var tempFilePath = Path.Combine(
             Path.GetTempPath(),
-            $"{Guid.NewGuid()}.ddd"
-        );
+            $"{Guid.NewGuid()}.ddd");
 
         try
         {
@@ -36,14 +40,25 @@ public class DddFilesController : ControllerBase
                 await file.CopyToAsync(stream, cancellationToken);
             }
 
-            var result = await _dddParserGateway.ParseAsync(tempFilePath, cancellationToken);
+            var result = await _dddParserGateway.ParseAsync(
+                tempFilePath,
+                cancellationToken);
 
             return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                error = ex.Message
+            });
         }
         finally
         {
             if (System.IO.File.Exists(tempFilePath))
+            {
                 System.IO.File.Delete(tempFilePath);
+            }
         }
     }
 }
