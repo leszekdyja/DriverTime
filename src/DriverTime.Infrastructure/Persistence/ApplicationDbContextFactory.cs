@@ -10,7 +10,7 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
         optionsBuilder.UseNpgsql(
-            "Host=localhost;Port=5432;Database=drivertime;Username=postgres;Password=postgres"
+            "Host=localhost;Port=5433;Database=drivertime;Username=postgres;Password=postgres"
         );
 
         return new ApplicationDbContext(optionsBuilder.Options);

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DriverTime.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+60789c1c657f8b9c5561ad503379c52ac59eba38")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+609fbedd5e25f3021e6ea4d6d9582c131daee88b")]
 [assembly: System.Reflection.AssemblyProductAttribute("DriverTime.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DriverTime.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
