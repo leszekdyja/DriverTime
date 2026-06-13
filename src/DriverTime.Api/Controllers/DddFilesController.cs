@@ -7,11 +7,11 @@ namespace DriverTime.Api.Controllers;
 [Route("api/ddd-files")]
 public class DddFilesController : ControllerBase
 {
-    private readonly IDddParserGateway _dddParserGateway;
+    private readonly IDddFileService _dddFileService;
 
-    public DddFilesController(IDddParserGateway dddParserGateway)
+    public DddFilesController(IDddFileService dddFileService)
     {
-        _dddParserGateway = dddParserGateway;
+        _dddFileService = dddFileService;
     }
 
     [HttpPost("upload")]
@@ -29,36 +29,16 @@ public class DddFilesController : ControllerBase
             return BadRequest("Only .ddd files are supported.");
         }
 
-        var tempFilePath = Path.Combine(
-            Path.GetTempPath(),
-            $"{Guid.NewGuid()}.ddd");
+        await using var stream = file.OpenReadStream();
 
-        try
-        {
-            await using (var stream = System.IO.File.Create(tempFilePath))
-            {
-                await file.CopyToAsync(stream, cancellationToken);
-            }
+        var id = await _dddFileService.UploadAndParseAsync(
+            stream,
+            file.FileName,
+            cancellationToken);
 
-            var result = await _dddParserGateway.ParseAsync(
-                tempFilePath,
-                cancellationToken);
-
-            return Ok(result);
-        }
-        catch (Exception ex)
+        return Ok(new
         {
-            return StatusCode(500, new
-            {
-                error = ex.Message
-            });
-        }
-        finally
-        {
-            if (System.IO.File.Exists(tempFilePath))
-            {
-                System.IO.File.Delete(tempFilePath);
-            }
-        }
+            id
+        });
     }
 }

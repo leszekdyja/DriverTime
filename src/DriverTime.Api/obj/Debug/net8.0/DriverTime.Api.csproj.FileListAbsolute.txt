@@ -122,3 +122,4 @@ C:\Users\48602\source\repos\DriverTime\src\DriverTime.Api\obj\Debug\net8.0\refin
 C:\Users\48602\source\repos\DriverTime\src\DriverTime.Api\obj\Debug\net8.0\DriverTime.Api.pdb
 C:\Users\48602\source\repos\DriverTime\src\DriverTime.Api\obj\Debug\net8.0\DriverTime.Api.genruntimeconfig.cache
 C:\Users\48602\source\repos\DriverTime\src\DriverTime.Api\obj\Debug\net8.0\ref\DriverTime.Api.dll
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Api\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

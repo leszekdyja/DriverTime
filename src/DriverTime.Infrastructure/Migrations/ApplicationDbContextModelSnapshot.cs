@@ -22,36 +22,6 @@ namespace DriverTime.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("DriverTime.Domain.Entities.AuditLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActionType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("EntityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("EntityName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("audit_log", (string)null);
-                });
-
             modelBuilder.Entity("DriverTime.Domain.Entities.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -78,7 +48,60 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("companies", (string)null);
+                    b.ToTable("Companies");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.CountryEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DddFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("EntryTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DddFileId");
+
+                    b.ToTable("CountryEntries");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.DddFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DriverCardNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DriverName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UploadedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistrationNumber")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DddFiles");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>
@@ -116,7 +139,7 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("drivers", (string)null);
+                    b.ToTable("Driver");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.DriverActivity", b =>
@@ -131,6 +154,9 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DddFileId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("DriverId")
                         .HasColumnType("uuid");
@@ -149,13 +175,15 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DddFileId");
+
                     b.HasIndex("DriverId");
 
                     b.HasIndex("ImportFileId");
 
                     b.HasIndex("VehicleId");
 
-                    b.ToTable("driver_activities", (string)null);
+                    b.ToTable("DriverActivities");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
@@ -192,7 +220,7 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("import_files", (string)null);
+                    b.ToTable("ImportFile");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Notification", b =>
@@ -222,40 +250,7 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("notifications", (string)null);
-                });
-
-            modelBuilder.Entity("DriverTime.Domain.Entities.TachographFile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<long>("FileSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("FileType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ParserStatus")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UploadedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("tachograph_files", (string)null);
+                    b.ToTable("Notification");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.User", b =>
@@ -289,7 +284,7 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("users", (string)null);
+                    b.ToTable("User");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Vehicle", b =>
@@ -319,7 +314,32 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("CompanyId");
 
-                    b.ToTable("vehicles", (string)null);
+                    b.ToTable("Vehicle");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.VehicleUse", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DddFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("EndTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StartTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistrationNumber")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DddFileId");
+
+                    b.ToTable("VehicleUses");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Violation", b =>
@@ -362,16 +382,18 @@ namespace DriverTime.Infrastructure.Migrations
 
                     b.HasIndex("DriverId");
 
-                    b.ToTable("violations", (string)null);
+                    b.ToTable("Violation");
                 });
 
-            modelBuilder.Entity("DriverTime.Domain.Entities.AuditLog", b =>
+            modelBuilder.Entity("DriverTime.Domain.Entities.CountryEntry", b =>
                 {
-                    b.HasOne("DriverTime.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId");
+                    b.HasOne("DriverTime.Domain.Entities.DddFile", "DddFile")
+                        .WithMany("CountryEntries")
+                        .HasForeignKey("DddFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Navigation("User");
+                    b.Navigation("DddFile");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>
@@ -387,6 +409,10 @@ namespace DriverTime.Infrastructure.Migrations
 
             modelBuilder.Entity("DriverTime.Domain.Entities.DriverActivity", b =>
                 {
+                    b.HasOne("DriverTime.Domain.Entities.DddFile", null)
+                        .WithMany("DriverActivities")
+                        .HasForeignKey("DddFileId");
+
                     b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
                         .WithMany("Activities")
                         .HasForeignKey("DriverId")
@@ -452,6 +478,17 @@ namespace DriverTime.Infrastructure.Migrations
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.VehicleUse", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.DddFile", "DddFile")
+                        .WithMany("VehicleUses")
+                        .HasForeignKey("DddFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DddFile");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Violation", b =>
                 {
                     b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
@@ -474,6 +511,15 @@ namespace DriverTime.Infrastructure.Migrations
                     b.Navigation("Users");
 
                     b.Navigation("Vehicles");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.DddFile", b =>
+                {
+                    b.Navigation("CountryEntries");
+
+                    b.Navigation("DriverActivities");
+
+                    b.Navigation("VehicleUses");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>

@@ -1,5 +1,7 @@
 using DriverTime.Application.Interfaces;
-using DriverTime.Infrastructure.Parsing;
+using DriverTime.Infrastructure.Persistence;
+using DriverTime.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,10 +13,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<DddParserOptions>(
-            configuration.GetSection("DddParser"));
+        services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("DefaultConnection")));
 
-        services.AddScoped<IDddParserGateway, DddParserGateway>();
+        services.AddScoped<IDddFileService, DddFileService>();
 
         return services;
     }
