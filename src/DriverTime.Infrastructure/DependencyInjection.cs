@@ -11,7 +11,10 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddScoped<IDddParserGateway, PythonDddParserGateway>();
+        services.Configure<DddParserOptions>(
+            configuration.GetSection("DddParser"));
+
+        services.AddScoped<IDddParserGateway, DddParserGateway>();
 
         return services;
     }

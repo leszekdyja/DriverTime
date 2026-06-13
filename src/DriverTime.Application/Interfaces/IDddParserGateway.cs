@@ -1,4 +1,5 @@
-using DriverTime.Application.DTOs.Ddd;
+using DriverTime.Application.DDD;
+using DriverTime.Application.DDD.DTOs;
 
 namespace DriverTime.Application.Interfaces;
 
