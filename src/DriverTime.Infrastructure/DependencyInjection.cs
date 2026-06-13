@@ -1,8 +1,5 @@
-using DriverTime.Application.Common.Interfaces;
-using DriverTime.Application.Companies.Services;
-using DriverTime.Infrastructure.Persistence;
-using DriverTime.Infrastructure.Services;
-using Microsoft.EntityFrameworkCore;
+using DriverTime.Application.Interfaces;
+using DriverTime.Infrastructure.Parsing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,13 +11,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
-
-        services.AddScoped<IApplicationDbContext>(provider =>
-            provider.GetRequiredService<ApplicationDbContext>());
-
-        services.AddScoped<ICompanyService, CompanyService>();
+        services.AddScoped<IDddParserGateway, PythonDddParserGateway>();
 
         return services;
     }
