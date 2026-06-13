@@ -1,0 +1,12 @@
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\bin\Debug\net8.0\DriverTime.Domain.deps.json
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\bin\Debug\net8.0\DriverTime.Domain.dll
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\bin\Debug\net8.0\DriverTime.Domain.pdb
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.AssemblyInfoInputs.cache
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.AssemblyInfo.cs
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.csproj.CoreCompileInputs.cache
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.sourcelink.json
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.dll
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\refint\DriverTime.Domain.dll
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\DriverTime.Domain.pdb
+C:\Users\48602\source\repos\DriverTime\src\DriverTime.Domain\obj\Debug\net8.0\ref\DriverTime.Domain.dll

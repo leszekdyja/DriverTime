@@ -25,6 +25,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public DbSet<ImportFile> ImportFiles => Set<ImportFile>();
 
+    public DbSet<TachographFile> TachographFiles => Set<TachographFile>();
+
     public DbSet<Notification> Notifications => Set<Notification>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -40,6 +42,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<DriverActivity>().ToTable("driver_activities");
         modelBuilder.Entity<Violation>().ToTable("violations");
         modelBuilder.Entity<ImportFile>().ToTable("import_files");
+        modelBuilder.Entity<TachographFile>().ToTable("tachograph_files");
         modelBuilder.Entity<Notification>().ToTable("notifications");
         modelBuilder.Entity<AuditLog>().ToTable("audit_log");
     }
