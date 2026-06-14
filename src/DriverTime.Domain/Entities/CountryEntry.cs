@@ -1,9 +1,9 @@
-﻿using DriverTime.Domain.Common;
+﻿namespace DriverTime.Domain.Entities;
 
-namespace DriverTime.Domain.Entities;
-
-public class CountryEntry : BaseEntity
+public class CountryEntry
 {
+    public Guid Id { get; set; }
+
     public Guid DddFileId { get; set; }
 
     public DddFile DddFile { get; set; } = null!;

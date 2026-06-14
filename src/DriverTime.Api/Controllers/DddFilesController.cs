@@ -31,14 +31,14 @@ public class DddFilesController : ControllerBase
 
         await using var stream = file.OpenReadStream();
 
-        var id = await _dddFileService.UploadAndParseAsync(
+        var importId = await _dddFileService.UploadAndParseAsync(
             stream,
             file.FileName,
             cancellationToken);
 
         return Ok(new
         {
-            id
+            id = importId
         });
     }
 }

@@ -10,8 +10,6 @@ public class ApplicationDbContext : DbContext
     {
     }
 
-    public DbSet<Company> Companies => Set<Company>();
-
     public DbSet<DddFile> DddFiles => Set<DddFile>();
 
     public DbSet<DriverActivity> DriverActivities => Set<DriverActivity>();

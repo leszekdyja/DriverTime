@@ -1,16 +1,18 @@
 ﻿using DriverTime.Application.Interfaces;
-using DriverTime.Domain.Entities;
-using DriverTime.Infrastructure.Persistence;
 
 namespace DriverTime.Infrastructure.Services;
 
 public class DddFileService : IDddFileService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly IDddParserGateway _parserGateway;
+    private readonly IDddImportService _dddImportService;
 
-    public DddFileService(ApplicationDbContext dbContext)
+    public DddFileService(
+        IDddParserGateway parserGateway,
+        IDddImportService dddImportService)
     {
-        _dbContext = dbContext;
+        _parserGateway = parserGateway;
+        _dddImportService = dddImportService;
     }
 
     public async Task<Guid> UploadAndParseAsync(
@@ -18,17 +20,24 @@ public class DddFileService : IDddFileService
         string fileName,
         CancellationToken cancellationToken = default)
     {
-        var dddFile = new DddFile
+        var tempFilePath = Path.Combine(
+            Path.GetTempPath(),
+            $"{Guid.NewGuid()}.ddd");
+
+        await using (var output = File.Create(tempFilePath))
         {
-            Id = Guid.NewGuid(),
-            FileName = fileName,
-            UploadedAtUtc = DateTime.UtcNow
-        };
+            await fileStream.CopyToAsync(output, cancellationToken);
+        }
 
-        _dbContext.DddFiles.Add(dddFile);
+        var parsedData = await _parserGateway.ParseAsync(
+            tempFilePath,
+            cancellationToken);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        File.Delete(tempFilePath);
 
-        return dddFile.Id;
+        return await _dddImportService.ImportAsync(
+            fileName,
+            parsedData,
+            cancellationToken);
     }
 }

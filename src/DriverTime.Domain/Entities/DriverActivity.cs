@@ -1,24 +1,16 @@
-using DriverTime.Domain.Common;
-
 namespace DriverTime.Domain.Entities;
 
-public class DriverActivity : BaseEntity
+public class DriverActivity
 {
-    public Guid DriverId { get; set; }
+    public Guid Id { get; set; }
 
-    public Driver? Driver { get; set; }
+    public Guid DddFileId { get; set; }
 
-    public Guid? VehicleId { get; set; }
+    public DddFile DddFile { get; set; } = null!;
 
-    public Vehicle? Vehicle { get; set; }
+    public DateTime StartUtc { get; set; }
 
-    public Guid? ImportFileId { get; set; }
-
-    public ImportFile? ImportFile { get; set; }
-
-    public DateTime StartTime { get; set; }
-
-    public DateTime EndTime { get; set; }
+    public DateTime EndUtc { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;
 }

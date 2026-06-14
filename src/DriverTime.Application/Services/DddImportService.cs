@@ -1,0 +1,72 @@
+﻿using DriverTime.Application.DDD.DTOs;
+using DriverTime.Application.Interfaces;
+using DriverTime.Domain.Entities;
+
+namespace DriverTime.Application.Services;
+
+public class DddImportService : IDddImportService
+{
+    public Task<Guid> ImportAsync(
+        string fileName,
+        DddParseResultDto parsedData,
+        CancellationToken cancellationToken = default)
+    {
+        var dddFile = new DddFile
+        {
+            Id = Guid.NewGuid(),
+            FileName = fileName,
+            UploadedAtUtc = DateTime.UtcNow
+        };
+
+        foreach (var activity in parsedData.Activities)
+        {
+            dddFile.DriverActivities.Add(new DriverActivity
+            {
+                Id = Guid.NewGuid(),
+                StartUtc = DateTime.TryParse(activity.Start, out var start)
+                    ? start
+                    : DateTime.UtcNow,
+
+                EndUtc = DateTime.TryParse(activity.End, out var end)
+                    ? end
+                    : DateTime.UtcNow,
+
+                ActivityType = activity.Activity
+            });
+        }
+
+        foreach (var vehicle in parsedData.VehicleUses)
+        {
+            dddFile.VehicleUses.Add(new VehicleUse
+            {
+                Id = Guid.NewGuid(),
+
+                RegistrationNumber = vehicle.VehicleRegistration,
+
+                StartUtc = DateTime.TryParse(vehicle.Start, out var start)
+                    ? start
+                    : DateTime.UtcNow,
+
+                EndUtc = DateTime.TryParse(vehicle.End, out var end)
+                    ? end
+                    : DateTime.UtcNow
+            });
+        }
+
+        foreach (var country in parsedData.CountryCodeEntries)
+        {
+            dddFile.CountryEntries.Add(new CountryEntry
+            {
+                Id = Guid.NewGuid(),
+
+                CountryCode = country.CountryCode,
+
+                EntryTimeUtc = DateTime.TryParse(country.Timestamp, out var entryTime)
+                    ? entryTime
+                    : DateTime.UtcNow
+            });
+        }
+
+        return Task.FromResult(dddFile.Id);
+    }
+}
