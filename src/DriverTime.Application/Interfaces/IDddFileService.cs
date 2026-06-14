@@ -6,9 +6,9 @@ public interface IDddFileService
 {
     Task<DddParseResultDto> UploadAndParseAsync(
         Stream fileStream,
-        string fileName);
+        string originalFileName);
 
-    Task<IEnumerable<DddFileDto>> GetAllAsync();
+    Task<IReadOnlyList<DddFileDto>> GetAllAsync();
 
     Task<DddFileDetailsDto?> GetByIdAsync(Guid id);
 }

@@ -26,50 +26,34 @@ public class DddImportService : IDddImportService
             UploadedAtUtc = DateTime.UtcNow
         };
 
+        _dbContext.DddFiles.Add(dddFile);
+
         foreach (var activity in parsedData.Activities)
         {
-            dddFile.DriverActivities.Add(new DriverActivity
+            if (!DateTime.TryParse(activity.Start, out var startUtc))
+            {
+                continue;
+            }
+
+            if (!DateTime.TryParse(activity.End, out var endUtc))
+            {
+                continue;
+            }
+
+            var driverActivity = new DriverActivity
             {
                 Id = Guid.NewGuid(),
-                StartUtc = ToUtc(activity.Start),
-                EndUtc = ToUtc(activity.End),
+                DddFileId = dddFile.Id,
+                StartUtc = startUtc,
+                EndUtc = endUtc,
                 ActivityType = activity.Activity
-            });
-        }
+            };
 
-        foreach (var vehicle in parsedData.VehicleUses)
-        {
-            dddFile.VehicleUses.Add(new VehicleUse
-            {
-                Id = Guid.NewGuid(),
-                RegistrationNumber = vehicle.VehicleRegistration,
-                StartUtc = ToUtc(vehicle.Start),
-                EndUtc = ToUtc(vehicle.End)
-            });
+            _dbContext.DriverActivities.Add(driverActivity);
         }
-
-        foreach (var country in parsedData.CountryCodeEntries)
-        {
-            dddFile.CountryEntries.Add(new CountryEntry
-            {
-                Id = Guid.NewGuid(),
-                CountryCode = country.CountryCode,
-                EntryTimeUtc = ToUtc(country.Timestamp)
-            });
-        }
-
-        _dbContext.DddFiles.Add(dddFile);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return dddFile.Id;
-    }
-
-    private static DateTime ToUtc(string value)
-    {
-        if (!DateTime.TryParse(value, out var dateTime))
-            return DateTime.UtcNow;
-
-        return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
     }
 }

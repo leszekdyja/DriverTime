@@ -8,104 +8,123 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DddFileService : IDddFileService
 {
-    private readonly ApplicationDbContext _context;
-    private readonly IDddParserGateway _dddParserGateway;
+    private readonly ApplicationDbContext _dbContext;
+    private readonly IDddParserGateway _parserGateway;
 
     public DddFileService(
-        ApplicationDbContext context,
-        IDddParserGateway dddParserGateway)
+        ApplicationDbContext dbContext,
+        IDddParserGateway parserGateway)
     {
-        _context = context;
-        _dddParserGateway = dddParserGateway;
+        _dbContext = dbContext;
+        _parserGateway = parserGateway;
     }
 
     public async Task<DddParseResultDto> UploadAndParseAsync(
         Stream fileStream,
-        string fileName)
+        string originalFileName)
     {
-        var tempFilePath = Path.GetTempFileName();
+        var tempFilePath = Path.Combine(
+            Path.GetTempPath(),
+            $"{Guid.NewGuid()}.ddd");
 
-        try
+        await using (var file = File.Create(tempFilePath))
         {
-            await using (var file = File.Create(tempFilePath))
+            await fileStream.CopyToAsync(file);
+        }
+
+        var parseResult = await _parserGateway.ParseAsync(tempFilePath);
+
+        var dddFile = new DddFile
+        {
+            Id = Guid.NewGuid(),
+            FileName = originalFileName,
+            UploadedAtUtc = DateTime.UtcNow
+        };
+
+        foreach (var activity in parseResult.Activities)
+        {
+            if (!DateTime.TryParse(activity.Start, out var startUtc))
             {
-                await fileStream.CopyToAsync(file);
+                continue;
             }
 
-            var result = await _dddParserGateway.ParseAsync(tempFilePath);
+            if (!DateTime.TryParse(activity.End, out var endUtc))
+            {
+                continue;
+            }
 
-            var dddFile = new DddFile
+            startUtc = DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
+            endUtc = DateTime.SpecifyKind(endUtc, DateTimeKind.Utc);
+
+            dddFile.DriverActivities.Add(new DriverActivity
             {
                 Id = Guid.NewGuid(),
-                FileName = fileName,
-                UploadedAtUtc = DateTime.UtcNow
-            };
-
-            foreach (var activity in result.Activities)
-            {
-                dddFile.DriverActivities.Add(new DriverActivity
-                {
-                    Id = Guid.NewGuid(),
-                    ActivityType = activity.Activity,
-
-                    StartUtc = DateTime.SpecifyKind(
-                        DateTime.Parse(activity.Start),
-                        DateTimeKind.Utc),
-
-                    EndUtc = DateTime.SpecifyKind(
-                        DateTime.Parse(activity.End),
-                        DateTimeKind.Utc)
-                });
-            }
-
-            foreach (var vehicle in result.VehicleUses)
-            {
-                dddFile.VehicleUses.Add(new VehicleUse
-                {
-                    Id = Guid.NewGuid(),
-                    RegistrationNumber = vehicle.VehicleRegistration,
-
-                    StartUtc = DateTime.SpecifyKind(
-                        DateTime.Parse(vehicle.Start),
-                        DateTimeKind.Utc),
-
-                    EndUtc = DateTime.SpecifyKind(
-                        DateTime.Parse(vehicle.End),
-                        DateTimeKind.Utc)
-                });
-            }
-
-            foreach (var country in result.CountryCodeEntries)
-            {
-                dddFile.CountryEntries.Add(new CountryEntry
-                {
-                    Id = Guid.NewGuid(),
-                    CountryCode = country.CountryCode,
-
-                    EntryTimeUtc = DateTime.SpecifyKind(
-                        DateTime.Parse(country.Timestamp),
-                        DateTimeKind.Utc)
-                });
-            }
-
-            _context.DddFiles.Add(dddFile);
-
-            await _context.SaveChangesAsync();
-
-            return result;
+                DddFileId = dddFile.Id,
+                StartUtc = startUtc,
+                EndUtc = endUtc,
+                ActivityType = activity.Activity
+            });
         }
-        finally
+
+        foreach (var countryEntry in parseResult.CountryCodeEntries)
         {
-            if (File.Exists(tempFilePath))
+            if (!DateTime.TryParse(countryEntry.Timestamp, out var entryUtc))
             {
-                File.Delete(tempFilePath);
+                continue;
             }
+
+            entryUtc = DateTime.SpecifyKind(entryUtc, DateTimeKind.Utc);
+
+            dddFile.CountryEntries.Add(new CountryEntry
+            {
+                Id = Guid.NewGuid(),
+                DddFileId = dddFile.Id,
+                EntryTimeUtc = entryUtc,
+                CountryCode = countryEntry.CountryCode
+            });
         }
+
+        foreach (var vehicleUse in parseResult.VehicleUses)
+        {
+            if (!DateTime.TryParse(vehicleUse.Start, out var startUtc))
+            {
+                continue;
+            }
+
+            if (!DateTime.TryParse(vehicleUse.End, out var endUtc))
+            {
+                continue;
+            }
+
+            startUtc = DateTime.SpecifyKind(startUtc, DateTimeKind.Utc);
+            endUtc = DateTime.SpecifyKind(endUtc, DateTimeKind.Utc);
+
+            dddFile.VehicleUses.Add(new VehicleUse
+            {
+                Id = Guid.NewGuid(),
+                DddFileId = dddFile.Id,
+                RegistrationNumber = vehicleUse.VehicleRegistration,
+                StartUtc = startUtc,
+                EndUtc = endUtc
+            });
+        }
+
+        _dbContext.DddFiles.Add(dddFile);
+
+        await _dbContext.SaveChangesAsync();
+
+        if (File.Exists(tempFilePath))
+        {
+            File.Delete(tempFilePath);
+        }
+
+        return parseResult;
     }
 
-    public async Task<IEnumerable<DddFileDto>> GetAllAsync()
+    public async Task<IReadOnlyList<DddFileDto>> GetAllAsync()
     {
-        return await _context.DddFiles
+        return await _dbContext.DddFiles
+            .AsNoTracking()
             .OrderByDescending(x => x.UploadedAtUtc)
             .Select(x => new DddFileDto
             {
@@ -118,46 +137,52 @@ public class DddFileService : IDddFileService
 
     public async Task<DddFileDetailsDto?> GetByIdAsync(Guid id)
     {
-        var file = await _context.DddFiles
+        var dddFile = await _dbContext.DddFiles
+            .AsNoTracking()
             .Include(x => x.DriverActivities)
-            .Include(x => x.VehicleUses)
             .Include(x => x.CountryEntries)
+            .Include(x => x.VehicleUses)
             .FirstOrDefaultAsync(x => x.Id == id);
 
-        if (file is null)
+        if (dddFile == null)
         {
             return null;
         }
 
         return new DddFileDetailsDto
         {
-            Id = file.Id,
-            FileName = file.FileName,
-            UploadedAtUtc = file.UploadedAtUtc,
+            Id = dddFile.Id,
+            FileName = dddFile.FileName,
+            UploadedAt = dddFile.UploadedAtUtc,
 
-            Activities = file.DriverActivities
+            DriverActivities = dddFile.DriverActivities
+                .OrderBy(x => x.StartUtc)
                 .Select(x => new ParsedDriverActivityDto
                 {
-                    Activity = x.ActivityType,
-                    Start = x.StartUtc.ToString("O"),
-                    End = x.EndUtc.ToString("O")
+                    Start = x.StartUtc.ToString("yyyy-MM-dd HH:mm:ss"),
+                    End = x.EndUtc.ToString("yyyy-MM-dd HH:mm:ss"),
+                    Activity = x.ActivityType
                 })
                 .ToList(),
 
-            VehicleUses = file.VehicleUses
-                .Select(x => new ParsedVehicleUseDto
-                {
-                    VehicleRegistration = x.RegistrationNumber,
-                    Start = x.StartUtc.ToString("O"),
-                    End = x.EndUtc.ToString("O")
-                })
-                .ToList(),
-
-            CountryEntries = file.CountryEntries
+            CountryEntries = dddFile.CountryEntries
+                .OrderBy(x => x.EntryTimeUtc)
                 .Select(x => new ParsedCountryEntryDto
                 {
-                    CountryCode = x.CountryCode,
-                    Timestamp = x.EntryTimeUtc.ToString("O")
+                    Timestamp = x.EntryTimeUtc
+                        .ToString("yyyy-MM-dd HH:mm:ss"),
+
+                    CountryCode = x.CountryCode
+                })
+                .ToList(),
+
+            VehicleUses = dddFile.VehicleUses
+                .OrderBy(x => x.StartUtc)
+                .Select(x => new ParsedVehicleUseDto
+                {
+                    Start = x.StartUtc.ToString("yyyy-MM-dd HH:mm:ss"),
+                    End = x.EndUtc.ToString("yyyy-MM-dd HH:mm:ss"),
+                    VehicleRegistration = x.RegistrationNumber
                 })
                 .ToList()
         };

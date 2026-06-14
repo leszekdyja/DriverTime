@@ -6,17 +6,11 @@ public class DddFileDetailsDto
 
     public string FileName { get; set; } = string.Empty;
 
-    public string DriverCardNumber { get; set; } = string.Empty;
+    public DateTime UploadedAt { get; set; }
 
-    public string DriverFirstName { get; set; } = string.Empty;
+    public List<ParsedDriverActivityDto> DriverActivities { get; set; } = new();
 
-    public string DriverLastName { get; set; } = string.Empty;
+    public List<ParsedCountryEntryDto> CountryEntries { get; set; } = new();
 
-    public DateTime UploadedAtUtc { get; set; }
-
-    public List<ParsedDriverActivityDto> Activities { get; set; } = [];
-
-    public List<ParsedVehicleUseDto> VehicleUses { get; set; } = [];
-
-    public List<ParsedCountryEntryDto> CountryEntries { get; set; } = [];
+    public List<ParsedVehicleUseDto> VehicleUses { get; set; } = new();
 }

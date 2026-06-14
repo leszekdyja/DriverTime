@@ -15,17 +15,16 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(
-                configuration.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
 
         services.Configure<DddParserOptions>(
             configuration.GetSection("DddParser"));
 
         services.AddScoped<IDddParserGateway, DddParserGateway>();
-
         services.AddScoped<IDddFileService, DddFileService>();
-
         services.AddScoped<IDddImportService, DddImportService>();
+        services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IDriverActivityService, DriverActivityService>();
 
         return services;
     }
