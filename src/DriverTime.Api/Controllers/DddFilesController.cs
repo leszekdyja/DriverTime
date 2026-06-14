@@ -16,12 +16,12 @@ public class DddFilesController : ControllerBase
 
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload(
-        IFormFile file,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload(IFormFile file)
     {
         if (file == null || file.Length == 0)
+        {
             return BadRequest("No file uploaded.");
+        }
 
         if (!Path.GetExtension(file.FileName)
             .Equals(".ddd", StringComparison.OrdinalIgnoreCase))
@@ -31,14 +31,31 @@ public class DddFilesController : ControllerBase
 
         await using var stream = file.OpenReadStream();
 
-        var importId = await _dddFileService.UploadAndParseAsync(
+        var result = await _dddFileService.UploadAndParseAsync(
             stream,
-            file.FileName,
-            cancellationToken);
+            file.FileName);
 
-        return Ok(new
+        return Ok(result);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        var result = await _dddFileService.GetAllAsync();
+
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetById(Guid id)
+    {
+        var result = await _dddFileService.GetByIdAsync(id);
+
+        if (result is null)
         {
-            id = importId
-        });
+            return NotFound();
+        }
+
+        return Ok(result);
     }
 }
