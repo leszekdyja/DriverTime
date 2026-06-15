@@ -38,6 +38,9 @@ public sealed class DddParserGateway : IDddParserGateway
             StandardErrorEncoding = Encoding.UTF8
         };
 
+        startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
+        startInfo.Environment["PYTHONUTF8"] = "1";
+
         using var process = Process.Start(startInfo);
 
         if (process is null)
