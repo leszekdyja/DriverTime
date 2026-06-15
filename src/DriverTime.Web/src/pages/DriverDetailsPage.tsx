@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import DriverActivityCalendar from "../components/DriverActivityCalendar";
 import {
     getDriverDetails,
     type DriverDetails,
@@ -146,6 +147,8 @@ export default function DriverDetailsPage() {
                         <TimeCard label="Odpoczynek" seconds={details.restSeconds} />
                         <TimeCard label="Dyspozycyjnosc" seconds={details.availabilitySeconds} />
                     </section>
+
+                    <DriverActivityCalendar driverId={details.id} />
 
                     <DetailsSection title="Historia importow" empty={details.recentImports.length === 0}>
                         <table><thead><tr><th>Plik</th><th>Data</th><th>Aktywnosci</th><th></th></tr></thead>

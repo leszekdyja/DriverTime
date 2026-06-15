@@ -35,6 +35,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverActivityService, DriverActivityService>();
 
+        services.AddScoped<IDriverActivityCalendarService, DriverActivityCalendarService>();
+
         services.AddScoped<IDriverViolationService, DriverViolationService>();
 
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
