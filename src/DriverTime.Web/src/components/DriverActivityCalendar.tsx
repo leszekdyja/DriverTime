@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { memo, useEffect, useState, type FormEvent } from "react";
+
+import { EmptyState } from "./UiStates";
 
 import {
     getDriverActivityCalendar,
@@ -73,9 +75,9 @@ function getTimelineStyle(activity: CalendarActivity) {
 }
 
 export default function DriverActivityCalendar({ driverId }: { driverId: string }) {
-    const defaultRange = getDefaultRange();
-    const [dateFrom, setDateFrom] = useState(defaultRange.from);
-    const [dateTo, setDateTo] = useState(defaultRange.to);
+    const [initialRange] = useState(getDefaultRange);
+    const [dateFrom, setDateFrom] = useState(initialRange.from);
+    const [dateTo, setDateTo] = useState(initialRange.to);
     const [days, setDays] = useState<ActivityCalendarDay[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
@@ -104,7 +106,7 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
     }
 
     useEffect(() => {
-        void loadCalendar(defaultRange.from, defaultRange.to);
+        void loadCalendar(initialRange.from, initialRange.to);
     }, [driverId]);
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -131,12 +133,12 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
             </div>
 
             {error && <p className="activity-calendar-error" role="alert">{error}</p>}
-            {isLoading && <p className="driver-details-state" role="status">Ladowanie kalendarza...</p>}
-            {!isLoading && !error && days.length === 0 && <p className="driver-empty-state">Brak dni w wybranym zakresie.</p>}
-            {!isLoading && !error && days.length > 0 && !hasData && <p className="driver-empty-state">Brak aktywnosci i naruszen w wybranym zakresie.</p>}
+            {isLoading && days.length === 0 && <CalendarSkeleton />}
+            {!isLoading && !error && days.length === 0 && <EmptyState title="Brak dni" description="W wybranym zakresie nie ma danych kalendarza." />}
+            {!isLoading && !error && days.length > 0 && !hasData && <EmptyState title="Brak aktywnosci" description="W wybranym zakresie nie zapisano aktywnosci ani naruszen." />}
 
-            {!isLoading && !error && days.length > 0 && (
-                <div className="activity-calendar-days">
+            {!error && days.length > 0 && (
+                <div className={isLoading ? "activity-calendar-days is-refreshing" : "activity-calendar-days"} aria-busy={isLoading}>
                     {days.map((day) => <CalendarDayCard day={day} key={day.date} />)}
                 </div>
             )}
@@ -144,7 +146,7 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
     );
 }
 
-function CalendarDayCard({ day }: { day: ActivityCalendarDay }) {
+const CalendarDayCard = memo(function CalendarDayCard({ day }: { day: ActivityCalendarDay }) {
     return (
         <article className="activity-day-card">
             <div className="activity-day-heading">
@@ -183,8 +185,16 @@ function CalendarDayCard({ day }: { day: ActivityCalendarDay }) {
             )}
         </article>
     );
-}
+});
 
-function Summary({ label, value, className }: { label: string; value: number; className: string }) {
+const Summary = memo(function Summary({ label, value, className }: { label: string; value: number; className: string }) {
     return <div className={`activity-summary-item ${className}`}><span>{label}</span><strong>{formatDuration(value)}</strong></div>;
+});
+
+function CalendarSkeleton() {
+    return (
+        <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ladowanie kalendarza">
+            {Array.from({ length: 3 }, (_, index) => <div className="ui-skeleton activity-day-skeleton" key={index} />)}
+        </div>
+    );
 }

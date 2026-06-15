@@ -47,7 +47,10 @@
     justify-content: space-between;
     overflow: hidden;
     padding: 22px;
+    transition: transform 0.2s, box-shadow 0.2s;
 }
+
+.summary-card:hover { transform: translateY(-3px); box-shadow: 0 16px 38px rgb(15 23 42 / 11%); }
 
 .summary-card::before {
     position: absolute;
@@ -121,6 +124,12 @@
 .driver-risk-card.high::before { background: #f97316; }
 .driver-risk-card.critical::before { background: #dc2626; }
 
+.driver-risk-card.critical {
+    border-color: var(--color-danger-border);
+    background: linear-gradient(145deg, var(--color-danger-bg), var(--color-surface));
+    box-shadow: 0 10px 24px rgb(220 38 38 / 12%);
+}
+
 .driver-risk-card span,
 .driver-risk-card small {
     color: var(--color-muted);
@@ -147,6 +156,45 @@
     border: 1px solid var(--color-border);
     border-radius: 10px;
 }
+
+.risk-quick-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.risk-quick-stats span {
+    padding: 7px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface-muted);
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.risk-quick-stats strong { color: var(--color-heading); }
+
+.risk-toolbar {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.risk-toolbar input,
+.risk-toolbar select {
+    min-height: 42px;
+    padding: 8px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+}
+
+.risk-toolbar input { width: min(100%, 420px); }
+.risk-toolbar select { min-width: 190px; }
+.critical-risk-row { background: color-mix(in srgb, var(--color-danger-bg) 62%, transparent); }
+.critical-risk-row td:first-child { box-shadow: inset 3px 0 var(--color-danger); }
 
 .driver-risk-table {
     min-width: 1050px;
@@ -325,6 +373,8 @@
 .skeleton-heading { width: min(420px, 80%); height: 64px; }
 .skeleton-card { min-height: 128px; }
 .skeleton-panel { min-height: 380px; }
+.dashboard-activity-skeleton { min-height: 180px; margin-top: 22px; }
+.dashboard-risk-skeleton { min-height: 430px; margin-top: 22px; }
 .chart-skeleton { width: 100%; height: 100%; }
 
 @keyframes dashboard-shimmer {
@@ -354,4 +404,6 @@
     .activity-overview,
     .driver-risk-section { padding: 18px; }
     .activity-chart { height: 260px; }
+    .risk-toolbar { flex-direction: column; }
+    .risk-toolbar input, .risk-toolbar select { width: 100%; }
 }

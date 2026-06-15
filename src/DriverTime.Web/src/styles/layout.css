@@ -245,10 +245,13 @@
         flex-direction: row;
         justify-content: space-around;
         gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
     }
 
     .nav-link {
-        flex: 1;
+        min-width: 58px;
+        flex: 1 0 auto;
         flex-direction: column;
         gap: 3px;
         padding: 5px 3px;
@@ -280,4 +283,10 @@
     .page-content {
         padding: 22px 16px;
     }
+}
+
+@media (max-width: 420px) {
+    .topbar-title span { display: none; }
+    .topbar { gap: 10px; }
+    .profile-placeholder { padding: 6px; }
 }

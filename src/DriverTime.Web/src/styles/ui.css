@@ -1,0 +1,95 @@
+.ui-skeleton {
+    min-height: 15px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-surface-muted) 25%, var(--color-surface-hover) 50%, var(--color-surface-muted) 75%);
+    background-size: 200% 100%;
+    animation: ui-shimmer 1.4s infinite;
+}
+
+.ui-table-skeleton {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-border);
+}
+
+.ui-skeleton-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 24px;
+    min-height: 58px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--color-surface);
+}
+
+.ui-empty-state {
+    display: grid;
+    min-height: 180px;
+    place-items: center;
+    align-content: center;
+    gap: 7px;
+    padding: 28px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: 12px;
+    background: var(--color-surface-muted);
+    text-align: center;
+}
+
+.ui-empty-state > span {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border-radius: 12px;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-size: 22px;
+    box-shadow: var(--shadow-sm);
+}
+
+.ui-empty-state strong { color: var(--color-heading); }
+.ui-empty-state p { max-width: 440px; margin: 0; }
+
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 16px;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.pagination > div { display: flex; align-items: center; gap: 10px; }
+.pagination strong { color: var(--color-heading); font-size: 13px; }
+
+.pagination button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    font-weight: 650;
+}
+
+.pagination button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.pagination button:disabled { cursor: not-allowed; opacity: 0.45; }
+
+@keyframes ui-shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 560px) {
+    .pagination { align-items: stretch; flex-direction: column; }
+    .pagination > div { justify-content: space-between; }
+    .pagination button { flex: 1; }
+    .ui-skeleton-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

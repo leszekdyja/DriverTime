@@ -111,6 +111,18 @@
     padding: 20px;
 }
 
+.report-card-skeleton { min-height: 116px; border-radius: var(--radius-card); }
+
+.reports-content {
+    position: relative;
+    transition: opacity 0.18s;
+}
+
+.reports-content.is-refreshing {
+    pointer-events: none;
+    opacity: 0.55;
+}
+
 .report-summary-card span {
     color: #6b7280;
     font-size: 14px;
@@ -210,4 +222,6 @@
     .reports-panel {
         padding: 18px;
     }
+
+    .reports-filters button { width: 100%; }
 }

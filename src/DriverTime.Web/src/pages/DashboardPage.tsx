@@ -263,6 +263,8 @@ function DashboardSkeleton() {
                     <div className="skeleton skeleton-card" key={index} />
                 ))}
             </div>
+            <div className="skeleton dashboard-activity-skeleton" />
+            <div className="skeleton dashboard-risk-skeleton" />
             <div className="analytics-grid">
                 <div className="skeleton skeleton-panel" />
                 <div className="skeleton skeleton-panel" />

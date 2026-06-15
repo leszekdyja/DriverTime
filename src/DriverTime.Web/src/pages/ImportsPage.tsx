@@ -6,6 +6,7 @@ import {
 import { Link } from "react-router-dom";
 
 import DddDropzone from "../components/DddDropzone";
+import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDddImports,
     type DddImport,
@@ -65,11 +66,7 @@ export default function ImportsPage() {
             <section className="imports-list">
                 <h3>Lista importow</h3>
 
-                {isLoadingImports && (
-                    <p className="status-message" role="status">
-                        Ladowanie importow...
-                    </p>
-                )}
+                {isLoadingImports && imports.length === 0 && <TableSkeleton rows={5} columns={7} />}
 
                 {importsError && (
                     <p className="message error-message" role="alert">
@@ -78,11 +75,14 @@ export default function ImportsPage() {
                 )}
 
                 {!isLoadingImports && !importsError && imports.length === 0 && (
-                    <p>Brak zaimportowanych plikow DDD.</p>
+                    <EmptyState
+                        title="Brak importow DDD"
+                        description="Przeciagnij pliki DDD do pola powyzej, aby rozpoczac analize danych kierowcow."
+                    />
                 )}
 
-                {!isLoadingImports && !importsError && imports.length > 0 && (
-                    <div className="imports-table-wrapper">
+                {!importsError && imports.length > 0 && (
+                    <div className={isLoadingImports ? "imports-table-wrapper is-refreshing" : "imports-table-wrapper"} aria-busy={isLoadingImports}>
                         <table className="imports-table">
                             <thead>
                                 <tr>

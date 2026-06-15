@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+    useCallback,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useState,
+    type FormEvent,
+} from "react";
 import { Link } from "react-router-dom";
 
+import Pagination from "../components/Pagination";
+import { EmptyState, TableSkeleton } from "../components/UiStates";
 import { API_URL } from "../config/api";
 import { apiFetch } from "../services/apiClient";
 import "../styles/drivers.css";
@@ -21,6 +30,7 @@ type CreateDriverDto = {
 };
 
 const driversApiUrl = `${API_URL}/api/drivers`;
+const pageSize = 8;
 
 export default function DriversPage() {
     const [drivers, setDrivers] = useState<DriverDto[]>([]);
@@ -33,6 +43,24 @@ export default function DriversPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
+    const [search, setSearch] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
+    const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
+
+    const filteredDrivers = useMemo(() => {
+        if (!deferredSearch) return drivers;
+
+        return drivers.filter((driver) =>
+            driver.lastName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
+            || driver.cardNumber.toLocaleLowerCase("pl-PL").includes(deferredSearch),
+        );
+    }, [deferredSearch, drivers]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredDrivers.length / pageSize));
+    const visibleDrivers = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredDrivers.slice(start, start + pageSize);
+    }, [currentPage, filteredDrivers]);
 
     const loadDrivers = useCallback(async () => {
         setIsLoading(true);
@@ -92,6 +120,14 @@ export default function DriversPage() {
     useEffect(() => {
         void loadDrivers();
     }, [loadDrivers]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [deferredSearch]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
     return (
         <div className="drivers-page">
@@ -154,6 +190,22 @@ export default function DriversPage() {
                         <p>Aktualna baza kierowcow DriverTime.</p>
                     </div>
 
+                    <div className="drivers-toolbar">
+                        <label htmlFor="drivers-search">Szukaj kierowcy</label>
+                        <input
+                            id="drivers-search"
+                            type="search"
+                            placeholder="Nazwisko lub numer karty"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                        />
+                        {search && (
+                            <button type="button" onClick={() => setSearch("")}>
+                                Wyczysc
+                            </button>
+                        )}
+                    </div>
+
                     {message && (
                         <p className={`drivers-message${isError ? " error" : " success"}`}>
                             {message}
@@ -161,14 +213,25 @@ export default function DriversPage() {
                     )}
 
                     {isLoading ? (
-                        <p className="drivers-status" role="status">
-                            Ladowanie kierowcow...
-                        </p>
+                        drivers.length === 0 ? (
+                            <TableSkeleton rows={6} columns={6} />
+                        ) : null
                     ) : drivers.length === 0 ? (
-                        <p>Brak kierowcow.</p>
-                    ) : (
-                        <div className="drivers-table-wrapper">
-                            <table className="drivers-table">
+                        <EmptyState
+                            title="Brak kierowcow"
+                            description="Dodaj kierowce recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
+                        />
+                    ) : filteredDrivers.length === 0 ? (
+                        <EmptyState
+                            title="Brak wynikow"
+                            description="Zmien nazwisko lub numer karty wpisany w wyszukiwarce."
+                        />
+                    ) : null}
+
+                    {drivers.length > 0 && filteredDrivers.length > 0 && (
+                        <div className={isLoading ? "drivers-content is-refreshing" : "drivers-content"} aria-busy={isLoading}>
+                            <div className="drivers-table-wrapper">
+                                <table className="drivers-table">
                                 <thead>
                                     <tr>
                                         <th>Imie</th>
@@ -180,7 +243,7 @@ export default function DriversPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {drivers.map((driver) => (
+                                    {visibleDrivers.map((driver) => (
                                         <tr key={driver.id}>
                                             <td>{driver.firstName}</td>
                                             <td>{driver.lastName}</td>
@@ -199,7 +262,14 @@ export default function DriversPage() {
                                         </tr>
                                     ))}
                                 </tbody>
-                            </table>
+                                </table>
+                            </div>
+                            <Pagination
+                                currentPage={currentPage}
+                                pageSize={pageSize}
+                                totalItems={filteredDrivers.length}
+                                onPageChange={setCurrentPage}
+                            />
                         </div>
                     )}
                 </section>

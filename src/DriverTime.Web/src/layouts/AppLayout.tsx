@@ -68,7 +68,7 @@ export default function AppLayout() {
                         <span className="profile-avatar">{initials}</span>
                         <div>
                             <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
-                            <span>{user?.companyName} · {user?.role}</span>
+                            <span>{user?.companyName} / {user?.role}</span>
                         </div>
                         <button className="logout-button" type="button" onClick={logout}>
                             Wyloguj

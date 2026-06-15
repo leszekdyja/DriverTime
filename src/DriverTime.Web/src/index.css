@@ -126,3 +126,26 @@ p {
 #root {
     min-height: 100vh;
 }
+
+table { font-variant-numeric: tabular-nums; }
+
+[class$="table-wrapper"] {
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+.imports-table-wrapper.is-refreshing {
+    pointer-events: none;
+    opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

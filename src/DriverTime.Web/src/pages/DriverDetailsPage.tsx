@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import DriverActivityCalendar from "../components/DriverActivityCalendar";
+import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDriverDetails,
     type DriverDetails,
@@ -121,7 +122,7 @@ export default function DriverDetailsPage() {
                 Powrot do kierowcow
             </Link>
 
-            {isLoading && <p className="driver-details-state">Ladowanie kierowcy...</p>}
+            {isLoading && <DriverDetailsSkeleton />}
             {error && <p className="driver-details-error" role="alert">{error}</p>}
 
             {details && (
@@ -166,15 +167,16 @@ export default function DriverDetailsPage() {
                         <h3>Naruszenia</h3>
 
                         {areViolationsLoading ? (
-                            <p className="driver-details-state" role="status">
-                                Ladowanie naruszen...
-                            </p>
+                            <TableSkeleton rows={4} columns={5} />
                         ) : violationsError ? (
                             <p className="driver-violations-error" role="alert">
                                 {violationsError}
                             </p>
                         ) : violations.length === 0 ? (
-                            <p className="driver-empty-state">Brak naruszen.</p>
+                            <EmptyState
+                                title="Brak naruszen"
+                                description="Dla zapisanych aktywnosci kierowcy nie wykryto naruszen czasu pracy."
+                            />
                         ) : (
                             <div className="driver-details-table violations-table">
                                 <table>
@@ -196,14 +198,27 @@ export default function DriverDetailsPage() {
     );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+const Info = memo(function Info({ label, value }: { label: string; value: string }) {
     return <div><dt>{label}</dt><dd>{value}</dd></div>;
-}
+});
 
-function TimeCard({ label, seconds }: { label: string; seconds: number }) {
+const TimeCard = memo(function TimeCard({ label, seconds }: { label: string; seconds: number }) {
     return <article><span>{label}</span><strong>{formatDuration(seconds)}</strong></article>;
-}
+});
 
 function DetailsSection({ title, empty, children }: { title: string; empty: boolean; children: ReactNode }) {
-    return <section className="driver-details-section"><h3>{title}</h3>{empty ? <p className="driver-empty-state">Brak danych.</p> : <div className="driver-details-table">{children}</div>}</section>;
+    return <section className="driver-details-section"><h3>{title}</h3>{empty ? <EmptyState title={`Brak: ${title.toLocaleLowerCase("pl-PL")}`} description="Dane pojawia sie po kolejnym imporcie pliku DDD." /> : <div className="driver-details-table">{children}</div>}</section>;
+}
+
+function DriverDetailsSkeleton() {
+    return (
+        <div className="driver-details-skeleton" aria-busy="true" aria-label="Ladowanie kierowcy">
+            <div className="ui-skeleton driver-profile-skeleton" />
+            <div className="driver-time-grid">
+                {Array.from({ length: 4 }, (_, index) => <div className="ui-skeleton driver-time-skeleton" key={index} />)}
+            </div>
+            <div className="ui-skeleton driver-section-skeleton" />
+            <div className="ui-skeleton driver-section-skeleton" />
+        </div>
+    );
 }

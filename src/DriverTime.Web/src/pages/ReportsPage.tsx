@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import Pagination from "../components/Pagination";
+import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     downloadDriverReport,
     getReportActivities,
@@ -8,6 +10,8 @@ import {
     type ReportDriver,
 } from "../services/reportsService";
 import "../styles/reports.css";
+
+const pageSize = 12;
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
@@ -44,6 +48,7 @@ export default function ReportsPage() {
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [error, setError] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
 
     async function loadActivities(
         cardNumber = driverCardNumber,
@@ -54,7 +59,9 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            setActivities(await getReportActivities(cardNumber, from, to));
+            const loadedActivities = await getReportActivities(cardNumber, from, to);
+            setCurrentPage(1);
+            setActivities(loadedActivities);
         } catch (loadError) {
             setError(
                 loadError instanceof Error
@@ -76,6 +83,7 @@ export default function ReportsPage() {
                     getReportActivities("", "", ""),
                 ]);
 
+                setCurrentPage(1);
                 setDrivers(loadedDrivers);
                 setActivities(loadedActivities);
             } catch (loadError) {
@@ -113,6 +121,11 @@ export default function ReportsPage() {
 
         return result;
     }, [activities]);
+
+    const visibleActivities = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return activities.slice(start, start + pageSize);
+    }, [activities, currentPage]);
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -313,11 +326,17 @@ export default function ReportsPage() {
                 </p>
             )}
 
-            <section className="report-summary" aria-label="Podsumowanie czasu">
-                <SummaryCard label="Czas jazdy" seconds={totals.driving} />
-                <SummaryCard label="Czas odpoczynku" seconds={totals.rest} />
-                <SummaryCard label="Czas pracy" seconds={totals.work} />
-            </section>
+            {isLoading && activities.length === 0 ? (
+                <section className="report-summary report-summary-skeleton" aria-label="Ladowanie podsumowania">
+                    {Array.from({ length: 3 }, (_, index) => <div className="ui-skeleton report-card-skeleton" key={index} />)}
+                </section>
+            ) : (
+                <section className="report-summary" aria-label="Podsumowanie czasu">
+                    <SummaryCard label="Czas jazdy" seconds={totals.driving} />
+                    <SummaryCard label="Czas odpoczynku" seconds={totals.rest} />
+                    <SummaryCard label="Czas pracy" seconds={totals.work} />
+                </section>
+            )}
 
             <section className="reports-panel">
                 <div className="reports-panel-heading">
@@ -325,15 +344,17 @@ export default function ReportsPage() {
                     <span>{activities.length} rekordow</span>
                 </div>
 
-                {isLoading ? (
-                    <p className="reports-status" role="status">
-                        Ladowanie danych raportu...
-                    </p>
+                {isLoading && activities.length === 0 ? (
+                    <TableSkeleton rows={7} columns={6} />
                 ) : activities.length === 0 ? (
-                    <p>Brak aktywnosci dla wybranych filtrow.</p>
+                    <EmptyState
+                        title="Brak danych raportu"
+                        description="Dla wybranego kierowcy i zakresu dat nie znaleziono aktywnosci."
+                    />
                 ) : (
-                    <div className="reports-table-wrapper">
-                        <table className="reports-table">
+                    <div className={isLoading ? "reports-content is-refreshing" : "reports-content"} aria-busy={isLoading}>
+                        <div className="reports-table-wrapper">
+                            <table className="reports-table">
                             <thead>
                                 <tr>
                                     <th>Kierowca</th>
@@ -345,7 +366,7 @@ export default function ReportsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {activities.map((activity) => (
+                                {visibleActivities.map((activity) => (
                                     <tr key={activity.id}>
                                         <td>
                                             {`${activity.driverFirstName} ${activity.driverLastName}`.trim() || "Brak danych"}
@@ -358,7 +379,14 @@ export default function ReportsPage() {
                                     </tr>
                                 ))}
                             </tbody>
-                        </table>
+                            </table>
+                        </div>
+                        <Pagination
+                            currentPage={currentPage}
+                            pageSize={pageSize}
+                            totalItems={activities.length}
+                            onPageChange={setCurrentPage}
+                        />
                     </div>
                 )}
             </section>

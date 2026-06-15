@@ -1,4 +1,10 @@
-import { useEffect, useState } from "react";
+import {
+    memo,
+    useDeferredValue,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -6,7 +12,10 @@ import {
     type DriverRisk,
     type DriverRiskOverview as DriverRiskOverviewData,
 } from "../services/dashboardService";
+import Pagination from "./Pagination";
+import { EmptyState, TableSkeleton } from "./UiStates";
 
+const pageSize = 8;
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",
@@ -14,7 +23,6 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 
 function formatDate(value: string | null) {
     if (!value) return "Brak importu";
-
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? "Brak danych" : dateFormatter.format(date);
 }
@@ -24,36 +32,53 @@ function formatDays(value: number | null) {
 }
 
 function getRiskLabel(status: DriverRisk["riskStatus"]) {
-    return {
-        Low: "Niskie",
-        Medium: "Srednie",
-        High: "Wysokie",
-        Critical: "Krytyczne",
-    }[status];
+    return { Low: "Niskie", Medium: "Srednie", High: "Wysokie", Critical: "Krytyczne" }[status];
 }
 
-export default function DriverRiskOverview() {
+function DriverRiskOverview() {
     const [overview, setOverview] = useState<DriverRiskOverviewData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [search, setSearch] = useState("");
+    const [riskFilter, setRiskFilter] = useState("All");
+    const [currentPage, setCurrentPage] = useState(1);
+    const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     useEffect(() => {
         async function loadRiskOverview() {
             try {
                 setOverview(await getDriverRiskOverview());
             } catch (loadError) {
-                setError(
-                    loadError instanceof Error
-                        ? loadError.message
-                        : "Wystapil blad podczas pobierania ryzyka kierowcow.",
-                );
+                setError(loadError instanceof Error
+                    ? loadError.message
+                    : "Wystapil blad podczas pobierania ryzyka kierowcow.");
             } finally {
                 setIsLoading(false);
             }
         }
-
         void loadRiskOverview();
     }, []);
+
+    const filteredDrivers = useMemo(() => {
+        const drivers = overview?.drivers ?? [];
+        return drivers.filter((driver) => {
+            const matchesRisk = riskFilter === "All" || driver.riskStatus === riskFilter;
+            const haystack = `${driver.firstName} ${driver.lastName} ${driver.cardNumber}`
+                .toLocaleLowerCase("pl-PL");
+            return matchesRisk && (!deferredSearch || haystack.includes(deferredSearch));
+        });
+    }, [deferredSearch, overview, riskFilter]);
+
+    const visibleDrivers = useMemo(() => {
+        const start = (currentPage - 1) * pageSize;
+        return filteredDrivers.slice(start, start + pageSize);
+    }, [currentPage, filteredDrivers]);
+
+    const severeTotal = useMemo(() =>
+        overview?.drivers.reduce((sum, driver) => sum + driver.severeViolationsCount, 0) ?? 0,
+    [overview]);
+
+    useEffect(() => setCurrentPage(1), [deferredSearch, riskFilter]);
 
     return (
         <section className="driver-risk-section">
@@ -65,11 +90,7 @@ export default function DriverRiskOverview() {
             </div>
 
             {isLoading ? (
-                <div className="driver-risk-loading" aria-label="Ladowanie ryzyka">
-                    {Array.from({ length: 4 }, (_, index) => (
-                        <div className="skeleton risk-skeleton-card" key={index} />
-                    ))}
-                </div>
+                <><div className="driver-risk-loading">{Array.from({ length: 4 }, (_, index) => <div className="skeleton risk-skeleton-card" key={index} />)}</div><TableSkeleton rows={5} columns={8} /></>
             ) : error ? (
                 <p className="driver-risk-error" role="alert">{error}</p>
             ) : overview ? (
@@ -81,15 +102,47 @@ export default function DriverRiskOverview() {
                         <RiskCard label="Krytyczne" count={overview.criticalRiskCount} status="critical" />
                     </div>
 
+                    <div className="risk-quick-stats">
+                        <span><strong>{overview.drivers.length}</strong> monitorowanych</span>
+                        <span><strong>{overview.highRiskCount + overview.criticalRiskCount}</strong> wymaga reakcji</span>
+                        <span><strong>{severeTotal}</strong> ciezkich naruszen</span>
+                    </div>
+
+                    <div className="risk-toolbar">
+                        <input
+                            type="search"
+                            aria-label="Szukaj kierowcy ryzyka"
+                            placeholder="Nazwisko lub numer karty"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                        />
+                        <select
+                            aria-label="Filtr statusu ryzyka"
+                            value={riskFilter}
+                            onChange={(event) => setRiskFilter(event.target.value)}
+                        >
+                            <option value="All">Wszystkie statusy</option>
+                            <option value="Low">Niskie</option>
+                            <option value="Medium">Srednie</option>
+                            <option value="High">Wysokie</option>
+                            <option value="Critical">Krytyczne</option>
+                        </select>
+                    </div>
+
                     {overview.drivers.length === 0 ? (
-                        <p className="dashboard-empty">Brak kierowcow do analizy ryzyka.</p>
+                        <EmptyState title="Brak kierowcow" description="Zaimportuj dane DDD, aby uruchomic analize ryzyka floty." />
+                    ) : filteredDrivers.length === 0 ? (
+                        <EmptyState title="Brak wynikow" description="Zmien wyszukiwanie lub wybrany status ryzyka." />
                     ) : (
-                        <div className="dashboard-table-wrapper driver-risk-table-wrapper">
-                            <table className="dashboard-table driver-risk-table">
-                                <thead><tr><th>Kierowca</th><th>Karta</th><th>Status</th><th>Naruszenia</th><th>Ciezkie</th><th>Ostatni import</th><th>Bez aktywnosci</th><th>Bez importu</th></tr></thead>
-                                <tbody>{overview.drivers.map((driver) => <tr key={driver.driverId}><td><Link to={`/drivers/${driver.driverId}`}>{`${driver.firstName} ${driver.lastName}`.trim() || "Brak danych"}</Link></td><td>{driver.cardNumber || "Brak danych"}</td><td><span className={`risk-badge ${driver.riskStatus.toLowerCase()}`}>{getRiskLabel(driver.riskStatus)}</span></td><td>{driver.violationsCount}</td><td><strong className={driver.severeViolationsCount > 0 ? "severe-count" : undefined}>{driver.severeViolationsCount}</strong></td><td>{formatDate(driver.lastImportAtUtc)}</td><td>{formatDays(driver.daysSinceLastActivity)}</td><td>{formatDays(driver.daysSinceLastImport)}</td></tr>)}</tbody>
-                            </table>
-                        </div>
+                        <>
+                            <div className="dashboard-table-wrapper driver-risk-table-wrapper">
+                                <table className="dashboard-table driver-risk-table">
+                                    <thead><tr><th>Kierowca</th><th>Karta</th><th>Status</th><th>Naruszenia</th><th>Ciezkie</th><th>Ostatni import</th><th>Bez aktywnosci</th><th>Bez importu</th></tr></thead>
+                                    <tbody>{visibleDrivers.map((driver) => <RiskRow driver={driver} key={driver.driverId} />)}</tbody>
+                                </table>
+                            </div>
+                            <Pagination currentPage={currentPage} pageSize={pageSize} totalItems={filteredDrivers.length} onPageChange={setCurrentPage} />
+                        </>
                     )}
                 </>
             ) : null}
@@ -97,6 +150,23 @@ export default function DriverRiskOverview() {
     );
 }
 
-function RiskCard({ label, count, status }: { label: string; count: number; status: string }) {
+const RiskRow = memo(function RiskRow({ driver }: { driver: DriverRisk }) {
+    return (
+        <tr className={driver.riskStatus === "Critical" ? "critical-risk-row" : undefined}>
+            <td><Link to={`/drivers/${driver.driverId}`}>{`${driver.firstName} ${driver.lastName}`.trim() || "Brak danych"}</Link></td>
+            <td>{driver.cardNumber || "Brak danych"}</td>
+            <td><span className={`risk-badge ${driver.riskStatus.toLowerCase()}`}>{getRiskLabel(driver.riskStatus)}</span></td>
+            <td>{driver.violationsCount}</td>
+            <td><strong className={driver.severeViolationsCount > 0 ? "severe-count" : undefined}>{driver.severeViolationsCount}</strong></td>
+            <td>{formatDate(driver.lastImportAtUtc)}</td>
+            <td>{formatDays(driver.daysSinceLastActivity)}</td>
+            <td>{formatDays(driver.daysSinceLastImport)}</td>
+        </tr>
+    );
+});
+
+const RiskCard = memo(function RiskCard({ label, count, status }: { label: string; count: number; status: string }) {
     return <article className={`driver-risk-card ${status}`}><span>{label}</span><strong>{count}</strong><small>kierowcow</small></article>;
-}
+});
+
+export default memo(DriverRiskOverview);
