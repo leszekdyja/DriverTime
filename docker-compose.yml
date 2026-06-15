@@ -54,7 +54,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: src/drivertime.web/Dockerfile
+      dockerfile: src/DriverTime.Web/Dockerfile
       args:
         VITE_API_URL: ""
     ports:
