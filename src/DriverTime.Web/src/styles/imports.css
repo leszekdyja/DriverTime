@@ -209,9 +209,30 @@
     margin-top: 32px;
 }
 
-.imports-list h3 {
+.imports-list-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
     margin-bottom: 16px;
+}
+
+.imports-list-heading h3 {
+    margin-bottom: 5px;
     color: #111827;
+}
+
+.imports-list-heading p { margin: 0; }
+
+.imports-list-heading > span {
+    padding: 7px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .imports-table-wrapper {
@@ -260,6 +281,32 @@
     background-color: #eff6ff;
 }
 
+.imports-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.delete-import-button {
+    padding: 8px 12px;
+    border: 1px solid var(--color-danger-border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-danger);
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.delete-import-button:hover:not(:disabled) {
+    background: var(--color-danger-bg);
+}
+
+.delete-import-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
 .driver-import-status {
     display: inline-block;
     padding: 5px 9px;
@@ -288,4 +335,6 @@
         min-height: 190px;
         padding: 20px;
     }
+
+    .imports-list-heading { flex-direction: column; }
 }

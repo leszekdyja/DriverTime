@@ -11,4 +11,8 @@ public interface IDddFileService
     Task<IReadOnlyList<DddFileDto>> GetAllAsync();
 
     Task<DddFileDetailsDto?> GetByIdAsync(Guid id);
+
+    Task<bool> DeleteAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }

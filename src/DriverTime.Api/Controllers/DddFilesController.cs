@@ -65,4 +65,14 @@ public class DddFilesController : ControllerBase
 
         return Ok(result);
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await _dddFileService.DeleteAsync(id, cancellationToken);
+
+        return deleted ? NoContent() : NotFound();
+    }
 }

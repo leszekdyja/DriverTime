@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import DddDropzone from "../components/DddDropzone";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    deleteDddImport,
     getDddImports,
     type DddImport,
 } from "../services/dddImportsService";
@@ -34,6 +35,8 @@ export default function ImportsPage() {
     const [imports, setImports] = useState<DddImport[]>([]);
     const [isLoadingImports, setIsLoadingImports] = useState(true);
     const [importsError, setImportsError] = useState("");
+    const [deletingImportId, setDeletingImportId] = useState<string | null>(null);
+    const [deleteMessage, setDeleteMessage] = useState("");
 
     const loadImports = useCallback(async () => {
         setIsLoadingImports(true);
@@ -56,6 +59,33 @@ export default function ImportsPage() {
         void loadImports();
     }, [loadImports]);
 
+    async function handleDelete(dddImport: DddImport) {
+        const confirmed = window.confirm(
+            `Czy na pewno usunac import "${dddImport.fileName}"? Powiazane aktywnosci, pojazdy i wpisy krajow zostana usuniete.`,
+        );
+
+        if (!confirmed) return;
+
+        setDeletingImportId(dddImport.id);
+        setImportsError("");
+        setDeleteMessage("");
+
+        try {
+            await deleteDddImport(dddImport.id);
+            await loadImports();
+            setDeleteMessage(`Usunieto import "${dddImport.fileName}".`);
+            window.dispatchEvent(new Event("drivertime:data-changed"));
+        } catch (deleteError) {
+            setImportsError(
+                deleteError instanceof Error
+                    ? deleteError.message
+                    : "Wystapil blad podczas usuwania importu.",
+            );
+        } finally {
+            setDeletingImportId(null);
+        }
+    }
+
     return (
         <div className="imports-page">
             <h2>Importy DDD</h2>
@@ -64,13 +94,27 @@ export default function ImportsPage() {
             <DddDropzone onImportsChanged={loadImports} />
 
             <section className="imports-list">
-                <h3>Lista importow</h3>
+                <div className="imports-list-heading">
+                    <div>
+                        <h3>Historia importow</h3>
+                        <p>Zaimportowane pliki DDD uporzadkowane od najnowszych.</p>
+                    </div>
+                    {!isLoadingImports && !importsError && (
+                        <span>{imports.length} importow</span>
+                    )}
+                </div>
 
                 {isLoadingImports && imports.length === 0 && <TableSkeleton rows={5} columns={7} />}
 
                 {importsError && (
                     <p className="message error-message" role="alert">
                         {importsError}
+                    </p>
+                )}
+
+                {deleteMessage && (
+                    <p className="message success-message" role="status">
+                        {deleteMessage}
                     </p>
                 )}
 
@@ -92,7 +136,7 @@ export default function ImportsPage() {
                                     <th>Data importu</th>
                                     <th>Aktywnosci</th>
                                     <th>Status kierowcy</th>
-                                    <th aria-label="Akcje" />
+                                    <th>Akcje</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -120,12 +164,24 @@ export default function ImportsPage() {
                                             </span>
                                         </td>
                                         <td>
-                                            <Link
-                                                className="details-button"
-                                                to={`/imports/${dddImport.id}`}
-                                            >
-                                                Szczegoly
-                                            </Link>
+                                            <div className="imports-actions">
+                                                <Link
+                                                    className="details-button"
+                                                    to={`/imports/${dddImport.id}`}
+                                                >
+                                                    Szczegoly
+                                                </Link>
+                                                <button
+                                                    className="delete-import-button"
+                                                    type="button"
+                                                    onClick={() => void handleDelete(dddImport)}
+                                                    disabled={deletingImportId !== null}
+                                                >
+                                                    {deletingImportId === dddImport.id
+                                                        ? "Usuwanie..."
+                                                        : "Usun"}
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

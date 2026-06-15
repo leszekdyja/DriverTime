@@ -179,6 +179,42 @@ public class DddFileService : IDddFileService
         };
     }
 
+    public async Task<bool> DeleteAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await _dbContext.DddFiles
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == id && x.CompanyId == _currentUser.CompanyId,
+                cancellationToken);
+
+        if (!exists)
+        {
+            return false;
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(cancellationToken);
+
+        await _dbContext.DriverActivities
+            .Where(x => x.DddFileId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+        await _dbContext.VehicleUses
+            .Where(x => x.DddFileId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+        await _dbContext.CountryEntries
+            .Where(x => x.DddFileId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+        await _dbContext.DddFiles
+            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
     private Driver CreateDriver(ParsedDriverDto parsedDriver, string cardNumber)
     {
         return new Driver
