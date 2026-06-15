@@ -10,24 +10,48 @@ export type DddUploadResult = {
     country_code_entries: unknown[];
 };
 
-async function getErrorMessage(response: Response) {
-    const message = await response.text();
+export function uploadDddFile(
+    file: File,
+    onProgress?: (progress: number) => void,
+): Promise<DddUploadResult> {
+    return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        const formData = new FormData();
 
-    return message || "Nie udalo sie przeslac pliku DDD.";
-}
+        formData.append("file", file);
+        request.open("POST", `${API_URL}/api/ddd-files/upload`);
 
-export async function uploadDddFile(file: File): Promise<DddUploadResult> {
-    const formData = new FormData();
-    formData.append("file", file);
+        request.upload.addEventListener("progress", (event) => {
+            if (event.lengthComputable) {
+                onProgress?.(Math.round((event.loaded / event.total) * 100));
+            }
+        });
 
-    const response = await fetch(`${API_URL}/api/ddd-files/upload`, {
-        method: "POST",
-        body: formData,
+        request.addEventListener("load", () => {
+            if (request.status < 200 || request.status >= 300) {
+                reject(
+                    new Error(
+                        request.responseText || "Nie udalo sie przeslac pliku DDD.",
+                    ),
+                );
+                return;
+            }
+
+            try {
+                resolve(JSON.parse(request.responseText) as DddUploadResult);
+            } catch {
+                reject(new Error("Serwer zwrocil nieprawidlowa odpowiedz."));
+            }
+        });
+
+        request.addEventListener("error", () => {
+            reject(new Error("Nie udalo sie polaczyc z serwerem."));
+        });
+
+        request.addEventListener("abort", () => {
+            reject(new Error("Przesylanie pliku zostalo przerwane."));
+        });
+
+        request.send(formData);
     });
-
-    if (!response.ok) {
-        throw new Error(await getErrorMessage(response));
-    }
-
-    return response.json() as Promise<DddUploadResult>;
 }
