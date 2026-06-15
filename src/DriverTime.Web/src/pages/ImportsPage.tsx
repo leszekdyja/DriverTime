@@ -5,6 +5,7 @@ import {
     type ChangeEvent,
     type FormEvent,
 } from "react";
+import { Link } from "react-router-dom";
 
 import {
     uploadDddFile,
@@ -203,7 +204,14 @@ export default function ImportsPage() {
                             <tbody>
                                 {imports.map((dddImport) => (
                                     <tr key={dddImport.id}>
-                                        <td>{displayValue(dddImport.fileName)}</td>
+                                        <td>
+                                            <Link
+                                                className="details-link"
+                                                to={`/imports/${dddImport.id}`}
+                                            >
+                                                {displayValue(dddImport.fileName)}
+                                            </Link>
+                                        </td>
                                         <td>{displayValue(dddImport.driverFirstName)}</td>
                                         <td>{displayValue(dddImport.driverLastName)}</td>
                                         <td>{displayValue(dddImport.driverCardNumber)}</td>

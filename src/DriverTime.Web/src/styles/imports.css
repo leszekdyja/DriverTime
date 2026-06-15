@@ -121,6 +121,15 @@
     border-bottom: 0;
 }
 
+.details-link {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.details-link:hover {
+    text-decoration: underline;
+}
+
 @media (max-width: 768px) {
     .upload-form {
         padding: 18px;

@@ -6,7 +6,13 @@ public class DddFileDetailsDto
 
     public string FileName { get; set; } = string.Empty;
 
-    public DateTime UploadedAt { get; set; }
+    public string DriverFirstName { get; set; } = string.Empty;
+
+    public string DriverLastName { get; set; } = string.Empty;
+
+    public string DriverCardNumber { get; set; } = string.Empty;
+
+    public DateTime UploadedAtUtc { get; set; }
 
     public List<ParsedDriverActivityDto> DriverActivities { get; set; } = new();
 

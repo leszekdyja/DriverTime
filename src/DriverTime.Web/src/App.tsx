@@ -4,6 +4,7 @@ import AppLayout from "./layouts/AppLayout";
 
 import DashboardPage from "./pages/DashboardPage";
 import DriversPage from "./pages/DriversPage";
+import ImportDetailsPage from "./pages/ImportDetailsPage";
 import ImportsPage from "./pages/ImportsPage";
 import ReportsPage from "./pages/ReportsPage";
 
@@ -20,6 +21,11 @@ export default function App() {
                     <Route
                         path="imports"
                         element={<ImportsPage />}
+                    />
+
+                    <Route
+                        path="imports/:id"
+                        element={<ImportDetailsPage />}
                     />
 
                     <Route
