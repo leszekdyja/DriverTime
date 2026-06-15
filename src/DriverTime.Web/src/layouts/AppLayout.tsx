@@ -1,16 +1,17 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
 
 import { useAuth } from "../auth/useAuth";
 import "../styles/layout.css";
 
 const navigationItems = [
-    { to: "/", label: "Dashboard", shortLabel: "D" },
-    { to: "/drivers", label: "Kierowcy", shortLabel: "K" },
-    { to: "/reports", label: "Raporty", shortLabel: "R" },
-    { to: "/violations", label: "Naruszenia", shortLabel: "N" },
-    { to: "/imports", label: "Importy DDD", shortLabel: "I" },
-    { to: "/company-settings", label: "Ustawienia firmy", shortLabel: "U" },
-    { to: "/account", label: "Moje konto", shortLabel: "M" },
+    { to: "/", label: "Dashboard", icon: "dashboard" },
+    { to: "/drivers", label: "Kierowcy", icon: "drivers" },
+    { to: "/reports", label: "Raporty", icon: "reports" },
+    { to: "/violations", label: "Naruszenia", icon: "alerts" },
+    { to: "/imports", label: "Importy DDD", icon: "imports" },
+    { to: "/company-settings", label: "Ustawienia firmy", icon: "company" },
+    { to: "/account", label: "Moje konto", icon: "account" },
 ];
 
 const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -22,7 +23,13 @@ const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
 
 export default function AppLayout() {
     const { user, logout } = useAuth();
+    const location = useLocation();
     const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}` || "U";
+    const currentSection = [...navigationItems]
+        .sort((left, right) => right.to.length - left.to.length)
+        .find((item) => item.to === "/"
+            ? location.pathname === "/"
+            : location.pathname.startsWith(item.to));
 
     return (
         <div className="app-shell">
@@ -31,7 +38,7 @@ export default function AppLayout() {
                     <span className="brand-mark">DT</span>
                     <div>
                         <strong>DriverTime</strong>
-                        <span>Transport management</span>
+                        <span>Fleet intelligence</span>
                     </div>
                 </div>
 
@@ -45,33 +52,34 @@ export default function AppLayout() {
                                 `nav-link${isActive ? " active" : ""}`
                             }
                         >
-                            <span className="nav-icon" aria-hidden="true">
-                                {item.shortLabel}
-                            </span>
+                            <NavigationIcon name={item.icon} />
                             <span>{item.label}</span>
                         </NavLink>
                     ))}
                 </nav>
 
                 <div className="sidebar-footer">
-                    <span>DriverTime</span>
-                    <small>Local workspace</small>
+                    <span className="sidebar-status"><i /> System operacyjny</span>
+                    <small>DriverTime SaaS workspace</small>
                 </div>
             </aside>
 
             <div className="app-main">
                 <header className="topbar">
                     <div className="topbar-title">
-                        <strong>DriverTime</strong>
-                        <span>{currentDateFormatter.format(new Date())}</span>
+                        <span className="topbar-eyebrow">DriverTime / {currentSection?.label ?? "Panel"}</span>
+                        <strong>{currentSection?.label ?? "DriverTime"}</strong>
                     </div>
 
-                    <div className="profile-placeholder" aria-label="Profil uzytkownika">
-                        <span className="profile-avatar">{initials}</span>
-                        <div>
-                            <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
-                            <span>{user?.companyName} / {user?.role}</span>
-                        </div>
+                    <div className="topbar-actions">
+                        <span className="topbar-date">{currentDateFormatter.format(new Date())}</span>
+                        <Link className="profile-placeholder" aria-label="Profil uzytkownika" to="/account">
+                            <span className="profile-avatar">{initials}</span>
+                            <div>
+                                <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
+                                <span>{user?.companyName} / {user?.role}</span>
+                            </div>
+                        </Link>
                         <button className="logout-button" type="button" onClick={logout}>
                             Wyloguj
                         </button>
@@ -84,4 +92,18 @@ export default function AppLayout() {
             </div>
         </div>
     );
+}
+
+function NavigationIcon({ name }: { name: string }) {
+    const paths: Record<string, ReactNode> = {
+        dashboard: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></>,
+        drivers: <><circle cx="9" cy="8" r="4" /><path d="M3 21v-2a6 6 0 0 1 12 0v2" /><path d="M16 4.5a4 4 0 0 1 0 7" /><path d="M18 15a6 6 0 0 1 3 5" /></>,
+        reports: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /><path d="M2 21h22" /></>,
+        alerts: <><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v5" /><path d="M12 17.5h.01" /></>,
+        imports: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 19h16" /></>,
+        company: <><path d="M4 21V7l8-4v18" /><path d="M12 9h8v12" /><path d="M7 9h2M7 13h2M7 17h2M15 13h2M15 17h2" /></>,
+        account: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    };
+
+    return <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24">{paths[name]}</svg></span>;
 }
