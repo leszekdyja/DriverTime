@@ -31,6 +31,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverActivityService, DriverActivityService>();
 
+        services.AddScoped<IDriverViolationService, DriverViolationService>();
+
         return services;
     }
 }

@@ -6,6 +6,7 @@ const navigationItems = [
     { to: "/", label: "Dashboard", shortLabel: "D" },
     { to: "/drivers", label: "Kierowcy", shortLabel: "K" },
     { to: "/reports", label: "Raporty", shortLabel: "R" },
+    { to: "/violations", label: "Naruszenia", shortLabel: "N" },
     { to: "/imports", label: "Importy DDD", shortLabel: "I" },
 ];
 

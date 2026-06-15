@@ -7,6 +7,7 @@ import DriversPage from "./pages/DriversPage";
 import ImportDetailsPage from "./pages/ImportDetailsPage";
 import ImportsPage from "./pages/ImportsPage";
 import ReportsPage from "./pages/ReportsPage";
+import ViolationsPage from "./pages/ViolationsPage";
 
 export default function App() {
     return (
@@ -36,6 +37,11 @@ export default function App() {
                     <Route
                         path="reports"
                         element={<ReportsPage />}
+                    />
+
+                    <Route
+                        path="violations"
+                        element={<ViolationsPage />}
                     />
                 </Route>
             </Routes>
