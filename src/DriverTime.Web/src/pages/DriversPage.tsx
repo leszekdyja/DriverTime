@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { API_URL } from "../config/api";
 import { apiFetch } from "../services/apiClient";
@@ -175,6 +176,7 @@ export default function DriversPage() {
                                         <th>Numer karty</th>
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -189,6 +191,11 @@ export default function DriversPage() {
                                                     : "Brak danych"}
                                             </td>
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
+                                            <td>
+                                                <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
+                                                    Szczegoly
+                                                </Link>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

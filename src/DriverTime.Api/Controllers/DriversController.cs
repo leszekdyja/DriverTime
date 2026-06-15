@@ -24,7 +24,7 @@ public class DriversController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<DriverDto>> GetById(Guid id)
+    public async Task<ActionResult<DriverDetailsDto>> GetById(Guid id)
     {
         var driver = await _driverService.GetByIdAsync(id);
 

@@ -5,6 +5,7 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./layouts/AppLayout";
 
 import DashboardPage from "./pages/DashboardPage";
+import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
 import ImportDetailsPage from "./pages/ImportDetailsPage";
 import ImportsPage from "./pages/ImportsPage";
@@ -24,6 +25,7 @@ export default function App() {
                             <Route path="imports" element={<ImportsPage />} />
                             <Route path="imports/:id" element={<ImportDetailsPage />} />
                             <Route path="drivers" element={<DriversPage />} />
+                            <Route path="drivers/:id" element={<DriverDetailsPage />} />
                             <Route path="reports" element={<ReportsPage />} />
                             <Route path="violations" element={<ViolationsPage />} />
                         </Route>

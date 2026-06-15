@@ -38,6 +38,28 @@ public class DriverViolationService : IDriverViolationService
             .OrderBy(x => x.StartUtc)
             .ToListAsync(cancellationToken);
 
+        return CalculateViolations(activities);
+    }
+
+    public async Task<IReadOnlyList<DriverViolationDto>> GetViolationsForDriverAsync(
+        Guid driverId,
+        CancellationToken cancellationToken = default)
+    {
+        var activities = await _dbContext.DriverActivities
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.DddFile.DriverId == driverId)
+            .Include(x => x.DddFile)
+            .OrderBy(x => x.StartUtc)
+            .ToListAsync(cancellationToken);
+
+        return CalculateViolations(activities);
+    }
+
+    private static IReadOnlyList<DriverViolationDto> CalculateViolations(
+        IReadOnlyList<DriverActivity> activities)
+    {
         var violations = new List<DriverViolationDto>();
 
         foreach (var driverActivities in activities.GroupBy(GetDriverKey))

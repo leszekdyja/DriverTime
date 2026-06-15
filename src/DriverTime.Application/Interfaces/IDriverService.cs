@@ -6,7 +6,7 @@ public interface IDriverService
 {
     Task<List<DriverDto>> GetAllAsync();
 
-    Task<DriverDto?> GetByIdAsync(Guid id);
+    Task<DriverDetailsDto?> GetByIdAsync(Guid id);
 
     Task<DriverDto> CreateAsync(CreateDriverDto dto);
 }
