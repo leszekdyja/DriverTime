@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import {
@@ -24,11 +24,59 @@ function formatDate(value: string) {
         : dateFormatter.format(date);
 }
 
+function getDurationSeconds(startValue: string, endValue: string) {
+    const start = new Date(startValue);
+    const end = new Date(endValue);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return 0;
+    }
+
+    return Math.max(Math.floor((end.getTime() - start.getTime()) / 1000), 0);
+}
+
+function formatDuration(seconds: number) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    return `${hours} godz. ${minutes} min`;
+}
+
 export default function ImportDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const [details, setDetails] = useState<DddImportDetails | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+
+    const activitySummary = useMemo(() => {
+        const summary = {
+            driving: 0,
+            work: 0,
+            rest: 0,
+            availability: 0,
+        };
+
+        for (const activity of details?.driverActivities ?? []) {
+            const duration = getDurationSeconds(activity.start, activity.end);
+
+            switch (activity.activity.toUpperCase()) {
+                case "DRIVING":
+                    summary.driving += duration;
+                    break;
+                case "WORK":
+                    summary.work += duration;
+                    break;
+                case "REST":
+                    summary.rest += duration;
+                    break;
+                case "AVAILABILITY":
+                    summary.availability += duration;
+                    break;
+            }
+        }
+
+        return summary;
+    }, [details]);
 
     useEffect(() => {
         async function loadDetails() {
@@ -57,7 +105,7 @@ export default function ImportDetailsPage() {
     return (
         <div className="import-details-page">
             <Link className="back-link" to="/imports">
-                Wroc do listy importow
+                Powrot do importow
             </Link>
 
             <h2>Szczegoly importu DDD</h2>
@@ -102,16 +150,43 @@ export default function ImportDetailsPage() {
                         </dl>
                     </section>
 
+                    <section className="activity-summary" aria-label="Podsumowanie aktywnosci">
+                        <ActivitySummaryCard
+                            label="Suma jazdy"
+                            seconds={activitySummary.driving}
+                        />
+                        <ActivitySummaryCard
+                            label="Suma pracy"
+                            seconds={activitySummary.work}
+                        />
+                        <ActivitySummaryCard
+                            label="Suma odpoczynku"
+                            seconds={activitySummary.rest}
+                        />
+                        <ActivitySummaryCard
+                            label="Suma dyspozycyjnosci"
+                            seconds={activitySummary.availability}
+                        />
+                    </section>
+
                     <DetailsTable
                         title="Aktywnosci kierowcy"
                         isEmpty={details.driverActivities.length === 0}
-                        headers={["Poczatek", "Koniec", "Aktywnosc"]}
+                        headers={["Poczatek", "Koniec", "Aktywnosc", "Czas"]}
                     >
                         {details.driverActivities.map((activity, index) => (
                             <tr key={`${activity.start}-${index}`}>
                                 <td>{formatDate(activity.start)}</td>
                                 <td>{formatDate(activity.end)}</td>
                                 <td>{displayValue(activity.activity)}</td>
+                                <td>
+                                    {formatDuration(
+                                        getDurationSeconds(
+                                            activity.start,
+                                            activity.end,
+                                        ),
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </DetailsTable>
@@ -148,6 +223,20 @@ export default function ImportDetailsPage() {
                 </>
             )}
         </div>
+    );
+}
+
+type ActivitySummaryCardProps = {
+    label: string;
+    seconds: number;
+};
+
+function ActivitySummaryCard({ label, seconds }: ActivitySummaryCardProps) {
+    return (
+        <article className="activity-summary-card">
+            <span>{label}</span>
+            <strong>{formatDuration(seconds)}</strong>
+        </article>
     );
 }
 
