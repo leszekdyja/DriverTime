@@ -17,10 +17,13 @@ type ReportPdfOptions = {
     totals: ReportTotals;
 };
 
-const severityLabels: Record<DriverViolation["severity"], string> = {
+const severityLabels: Record<string, string> = {
     low: "Niski",
     medium: "Sredni",
     high: "Wysoki",
+    minor: "Minor",
+    serious: "Serious",
+    "very serious": "Very serious",
 };
 
 function formatDate(value: string) {
@@ -146,7 +149,7 @@ export async function exportViolationsPdf(violations: DriverViolation[]) {
             violation.violationType,
             formatDate(violation.occurredAtUtc),
             violation.description,
-            severityLabels[violation.severity],
+            severityLabels[violation.severity.toLowerCase()] ?? violation.severity,
         ]),
         columnStyles: {
             0: { cellWidth: 38 },

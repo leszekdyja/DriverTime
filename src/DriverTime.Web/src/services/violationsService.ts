@@ -1,13 +1,17 @@
 import { apiFetch } from "./apiClient";
 
 export type DriverViolation = {
+    code: string;
     driverFirstName: string;
     driverLastName: string;
     driverCardNumber: string;
     violationType: string;
     occurredAtUtc: string;
+    periodEndUtc: string;
     description: string;
-    severity: "low" | "medium" | "high";
+    severity: string;
+    actualDurationMinutes: number;
+    limitDurationMinutes: number;
 };
 
 export async function getDriverViolations(): Promise<DriverViolation[]> {

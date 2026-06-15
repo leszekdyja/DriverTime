@@ -17,10 +17,13 @@ type ReportExcelOptions = {
     totals: ReportTotals;
 };
 
-const severityLabels: Record<DriverViolation["severity"], string> = {
+const severityLabels: Record<string, string> = {
     low: "Niski",
     medium: "Sredni",
     high: "Wysoki",
+    minor: "Minor",
+    serious: "Serious",
+    "very serious": "Very serious",
 };
 
 const titleCell: CellObject = {
@@ -165,7 +168,7 @@ export async function exportViolationsExcel(violations: DriverViolation[]) {
             dataCell(violation.violationType),
             dateCell(violation.occurredAtUtc),
             dataCell(violation.description),
-            dataCell(severityLabels[violation.severity]),
+            dataCell(severityLabels[violation.severity.toLowerCase()] ?? violation.severity),
         ]),
     ];
 
