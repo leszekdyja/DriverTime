@@ -6,6 +6,7 @@ bin/
 obj/
 out/
 publish/
+.build/
 
 # =========================
 # Visual Studio
@@ -36,6 +37,7 @@ publish/
 # =========================
 
 node_modules/
+.npm-cache/
 dist/
 build/
 coverage/

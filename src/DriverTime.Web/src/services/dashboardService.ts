@@ -29,6 +29,7 @@ export type DashboardData = {
     totalImports: number;
     totalDrivers: number;
     totalActivities: number;
+    totalVehicles: number;
     latestImportDate: string | null;
     latestImports: DddImport[];
     activities: DriverActivity[];
@@ -67,6 +68,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         totalImports: summary.dddFilesCount,
         totalDrivers: drivers.length,
         totalActivities: summary.driverActivitiesCount,
+        totalVehicles: summary.vehicleUsesCount,
         latestImportDate: latestImports[0]?.uploadedAtUtc ?? null,
         latestImports,
         activities,
