@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Globalization;
 using System.Text;
 using System.Xml;
 using DriverTime.Application.Interfaces;
@@ -143,7 +144,7 @@ public class DriverReportExportService : IDriverReportExportService
 
     private static byte[] GeneratePdf(DriverReportDto report)
     {
-        const int rowsPerPage = 34;
+        const int rowsPerPage = 16;
         var indexedActivities = report.Activities
             .Select((activity, index) => (Activity: activity, Index: index))
             .ToList();
@@ -158,39 +159,11 @@ public class DriverReportExportService : IDriverReportExportService
 
         for (var pageIndex = 0; pageIndex < activityPages.Count; pageIndex++)
         {
-            var lines = new List<string>
-            {
-                "DriverTime - Raport aktywnosci kierowcy",
-                $"Firma: {DisplayValue(report.CompanyName)} | NIP: {DisplayValue(report.CompanyVatNumber)}",
-                $"Adres: {DisplayValue(report.CompanyAddress)}",
-                $"Kontakt: {FormatCompanyContact(report)}",
-                $"Kierowca: {GetDriverName(report)}",
-                $"Numer karty: {DisplayValue(report.DriverCardNumber)}",
-                $"Zakres: {FormatDate(report.From)} - {FormatDate(report.To)}",
-                $"Jazda: {FormatDuration(report.DrivingSeconds)} | Praca: {FormatDuration(report.WorkSeconds)} | Odpoczynek: {FormatDuration(report.RestSeconds)} | Dyspozycyjnosc: {FormatDuration(report.AvailabilitySeconds)}",
-                string.Empty,
-                "Lp.  Poczatek             Koniec               Typ                 Czas"
-            };
-
-            foreach (var row in activityPages[pageIndex])
-            {
-                lines.Add(string.Format(
-                    "{0,-4} {1,-20} {2,-20} {3,-19} {4}",
-                    row.Index + 1,
-                    FormatDateTime(row.Activity.StartUtc),
-                    FormatDateTime(row.Activity.EndUtc),
-                    Truncate(GetActivityLabel(row.Activity.ActivityType), 19),
-                    FormatDuration(row.Activity.DurationSeconds)));
-            }
-
-            if (report.Activities.Count == 0)
-            {
-                lines.Add("Brak aktywnosci w wybranym okresie.");
-            }
-
-            lines.Add(string.Empty);
-            lines.Add($"Wygenerowano: {DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC | Strona {pageIndex + 1}/{activityPages.Count}");
-            pageContents.Add(BuildPdfTextStream(lines));
+            pageContents.Add(BuildDriverReportPdfPage(
+                report,
+                activityPages[pageIndex],
+                pageIndex + 1,
+                activityPages.Count));
         }
 
         return BuildPdfDocument(pageContents);
@@ -200,10 +173,14 @@ public class DriverReportExportService : IDriverReportExportService
     {
         var objects = new List<byte[]>();
         var pageObjectNumbers = new List<int>();
-        var fontObjectNumber = 3;
+        const int regularFontObjectNumber = 3;
+        const int boldFontObjectNumber = 4;
+        const int monoFontObjectNumber = 5;
 
         objects.Add(Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"));
         objects.Add(Array.Empty<byte>());
+        objects.Add(Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"));
+        objects.Add(Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"));
         objects.Add(Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"));
 
         foreach (var content in pageContents)
@@ -212,7 +189,7 @@ public class DriverReportExportService : IDriverReportExportService
             var contentObjectNumber = pageObjectNumber + 1;
             pageObjectNumbers.Add(pageObjectNumber);
             objects.Add(Encoding.ASCII.GetBytes(
-                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 {fontObjectNumber} 0 R >> >> /Contents {contentObjectNumber} 0 R >>"));
+                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 {regularFontObjectNumber} 0 R /F2 {boldFontObjectNumber} 0 R /F3 {monoFontObjectNumber} 0 R >> >> /Contents {contentObjectNumber} 0 R >>"));
 
             var contentBytes = Encoding.ASCII.GetBytes(content);
             var prefix = Encoding.ASCII.GetBytes($"<< /Length {contentBytes.Length} >>\nstream\n");
@@ -248,17 +225,96 @@ public class DriverReportExportService : IDriverReportExportService
         return stream.ToArray();
     }
 
-    private static string BuildPdfTextStream(IEnumerable<string> lines)
+    private static string BuildDriverReportPdfPage(
+        DriverReportDto report,
+        IReadOnlyList<(DriverReportActivityDto Activity, int Index)> activities,
+        int pageNumber,
+        int totalPages)
     {
-        var builder = new StringBuilder("BT\n/F1 9 Tf\n11 TL\n35 555 Td\n");
+        var page = new PdfPageBuilder();
+        const double margin = 34;
 
-        foreach (var line in lines)
+        page.FillRectangle(0, 0, 842, 595, "#F8FAFC");
+        page.FillRectangle(0, 526, 842, 69, "#0F172A");
+        page.FillRectangle(0, 526, 842, 4, "#2563EB");
+        page.Text(margin, 563, "DriverTime", 22, true, "#FFFFFF");
+        page.Text(margin, 544, "Raport aktywnosci kierowcy", 11, false, "#CBD5E1");
+        page.Text(808, 563, $"Zakres: {FormatDate(report.From)} - {FormatDate(report.To)}", 10, false, "#E2E8F0", PdfTextAlign.Right);
+        page.Text(808, 545, $"Wygenerowano: {DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC", 9, false, "#CBD5E1", PdfTextAlign.Right);
+
+        page.FillRectangle(margin, 434, 374, 72, "#FFFFFF");
+        page.StrokeRectangle(margin, 434, 374, 72, "#E2E8F0");
+        page.Text(50, 487, "Firma", 9, true, "#64748B");
+        page.Text(50, 469, DisplayValue(report.CompanyName), 14, true, "#0F172A");
+        page.Text(50, 451, $"NIP: {DisplayValue(report.CompanyVatNumber)}", 9, false, "#475569");
+        page.Text(206, 451, $"Kontakt: {FormatCompanyContact(report)}", 9, false, "#475569");
+
+        page.FillRectangle(434, 434, 374, 72, "#FFFFFF");
+        page.StrokeRectangle(434, 434, 374, 72, "#E2E8F0");
+        page.Text(450, 487, "Kierowca", 9, true, "#64748B");
+        page.Text(450, 469, GetDriverName(report), 14, true, "#0F172A");
+        page.Text(450, 451, $"Numer karty: {DisplayValue(report.DriverCardNumber)}", 9, false, "#475569");
+        page.Text(634, 451, $"Okres: {FormatDate(report.From)} - {FormatDate(report.To)}", 9, false, "#475569");
+
+        DrawSummaryCard(page, 34, "Jazda", FormatDuration(report.DrivingSeconds), "#2563EB");
+        DrawSummaryCard(page, 231, "Praca", FormatDuration(report.WorkSeconds), "#0F766E");
+        DrawSummaryCard(page, 428, "Odpoczynek", FormatDuration(report.RestSeconds), "#7C3AED");
+        DrawSummaryCard(page, 625, "Dyspozycyjnosc", FormatDuration(report.AvailabilitySeconds), "#D97706");
+
+        page.Text(margin, 345, "Aktywnosci", 13, true, "#0F172A");
+        page.Text(808, 345, $"{report.Activities.Count} rekordow", 9, false, "#64748B", PdfTextAlign.Right);
+
+        const double tableX = 34;
+        const double headerY = 316;
+        const double rowHeight = 17;
+        page.FillRectangle(tableX, headerY, 774, 22, "#1E293B");
+        page.Text(46, 323, "Lp.", 8, true, "#FFFFFF");
+        page.Text(82, 323, "Poczatek", 8, true, "#FFFFFF");
+        page.Text(218, 323, "Koniec", 8, true, "#FFFFFF");
+        page.Text(354, 323, "Aktywnosc", 8, true, "#FFFFFF");
+        page.Text(522, 323, "Czas", 8, true, "#FFFFFF");
+
+        if (report.Activities.Count == 0)
         {
-            builder.Append('(').Append(EscapePdf(ToPdfAscii(line))).Append(") Tj\nT*\n");
+            page.FillRectangle(tableX, 290, 774, 26, "#FFFFFF");
+            page.StrokeRectangle(tableX, 290, 774, 26, "#E2E8F0");
+            page.Text(46, 300, "Brak aktywnosci w wybranym okresie.", 9, false, "#64748B");
+        }
+        else
+        {
+            for (var rowIndex = 0; rowIndex < activities.Count; rowIndex++)
+            {
+                var row = activities[rowIndex];
+                var y = headerY - ((rowIndex + 1) * rowHeight);
+                page.FillRectangle(tableX, y, 774, rowHeight, rowIndex % 2 == 0 ? "#FFFFFF" : "#F1F5F9");
+                page.StrokeRectangle(tableX, y, 774, rowHeight, "#E2E8F0");
+                page.Text(46, y + 6, (row.Index + 1).ToString(CultureInfo.InvariantCulture), 8, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(82, y + 6, FormatDateTime(row.Activity.StartUtc), 8, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(218, y + 6, FormatDateTime(row.Activity.EndUtc), 8, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(354, y + 6, Truncate(GetActivityLabel(row.Activity.ActivityType), 30), 8, false, "#334155");
+                page.Text(522, y + 6, FormatDuration(row.Activity.DurationSeconds), 8, false, "#334155");
+            }
         }
 
-        builder.Append("ET");
-        return builder.ToString();
+        page.StrokeLine(margin, 38, 808, 38, "#CBD5E1", 0.6);
+        page.Text(margin, 22, $"DriverTime - raport wygenerowany automatycznie dla {DisplayValue(report.CompanyName)}", 8, false, "#64748B");
+        page.Text(808, 22, $"Strona {pageNumber}/{totalPages}", 8, false, "#64748B", PdfTextAlign.Right);
+
+        return page.ToString();
+    }
+
+    private static void DrawSummaryCard(
+        PdfPageBuilder page,
+        double x,
+        string label,
+        string value,
+        string accentColor)
+    {
+        page.FillRectangle(x, 374, 183, 42, "#FFFFFF");
+        page.StrokeRectangle(x, 374, 183, 42, "#E2E8F0");
+        page.FillRectangle(x, 374, 5, 42, accentColor);
+        page.Text(x + 17, 399, label, 8, true, "#64748B");
+        page.Text(x + 17, 383, value, 14, true, "#0F172A");
     }
 
     private static byte[] GenerateExcel(DriverReportDto report)
@@ -456,7 +512,160 @@ public class DriverReportExportService : IDriverReportExportService
     private static string DisplayValue(string value) => string.IsNullOrWhiteSpace(value) ? "Brak danych" : value;
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
-    private static string ToPdfAscii(string value) => string.Concat(value.Select(character => character <= 127 ? character : '?'));
+    private static string ToPdfAscii(string value) => string.Concat(value.Select(ToPdfAscii));
+
+    private static char ToPdfAscii(char character) => character switch
+    {
+        'ą' => 'a',
+        'ć' => 'c',
+        'ę' => 'e',
+        'ł' => 'l',
+        'ń' => 'n',
+        'ó' => 'o',
+        'ś' => 's',
+        'ż' => 'z',
+        'ź' => 'z',
+        'Ą' => 'A',
+        'Ć' => 'C',
+        'Ę' => 'E',
+        'Ł' => 'L',
+        'Ń' => 'N',
+        'Ó' => 'O',
+        'Ś' => 'S',
+        'Ż' => 'Z',
+        'Ź' => 'Z',
+        <= '\u007f' => character,
+        _ => '?'
+    };
+
+    private enum PdfTextAlign
+    {
+        Left,
+        Right
+    }
+
+    private sealed class PdfPageBuilder
+    {
+        private readonly StringBuilder _builder = new();
+
+        public void FillRectangle(
+            double x,
+            double y,
+            double width,
+            double height,
+            string color)
+        {
+            _builder
+                .Append("q\n")
+                .Append(ToRgb(color))
+                .Append(" rg\n")
+                .Append(FormatNumber(x))
+                .Append(' ')
+                .Append(FormatNumber(y))
+                .Append(' ')
+                .Append(FormatNumber(width))
+                .Append(' ')
+                .Append(FormatNumber(height))
+                .Append(" re f\nQ\n");
+        }
+
+        public void StrokeRectangle(
+            double x,
+            double y,
+            double width,
+            double height,
+            string color)
+        {
+            _builder
+                .Append("q\n")
+                .Append(ToRgb(color))
+                .Append(" RG\n0.8 w\n")
+                .Append(FormatNumber(x))
+                .Append(' ')
+                .Append(FormatNumber(y))
+                .Append(' ')
+                .Append(FormatNumber(width))
+                .Append(' ')
+                .Append(FormatNumber(height))
+                .Append(" re S\nQ\n");
+        }
+
+        public void StrokeLine(
+            double x1,
+            double y1,
+            double x2,
+            double y2,
+            string color,
+            double width)
+        {
+            _builder
+                .Append("q\n")
+                .Append(ToRgb(color))
+                .Append(" RG\n")
+                .Append(FormatNumber(width))
+                .Append(" w\n")
+                .Append(FormatNumber(x1))
+                .Append(' ')
+                .Append(FormatNumber(y1))
+                .Append(" m\n")
+                .Append(FormatNumber(x2))
+                .Append(' ')
+                .Append(FormatNumber(y2))
+                .Append(" l S\nQ\n");
+        }
+
+        public void Text(
+            double x,
+            double y,
+            string text,
+            double size,
+            bool bold,
+            string color,
+            PdfTextAlign align = PdfTextAlign.Left,
+            string? font = null)
+        {
+            var escapedText = EscapePdf(ToPdfAscii(text));
+            var fontName = font ?? (bold ? "F2" : "F1");
+            var safeX = align == PdfTextAlign.Right
+                ? x - EstimateTextWidth(text, size, fontName)
+                : x;
+
+            _builder
+                .Append("BT\n/")
+                .Append(fontName)
+                .Append(' ')
+                .Append(FormatNumber(size))
+                .Append(" Tf\n")
+                .Append(ToRgb(color))
+                .Append(" rg\n")
+                .Append(FormatNumber(safeX))
+                .Append(' ')
+                .Append(FormatNumber(y))
+                .Append(" Td\n(")
+                .Append(escapedText)
+                .Append(") Tj\nET\n");
+        }
+
+        public override string ToString() => _builder.ToString();
+
+        private static string ToRgb(string color)
+        {
+            var value = color.TrimStart('#');
+            var red = int.Parse(value[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture) / 255d;
+            var green = int.Parse(value.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture) / 255d;
+            var blue = int.Parse(value.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture) / 255d;
+            return $"{FormatNumber(red)} {FormatNumber(green)} {FormatNumber(blue)}";
+        }
+
+        private static double EstimateTextWidth(string text, double size, string font)
+        {
+            var factor = font == "F3" ? 0.6 : 0.52;
+            return ToPdfAscii(text).Length * size * factor;
+        }
+
+        private static string FormatNumber(double value) =>
+            value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
 
     private const string SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private const string ContentTypesXml = """

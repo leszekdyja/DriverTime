@@ -47,7 +47,8 @@ app.UseCors(policy =>
     policy
         .AllowAnyOrigin()
         .AllowAnyHeader()
-        .AllowAnyMethod();
+        .AllowAnyMethod()
+        .WithExposedHeaders("Content-Disposition");
 });
 
 app.UseHttpsRedirection();

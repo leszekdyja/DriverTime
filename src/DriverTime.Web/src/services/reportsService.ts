@@ -20,6 +20,19 @@ export type ReportActivity = {
     durationSeconds: number;
 };
 
+type ReportFormat = "pdf" | "excel";
+
+const reportFiles: Record<ReportFormat, { contentType: string; fallbackName: string }> = {
+    pdf: {
+        contentType: "application/pdf",
+        fallbackName: "raport-kierowcy.pdf",
+    },
+    excel: {
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fallbackName: "raport-kierowcy.xlsx",
+    },
+};
+
 async function getJson<T>(url: string, errorMessage: string): Promise<T> {
     const response = await apiFetch(url);
 
@@ -66,7 +79,7 @@ export async function downloadDriverReport(
     driverId: string,
     dateFrom: string,
     dateTo: string,
-    format: "pdf" | "excel",
+    format: ReportFormat,
 ): Promise<void> {
     const parameters = new URLSearchParams({
         from: dateFrom,
@@ -89,16 +102,47 @@ export async function downloadDriverReport(
         throw new Error(message);
     }
 
+    const file = reportFiles[format];
+    const responseType = response.headers.get("Content-Type")?.split(";", 1)[0];
+
+    if (responseType && responseType !== file.contentType) {
+        throw new Error(`API zwrocilo nieprawidlowy format pliku ${format.toUpperCase()}.`);
+    }
+
     const blob = await response.blob();
+
+    if (blob.size === 0) {
+        throw new Error(`Pobrany plik ${format.toUpperCase()} jest pusty.`);
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = format === "pdf"
-        ? "raport-kierowcy.pdf"
-        : "raport-kierowcy.xlsx";
+    link.download = getDownloadFileName(
+        response.headers.get("Content-Disposition"),
+        file.fallbackName,
+    );
+    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+function getDownloadFileName(contentDisposition: string | null, fallback: string) {
+    if (!contentDisposition) return fallback;
+
+    const utf8Name = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+
+    if (utf8Name) {
+        try {
+            return decodeURIComponent(utf8Name.replace(/^"|"$/g, ""));
+        } catch {
+            return fallback;
+        }
+    }
+
+    return contentDisposition.match(/filename="?([^";]+)"?/i)?.[1] ?? fallback;
 }
