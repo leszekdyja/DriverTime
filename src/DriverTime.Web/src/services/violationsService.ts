@@ -1,4 +1,4 @@
-import { API_URL } from "../config/api";
+import { apiFetch } from "./apiClient";
 
 export type DriverViolation = {
     driverFirstName: string;
@@ -11,7 +11,7 @@ export type DriverViolation = {
 };
 
 export async function getDriverViolations(): Promise<DriverViolation[]> {
-    const response = await fetch(`${API_URL}/api/driver-violations`);
+    const response = await apiFetch("/api/driver-violations");
 
     if (!response.ok) {
         throw new Error("Nie udalo sie pobrac naruszen kierowcow.");

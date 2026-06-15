@@ -1,4 +1,4 @@
-import { API_URL } from "../config/api";
+import { apiFetch } from "./apiClient";
 
 export type DddImport = {
     id: string;
@@ -11,7 +11,7 @@ export type DddImport = {
 };
 
 export async function getDddImports(): Promise<DddImport[]> {
-    const response = await fetch(`${API_URL}/api/ddd-files`);
+    const response = await apiFetch("/api/ddd-files");
 
     if (!response.ok) {
         throw new Error("Nie udalo sie pobrac listy importow DDD.");

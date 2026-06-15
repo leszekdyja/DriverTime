@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { API_URL } from "../config/api";
+import { apiFetch } from "../services/apiClient";
 import "../styles/drivers.css";
 
 type DriverDto = {
@@ -35,7 +36,7 @@ export default function DriversPage() {
         setMessage("");
 
         try {
-            const response = await fetch(driversApiUrl);
+            const response = await apiFetch(driversApiUrl);
 
             if (!response.ok) {
                 throw new Error("Nie udalo sie pobrac kierowcow.");
@@ -64,7 +65,7 @@ export default function DriversPage() {
         setIsSaving(true);
 
         try {
-            const response = await fetch(driversApiUrl, {
+            const response = await apiFetch(driversApiUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(form),

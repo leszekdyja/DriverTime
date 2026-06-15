@@ -1,4 +1,4 @@
-import { API_URL } from "../config/api";
+import { apiFetch } from "./apiClient";
 
 export type DriverActivity = {
     start: string;
@@ -42,7 +42,7 @@ export type DddImportDetails = {
 export async function getDddImportDetails(
     id: string,
 ): Promise<DddImportDetails> {
-    const response = await fetch(`${API_URL}/api/ddd-files/${id}`);
+    const response = await apiFetch(`/api/ddd-files/${id}`);
 
     if (!response.ok) {
         if (response.status === 404) {

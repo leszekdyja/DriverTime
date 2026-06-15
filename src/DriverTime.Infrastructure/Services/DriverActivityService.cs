@@ -8,10 +8,14 @@ namespace DriverTime.Infrastructure.Services;
 public class DriverActivityService : IDriverActivityService
 {
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ICurrentUserService _currentUser;
 
-    public DriverActivityService(DriverTimeDbContext dbContext)
+    public DriverActivityService(
+        DriverTimeDbContext dbContext,
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     public async Task<List<DriverActivityDto>> GetActivitiesAsync(
@@ -21,6 +25,7 @@ public class DriverActivityService : IDriverActivityService
     {
         var query = _dbContext.DriverActivities
             .AsNoTracking()
+            .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(driverCardNumber))

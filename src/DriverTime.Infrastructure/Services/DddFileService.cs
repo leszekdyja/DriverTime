@@ -10,13 +10,16 @@ public class DddFileService : IDddFileService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly IDddParserGateway _dddParserGateway;
+    private readonly ICurrentUserService _currentUser;
 
     public DddFileService(
         DriverTimeDbContext dbContext,
-        IDddParserGateway dddParserGateway)
+        IDddParserGateway dddParserGateway,
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
         _dddParserGateway = dddParserGateway;
+        _currentUser = currentUser;
     }
 
     public async Task<DddParseResultDto> UploadAndParseAsync(
@@ -39,6 +42,7 @@ public class DddFileService : IDddFileService
             var dddFile = new DddFile
             {
                 Id = Guid.NewGuid(),
+                CompanyId = _currentUser.CompanyId,
                 FileName = originalFileName,
                 UploadedAtUtc = DateTime.UtcNow
             };
@@ -61,6 +65,7 @@ public class DddFileService : IDddFileService
     public async Task<IReadOnlyList<DddFileDto>> GetAllAsync()
     {
         return await _dbContext.DddFiles
+            .Where(x => x.CompanyId == _currentUser.CompanyId)
             .OrderByDescending(x => x.UploadedAtUtc)
             .Select(x => new DddFileDto
             {
@@ -82,7 +87,8 @@ public class DddFileService : IDddFileService
             .Include(x => x.DriverActivities)
             .Include(x => x.CountryEntries)
             .Include(x => x.VehicleUses)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x =>
+                x.Id == id && x.CompanyId == _currentUser.CompanyId);
 
         if (dddFile is null)
         {

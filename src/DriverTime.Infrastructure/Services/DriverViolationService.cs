@@ -18,10 +18,14 @@ public class DriverViolationService : IDriverViolationService
         TimeSpan.FromMinutes(45);
 
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ICurrentUserService _currentUser;
 
-    public DriverViolationService(DriverTimeDbContext dbContext)
+    public DriverViolationService(
+        DriverTimeDbContext dbContext,
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyList<DriverViolationDto>> GetViolationsAsync(
@@ -29,6 +33,7 @@ public class DriverViolationService : IDriverViolationService
     {
         var activities = await _dbContext.DriverActivities
             .AsNoTracking()
+            .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
             .Include(x => x.DddFile)
             .OrderBy(x => x.StartUtc)
             .ToListAsync(cancellationToken);

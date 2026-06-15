@@ -1,4 +1,5 @@
 import { API_URL } from "../config/api";
+import { getAuthToken } from "./apiClient";
 
 export type DddUploadResult = {
     parser_name: string;
@@ -20,6 +21,12 @@ export function uploadDddFile(
 
         formData.append("file", file);
         request.open("POST", `${API_URL}/api/ddd-files/upload`);
+
+        const token = getAuthToken();
+
+        if (token) {
+            request.setRequestHeader("Authorization", `Bearer ${token}`);
+        }
 
         request.upload.addEventListener("progress", (event) => {
             if (event.lengthComputable) {

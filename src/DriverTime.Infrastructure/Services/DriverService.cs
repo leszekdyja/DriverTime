@@ -9,15 +9,20 @@ namespace DriverTime.Infrastructure.Services;
 public class DriverService : IDriverService
 {
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ICurrentUserService _currentUser;
 
-    public DriverService(DriverTimeDbContext dbContext)
+    public DriverService(
+        DriverTimeDbContext dbContext,
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     public async Task<List<DriverDto>> GetAllAsync()
     {
         return await _dbContext.Drivers
+            .Where(x => x.CompanyId == _currentUser.CompanyId)
             .OrderBy(x => x.LastName)
             .ThenBy(x => x.FirstName)
             .Select(x => new DriverDto
@@ -34,7 +39,7 @@ public class DriverService : IDriverService
     public async Task<DriverDto?> GetByIdAsync(Guid id)
     {
         return await _dbContext.Drivers
-            .Where(x => x.Id == id)
+            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId)
             .Select(x => new DriverDto
             {
                 Id = x.Id,
@@ -51,6 +56,7 @@ public class DriverService : IDriverService
         var driver = new Driver
         {
             Id = Guid.NewGuid(),
+            CompanyId = _currentUser.CompanyId,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
             CardNumber = dto.CardNumber,

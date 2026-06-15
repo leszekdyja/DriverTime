@@ -1,6 +1,7 @@
 using DriverTime.Application.Companies.Services;
 using DriverTime.Application.Interfaces;
 using DriverTime.Infrastructure.Parsing;
+using DriverTime.Infrastructure.Authentication;
 using DriverTime.Infrastructure.Persistence;
 using DriverTime.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,11 @@ public static class DependencyInjection
         services.AddScoped<IDriverActivityService, DriverActivityService>();
 
         services.AddScoped<IDriverViolationService, DriverViolationService>();
+
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddSingleton<ITokenService, TokenService>();
+        services.AddScoped<DatabaseSeeder>();
 
         return services;
     }

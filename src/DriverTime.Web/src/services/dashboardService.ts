@@ -1,4 +1,4 @@
-import { API_URL } from "../config/api";
+import { apiFetch } from "./apiClient";
 import { getDddImports, type DddImport } from "./dddImportsService";
 
 type DashboardSummary = {
@@ -36,7 +36,7 @@ export type DashboardData = {
 };
 
 async function getJson<T>(path: string, errorMessage: string): Promise<T> {
-    const response = await fetch(`${API_URL}${path}`);
+    const response = await apiFetch(path);
 
     if (!response.ok) {
         throw new Error(errorMessage);

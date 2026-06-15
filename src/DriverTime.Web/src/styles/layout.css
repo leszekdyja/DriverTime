@@ -155,6 +155,23 @@
     font-size: 13px;
 }
 
+.logout-button {
+    padding: 7px 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 8px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.logout-button:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
 .profile-avatar {
     display: grid;
     width: 34px;
@@ -254,6 +271,10 @@
 
     .profile-placeholder div {
         display: none;
+    }
+
+    .logout-button {
+        padding-inline: 8px;
     }
 
     .page-content {

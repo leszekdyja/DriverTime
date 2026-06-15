@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DriverTime.Api.Controllers;
@@ -6,6 +7,7 @@ namespace DriverTime.Api.Controllers;
 [Route("api/[controller]")]
 public class HealthController : ControllerBase
 {
+    [AllowAnonymous]
     [HttpGet]
     public IActionResult Get()
     {

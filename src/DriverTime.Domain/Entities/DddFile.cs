@@ -4,6 +4,10 @@ public class DddFile
 {
     public Guid Id { get; set; }
 
+    public Guid CompanyId { get; set; }
+
+    public Company Company { get; set; } = null!;
+
     public string FileName { get; set; } = string.Empty;
 
     public DateTime UploadedAtUtc { get; set; }

@@ -8,10 +8,14 @@ namespace DriverTime.Infrastructure.Services;
 public class DashboardService : IDashboardService
 {
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ICurrentUserService _currentUser;
 
-    public DashboardService(DriverTimeDbContext dbContext)
+    public DashboardService(
+        DriverTimeDbContext dbContext,
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     public async Task<DashboardDto> GetDashboardAsync(
@@ -19,13 +23,17 @@ public class DashboardService : IDashboardService
     {
         return new DashboardDto
         {
-            DddFilesCount = await _dbContext.DddFiles.CountAsync(cancellationToken),
+            DddFilesCount = await _dbContext.DddFiles
+                .CountAsync(x => x.CompanyId == _currentUser.CompanyId, cancellationToken),
 
-            DriverActivitiesCount = await _dbContext.DriverActivities.CountAsync(cancellationToken),
+            DriverActivitiesCount = await _dbContext.DriverActivities
+                .CountAsync(x => x.DddFile.CompanyId == _currentUser.CompanyId, cancellationToken),
 
-            VehicleUsesCount = await _dbContext.VehicleUses.CountAsync(cancellationToken),
+            VehicleUsesCount = await _dbContext.VehicleUses
+                .CountAsync(x => x.DddFile.CompanyId == _currentUser.CompanyId, cancellationToken),
 
-            CountryEntriesCount = await _dbContext.CountryEntries.CountAsync(cancellationToken),
+            CountryEntriesCount = await _dbContext.CountryEntries
+                .CountAsync(x => x.DddFile.CompanyId == _currentUser.CompanyId, cancellationToken),
 
             GeneratedAtUtc = DateTime.UtcNow
         };

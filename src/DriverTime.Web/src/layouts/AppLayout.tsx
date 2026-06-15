@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthContext";
 import "../styles/layout.css";
 
 const navigationItems = [
@@ -18,6 +19,9 @@ const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 export default function AppLayout() {
+    const { user, logout } = useAuth();
+    const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}` || "U";
+
     return (
         <div className="app-shell">
             <aside className="sidebar">
@@ -60,12 +64,15 @@ export default function AppLayout() {
                         <span>{currentDateFormatter.format(new Date())}</span>
                     </div>
 
-                    <div className="profile-placeholder" aria-label="Przyszly profil uzytkownika">
-                        <span className="profile-avatar">U</span>
+                    <div className="profile-placeholder" aria-label="Profil uzytkownika">
+                        <span className="profile-avatar">{initials}</span>
                         <div>
-                            <strong>Profil uzytkownika</strong>
-                            <span>Funkcja planowana</span>
+                            <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
+                            <span>{user?.companyName} · {user?.role}</span>
                         </div>
+                        <button className="logout-button" type="button" onClick={logout}>
+                            Wyloguj
+                        </button>
                     </div>
                 </header>
 

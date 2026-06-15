@@ -1,4 +1,5 @@
 import { API_URL } from "../config/api";
+import { apiFetch } from "./apiClient";
 
 export type ReportDriver = {
     id: string;
@@ -20,7 +21,7 @@ export type ReportActivity = {
 };
 
 async function getJson<T>(url: string, errorMessage: string): Promise<T> {
-    const response = await fetch(url);
+    const response = await apiFetch(url);
 
     if (!response.ok) {
         throw new Error(errorMessage);
