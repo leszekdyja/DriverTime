@@ -1,6 +1,6 @@
 import type { Cell, CellObject, SheetData, Value } from "write-excel-file/browser";
 
-import type { ReportActivity, ReportDriver } from "./reportsService";
+import type { DriverReport, ReportActivity, ReportDriver } from "./reportsService";
 import type { DriverViolation } from "./violationsService";
 
 type ReportTotals = {
@@ -11,6 +11,7 @@ type ReportTotals = {
 
 type ReportExcelOptions = {
     activities: ReportActivity[];
+    report?: DriverReport;
     driver?: ReportDriver;
     dateFrom: string;
     dateTo: string;
@@ -92,20 +93,37 @@ function driverName(firstName: string, lastName: string) {
     return [firstName, lastName].filter(Boolean).join(" ") || "Brak danych";
 }
 
+function reportDriverName(options: ReportExcelOptions) {
+    if (options.report) {
+        return driverName(options.report.driverFirstName, options.report.driverLastName);
+    }
+
+    if (options.driver) {
+        return driverName(options.driver.firstName, options.driver.lastName);
+    }
+
+    return "Wszyscy kierowcy";
+}
+
+function reportDriverCardNumber(options: ReportExcelOptions) {
+    return options.report?.driverCardNumber
+        || options.driver?.cardNumber
+        || "Wszystkie";
+}
+
 function generatedAtRow(): Cell[] {
     return [labelCell("Data wygenerowania"), dateCell(new Date().toISOString())];
 }
 
 export async function exportReportExcel(options: ReportExcelOptions) {
     const { default: writeExcelFile } = await import("write-excel-file/browser");
-    const selectedDriver = options.driver
-        ? driverName(options.driver.firstName, options.driver.lastName)
-        : "Wszyscy kierowcy";
+    const selectedDriver = reportDriverName(options);
+    const selectedDriverCardNumber = reportDriverCardNumber(options);
     const sheet: SheetData = [
         [titleCell],
         [{ value: "Raport aktywnosci kierowcow", fontSize: 14, fontWeight: "bold", columnSpan: 6 }],
         generatedAtRow(),
-        [labelCell("Kierowca"), selectedDriver, labelCell("Numer karty"), options.driver?.cardNumber || "Wszystkie"],
+        [labelCell("Kierowca"), selectedDriver, labelCell("Numer karty"), selectedDriverCardNumber],
         [labelCell("Zakres dat"), `${options.dateFrom || "Poczatek danych"} - ${options.dateTo || "Koniec danych"}`],
         [],
         [headerCell("Czas jazdy"), headerCell("Czas pracy"), headerCell("Czas odpoczynku"), headerCell("Liczba aktywnosci")],
@@ -120,8 +138,8 @@ export async function exportReportExcel(options: ReportExcelOptions) {
             headerCell("Czas"),
         ],
         ...options.activities.map((activity) => [
-            dataCell(driverName(activity.driverFirstName, activity.driverLastName)),
-            dataCell(activity.driverCardNumber || "Brak danych"),
+            dataCell(selectedDriver),
+            dataCell(selectedDriverCardNumber),
             dateCell(activity.startUtc),
             dateCell(activity.endUtc),
             dataCell(activity.activityType || "Brak danych"),

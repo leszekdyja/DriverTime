@@ -51,7 +51,7 @@ export default function ReportsPage() {
     const [error, setError] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
 
-    const activities = report?.activities ?? [];
+    const activities = useMemo(() => report?.activities ?? [], [report]);
 
     async function loadReport() {
         setIsGeneratingReport(true);

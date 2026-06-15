@@ -1,6 +1,6 @@
 import type { jsPDF as PdfDocument } from "jspdf";
 
-import type { ReportActivity, ReportDriver } from "./reportsService";
+import type { DriverReport, ReportActivity, ReportDriver } from "./reportsService";
 import type { DriverViolation } from "./violationsService";
 
 type ReportTotals = {
@@ -11,6 +11,7 @@ type ReportTotals = {
 
 type ReportPdfOptions = {
     activities: ReportActivity[];
+    report?: DriverReport;
     driver?: ReportDriver;
     dateFrom: string;
     dateTo: string;
@@ -51,6 +52,24 @@ function getDriverName(firstName: string, lastName: string) {
     return [firstName, lastName].filter(Boolean).join(" ") || "Brak danych";
 }
 
+function getReportDriverName(options: ReportPdfOptions) {
+    if (options.report) {
+        return getDriverName(options.report.driverFirstName, options.report.driverLastName);
+    }
+
+    if (options.driver) {
+        return getDriverName(options.driver.firstName, options.driver.lastName);
+    }
+
+    return "Wszyscy kierowcy";
+}
+
+function getReportDriverCardNumber(options: ReportPdfOptions) {
+    return options.report?.driverCardNumber
+        || options.driver?.cardNumber
+        || "Wszystkie numery kart";
+}
+
 function addHeader(document: PdfDocument, title: string, subtitle: string) {
     document.setFillColor(15, 23, 42);
     document.rect(0, 0, 297, 30, "F");
@@ -75,9 +94,8 @@ export async function exportReportPdf(options: ReportPdfOptions) {
         import("jspdf-autotable"),
     ]);
     const document = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const driverName = options.driver
-        ? getDriverName(options.driver.firstName, options.driver.lastName)
-        : "Wszyscy kierowcy";
+    const driverName = getReportDriverName(options);
+    const driverCardNumber = getReportDriverCardNumber(options);
     const dateRange = `${options.dateFrom || "poczatek danych"} - ${options.dateTo || "koniec danych"}`;
 
     addHeader(document, "Raport aktywnosci kierowcow", `Zakres: ${dateRange}`);
@@ -89,7 +107,7 @@ export async function exportReportPdf(options: ReportPdfOptions) {
     document.text("Zakres dat", 176, 41);
     document.setFont("helvetica", "normal");
     document.text(driverName, 14, 47);
-    document.text(options.driver?.cardNumber || "Wszystkie numery kart", 95, 47);
+    document.text(driverCardNumber, 95, 47);
     document.text(dateRange, 176, 47);
 
     autoTable(document, {
@@ -111,8 +129,8 @@ export async function exportReportPdf(options: ReportPdfOptions) {
         theme: "striped",
         head: [["Kierowca", "Numer karty", "Poczatek", "Koniec", "Aktywnosc", "Czas"]],
         body: options.activities.map((activity) => [
-            getDriverName(activity.driverFirstName, activity.driverLastName),
-            activity.driverCardNumber || "Brak danych",
+            driverName,
+            driverCardNumber,
             formatDate(activity.startUtc),
             formatDate(activity.endUtc),
             activity.activityType || "Brak danych",
