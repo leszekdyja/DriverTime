@@ -1,0 +1,35 @@
+name: DriverTime Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore DriverTime.sln
+
+      - name: Build solution
+        run: dotnet build DriverTime.sln --no-restore --configuration Release
+
+      - name: Run tests
+        run: dotnet test DriverTime.sln --no-build --configuration Release

@@ -1,6 +1,6 @@
-namespace DriverTime.Domain.Entities;
+﻿namespace DriverTime.Application.Drivers.DTOs;
 
-public class Driver
+public class DriverDto
 {
     public Guid Id { get; set; }
 
@@ -10,5 +10,5 @@ public class Driver
 
     public string CardNumber { get; set; } = string.Empty;
 
-    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAtUtc { get; set; }
 }

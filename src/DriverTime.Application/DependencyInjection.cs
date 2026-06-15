@@ -1,14 +1,14 @@
-using DriverTime.Application.Interfaces;
-using DriverTime.Application.Services;
+using DriverTime.Application.Companies.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DriverTime.Application;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static IServiceCollection AddApplication(
+        this IServiceCollection services)
     {
-        services.AddScoped<IDddImportService, DddImportService>();
+        services.AddScoped<ICompanyService, CompanyService>();
 
         return services;
     }

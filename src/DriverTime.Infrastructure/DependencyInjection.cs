@@ -1,3 +1,4 @@
+using DriverTime.Application.Companies.Services;
 using DriverTime.Application.Interfaces;
 using DriverTime.Infrastructure.Parsing;
 using DriverTime.Infrastructure.Persistence;
@@ -14,17 +15,17 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+        services.AddDbContext<DriverTimeDbContext>(options =>
+            options.UseNpgsql(
+                configuration.GetConnectionString("DefaultConnection")));
 
-        services.Configure<DddParserOptions>(
-            configuration.GetSection("DddParser"));
+        services.AddScoped<ICompanyService, DriverTime.Application.Companies.Services.CompanyService>();
 
         services.AddScoped<IDddParserGateway, DddParserGateway>();
+
         services.AddScoped<IDddFileService, DddFileService>();
-        services.AddScoped<IDddImportService, DddImportService>();
-        services.AddScoped<IDashboardService, DashboardService>();
-        services.AddScoped<IDriverActivityService, DriverActivityService>();
+
+        services.AddScoped<IDriverService, DriverService>();
 
         return services;
     }
