@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import DriverRiskOverview from "../components/DriverRiskOverview";
 import {
     getDashboardData,
     type DashboardData,
@@ -159,6 +160,8 @@ export default function DashboardPage() {
                     ))}
                 </div>
             </section>
+
+            <DriverRiskOverview />
 
             <div className="analytics-grid">
                 <section className="dashboard-panel chart-panel">

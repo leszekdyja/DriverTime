@@ -1,4 +1,5 @@
-﻿using DriverTime.Application.DTOs;
+using DriverTime.Application.Dashboard.DTOs;
+using DriverTime.Application.DTOs;
 using DriverTime.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,9 +20,15 @@ public class DashboardController : ControllerBase
     public async Task<ActionResult<DashboardDto>> GetDashboard(
         CancellationToken cancellationToken)
     {
-        var dashboard = await _dashboardService.GetDashboardAsync(
-            cancellationToken);
-
+        var dashboard = await _dashboardService.GetDashboardAsync(cancellationToken);
         return Ok(dashboard);
+    }
+
+    [HttpGet("risk-overview")]
+    public async Task<ActionResult<DriverRiskOverviewDto>> GetRiskOverview(
+        CancellationToken cancellationToken)
+    {
+        var overview = await _dashboardService.GetRiskOverviewAsync(cancellationToken);
+        return Ok(overview);
     }
 }

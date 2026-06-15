@@ -35,6 +35,30 @@ export type DashboardData = {
     activities: DriverActivity[];
 };
 
+export type DriverRisk = {
+    driverId: string;
+    firstName: string;
+    lastName: string;
+    cardNumber: string;
+    violationsCount: number;
+    severeViolationsCount: number;
+    lastImportAtUtc: string | null;
+    lastActivityAtUtc: string | null;
+    daysSinceLastImport: number | null;
+    daysSinceLastActivity: number | null;
+    riskStatus: "Low" | "Medium" | "High" | "Critical";
+    riskScore: number;
+};
+
+export type DriverRiskOverview = {
+    generatedAtUtc: string;
+    lowRiskCount: number;
+    mediumRiskCount: number;
+    highRiskCount: number;
+    criticalRiskCount: number;
+    drivers: DriverRisk[];
+};
+
 async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     const response = await apiFetch(path);
 
@@ -73,4 +97,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         latestImports,
         activities,
     };
+}
+
+export function getDriverRiskOverview(): Promise<DriverRiskOverview> {
+    return getJson<DriverRiskOverview>(
+        "/api/dashboard/risk-overview",
+        "Nie udalo sie pobrac danych ryzyka kierowcow.",
+    );
 }

@@ -31,7 +31,8 @@
 
 .summary-card,
 .dashboard-panel,
-.activity-overview {
+.activity-overview,
+.driver-risk-section {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-card);
     background: var(--color-surface);
@@ -82,6 +83,118 @@
 .activity-overview {
     margin-top: 22px;
     padding: 22px;
+}
+
+.driver-risk-section {
+    margin-top: 22px;
+    padding: 22px;
+}
+
+.driver-risk-cards,
+.driver-risk-loading {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.driver-risk-card {
+    position: relative;
+    display: grid;
+    min-height: 104px;
+    align-content: space-between;
+    overflow: hidden;
+    padding: 17px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface-muted);
+}
+
+.driver-risk-card::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 4px;
+    content: "";
+}
+
+.driver-risk-card.low::before { background: #16a34a; }
+.driver-risk-card.medium::before { background: #eab308; }
+.driver-risk-card.high::before { background: #f97316; }
+.driver-risk-card.critical::before { background: #dc2626; }
+
+.driver-risk-card span,
+.driver-risk-card small {
+    color: var(--color-muted);
+}
+
+.driver-risk-card span {
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.driver-risk-card strong {
+    color: var(--color-heading);
+    font-size: 28px;
+}
+
+.driver-risk-card small {
+    font-size: 12px;
+}
+
+.driver-risk-table-wrapper {
+    margin-top: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+}
+
+.driver-risk-table {
+    min-width: 1050px;
+}
+
+.risk-badge {
+    display: inline-flex;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.risk-badge.low {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.risk-badge.medium {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.risk-badge.high {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.risk-badge.critical {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.severe-count {
+    color: var(--color-danger);
+}
+
+.driver-risk-error {
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid var(--color-danger-border);
+    border-radius: 9px;
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.risk-skeleton-card {
+    min-height: 104px;
 }
 
 .panel-heading {
@@ -222,6 +335,8 @@
     .dashboard-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .activity-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .analytics-grid { grid-template-columns: 1fr; }
+    .driver-risk-cards,
+    .driver-risk-loading { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -232,8 +347,11 @@
 
 @media (max-width: 520px) {
     .dashboard-cards,
-    .activity-metrics { grid-template-columns: 1fr; }
+    .activity-metrics,
+    .driver-risk-cards,
+    .driver-risk-loading { grid-template-columns: 1fr; }
     .dashboard-panel,
-    .activity-overview { padding: 18px; }
+    .activity-overview,
+    .driver-risk-section { padding: 18px; }
     .activity-chart { height: 260px; }
 }
