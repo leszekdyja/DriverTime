@@ -1,5 +1,6 @@
 ﻿using DriverTime.Application.Drivers.DTOs;
 using DriverTime.Application.Interfaces;
+using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -106,8 +107,8 @@ public class DriverService : IDriverService
         driver.LastImportAtUtc = imports.FirstOrDefault()?.UploadedAtUtc;
         driver.RecentImports = imports.Take(10).ToList();
         driver.RecentActivities = activities.Take(20).ToList();
-        driver.RecentViolations = (await _driverViolationService
-                .GetViolationsForDriverAsync(id))
+        driver.RecentViolations = ((await _driverViolationService
+                .GetViolationsForDriverAsync(id)) ?? Array.Empty<DriverViolationDto>())
             .Take(10)
             .ToList();
         driver.Vehicles = await _dbContext.VehicleUses

@@ -2,6 +2,8 @@ namespace DriverTime.Application.Violations.DTOs;
 
 public class DriverViolationDto
 {
+    public string Code { get; set; } = string.Empty;
+
     public string DriverFirstName { get; set; } = string.Empty;
 
     public string DriverLastName { get; set; } = string.Empty;
@@ -12,7 +14,13 @@ public class DriverViolationDto
 
     public DateTime OccurredAtUtc { get; set; }
 
+    public DateTime PeriodEndUtc { get; set; }
+
     public string Description { get; set; } = string.Empty;
 
     public string Severity { get; set; } = string.Empty;
+
+    public long ActualDurationMinutes { get; set; }
+
+    public long LimitDurationMinutes { get; set; }
 }

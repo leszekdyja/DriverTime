@@ -1,5 +1,6 @@
 ﻿using DriverTime.Application.Drivers.DTOs;
 using DriverTime.Application.Interfaces;
+using DriverTime.Application.Violations.DTOs;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DriverTime.Api.Controllers;
@@ -9,10 +10,14 @@ namespace DriverTime.Api.Controllers;
 public class DriversController : ControllerBase
 {
     private readonly IDriverService _driverService;
+    private readonly IDriverViolationService _driverViolationService;
 
-    public DriversController(IDriverService driverService)
+    public DriversController(
+        IDriverService driverService,
+        IDriverViolationService driverViolationService)
     {
         _driverService = driverService;
+        _driverViolationService = driverViolationService;
     }
 
     [HttpGet]
@@ -34,6 +39,17 @@ public class DriversController : ControllerBase
         }
 
         return Ok(driver);
+    }
+
+    [HttpGet("{id:guid}/violations")]
+    public async Task<ActionResult<IReadOnlyList<DriverViolationDto>>> GetViolations(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var violations = await _driverViolationService
+            .GetViolationsForDriverAsync(id, cancellationToken);
+
+        return violations is null ? NotFound() : Ok(violations);
     }
 
     [HttpPost]

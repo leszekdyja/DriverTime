@@ -5,6 +5,10 @@ import {
     getDriverDetails,
     type DriverDetails,
 } from "../services/driverDetailsService";
+import {
+    getDriverViolations,
+    type DriverViolation,
+} from "../services/driverViolationsService";
 import "../styles/driver-details.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -25,11 +29,43 @@ function formatDuration(seconds: number) {
     return `${hours} godz. ${minutes} min`;
 }
 
+function formatMinutes(minutes: number) {
+    return formatDuration(minutes * 60);
+}
+
+function formatViolationDuration(violation: DriverViolation) {
+    if (violation.actualDurationMinutes <= 0) {
+        return "Brak danych";
+    }
+
+    const actual = formatMinutes(violation.actualDurationMinutes);
+    const exceededBy = Math.max(
+        violation.actualDurationMinutes - violation.limitDurationMinutes,
+        0,
+    );
+
+    return exceededBy > 0
+        ? `${actual} (+${formatMinutes(exceededBy)})`
+        : actual;
+}
+
+function getSeverityClass(severity: string) {
+    const normalized = severity.toLowerCase();
+
+    if (normalized === "high" || normalized === "severe") return "high";
+    if (normalized === "medium") return "medium";
+    if (normalized === "low") return "low";
+    return "default";
+}
+
 export default function DriverDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const [details, setDetails] = useState<DriverDetails | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [violations, setViolations] = useState<DriverViolation[]>([]);
+    const [areViolationsLoading, setAreViolationsLoading] = useState(true);
+    const [violationsError, setViolationsError] = useState("");
 
     useEffect(() => {
         async function loadDetails() {
@@ -53,6 +89,29 @@ export default function DriverDetailsPage() {
         }
 
         void loadDetails();
+    }, [id]);
+
+    useEffect(() => {
+        async function loadViolations() {
+            if (!id) {
+                setAreViolationsLoading(false);
+                return;
+            }
+
+            try {
+                setViolations(await getDriverViolations(id));
+            } catch (loadError) {
+                setViolationsError(
+                    loadError instanceof Error
+                        ? loadError.message
+                        : "Wystapil blad podczas pobierania naruszen.",
+                );
+            } finally {
+                setAreViolationsLoading(false);
+            }
+        }
+
+        void loadViolations();
     }, [id]);
 
     return (
@@ -100,11 +159,28 @@ export default function DriverDetailsPage() {
                         </table>
                     </DetailsSection>
 
-                    <DetailsSection title="Ostatnie naruszenia" empty={details.recentViolations.length === 0}>
-                        <table><thead><tr><th>Typ</th><th>Data</th><th>Opis</th><th>Poziom</th></tr></thead>
-                            <tbody>{details.recentViolations.map((item, index) => <tr key={`${item.violationType}-${item.occurredAtUtc}-${index}`}><td>{item.violationType}</td><td>{formatDate(item.occurredAtUtc)}</td><td>{item.description}</td><td><span className={`severity-badge ${item.severity}`}>{item.severity}</span></td></tr>)}</tbody>
-                        </table>
-                    </DetailsSection>
+                    <section className="driver-details-section">
+                        <h3>Naruszenia</h3>
+
+                        {areViolationsLoading ? (
+                            <p className="driver-details-state" role="status">
+                                Ladowanie naruszen...
+                            </p>
+                        ) : violationsError ? (
+                            <p className="driver-violations-error" role="alert">
+                                {violationsError}
+                            </p>
+                        ) : violations.length === 0 ? (
+                            <p className="driver-empty-state">Brak naruszen.</p>
+                        ) : (
+                            <div className="driver-details-table violations-table">
+                                <table>
+                                    <thead><tr><th>Data i czas</th><th>Typ</th><th>Opis</th><th>Poziom</th><th>Czas / przekroczenie</th></tr></thead>
+                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{item.violationType}</td><td>{item.description}</td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{item.severity}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
 
                     <DetailsSection title="Uzyte pojazdy" empty={details.vehicles.length === 0}>
                         <table><thead><tr><th>Numer rejestracyjny</th><th>Pierwsze uzycie</th><th>Ostatnie uzycie</th><th>Liczba uzyc</th></tr></thead>
