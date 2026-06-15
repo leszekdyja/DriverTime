@@ -6,6 +6,7 @@ import {
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
+import { exportReportPdf } from "../services/pdfExportService";
 import "../styles/reports.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -40,6 +41,7 @@ export default function ReportsPage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [isLoading, setIsLoading] = useState(true);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [error, setError] = useState("");
 
     async function loadActivities(
@@ -156,6 +158,25 @@ export default function ReportsPage() {
         URL.revokeObjectURL(url);
     }
 
+    async function handlePdfExport() {
+        setIsGeneratingPdf(true);
+        setError("");
+
+        try {
+            await exportReportPdf({
+                activities,
+                driver: drivers.find((driver) => driver.cardNumber === driverCardNumber),
+                dateFrom,
+                dateTo,
+                totals,
+            });
+        } catch {
+            setError("Nie udalo sie wygenerowac pliku PDF.");
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    }
+
     return (
         <div className="reports-page">
             <div className="reports-heading">
@@ -163,14 +184,24 @@ export default function ReportsPage() {
                     <h2>Raport aktywnosci</h2>
                     <p>Analiza czasu pracy kierowcow na podstawie importow DDD.</p>
                 </div>
-                <button
-                    className="csv-button"
-                    type="button"
-                    onClick={exportCsv}
-                    disabled={activities.length === 0}
-                >
-                    Eksportuj CSV
-                </button>
+                <div className="reports-actions">
+                    <button
+                        className="csv-button"
+                        type="button"
+                        onClick={exportCsv}
+                        disabled={activities.length === 0 || isGeneratingPdf}
+                    >
+                        Eksportuj CSV
+                    </button>
+                    <button
+                        className="pdf-button"
+                        type="button"
+                        onClick={() => void handlePdfExport()}
+                        disabled={activities.length === 0 || isGeneratingPdf}
+                    >
+                        {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                    </button>
+                </div>
             </div>
 
             <form className="reports-filters" onSubmit={handleSubmit}>

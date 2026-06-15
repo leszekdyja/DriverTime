@@ -15,7 +15,13 @@
     color: #4b5563;
 }
 
+.reports-actions {
+    display: flex;
+    gap: 10px;
+}
+
 .csv-button,
+.pdf-button,
 .reports-filters button {
     padding: 10px 16px;
     border: 0;
@@ -27,6 +33,7 @@
 }
 
 .csv-button:disabled,
+.pdf-button:disabled,
 .reports-filters button:disabled {
     background-color: #9ca3af;
     cursor: not-allowed;
@@ -172,7 +179,9 @@
         flex-direction: column;
     }
 
-    .csv-button {
+    .reports-actions,
+    .csv-button,
+    .pdf-button {
         width: 100%;
     }
 

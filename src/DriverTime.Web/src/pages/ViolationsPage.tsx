@@ -4,6 +4,7 @@ import {
     getDriverViolations,
     type DriverViolation,
 } from "../services/violationsService";
+import { exportViolationsPdf } from "../services/pdfExportService";
 import "../styles/violations.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -36,7 +37,21 @@ function displayDriver(violation: DriverViolation) {
 export default function ViolationsPage() {
     const [violations, setViolations] = useState<DriverViolation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [error, setError] = useState("");
+
+    async function handlePdfExport() {
+        setIsGeneratingPdf(true);
+        setError("");
+
+        try {
+            await exportViolationsPdf(violations);
+        } catch {
+            setError("Nie udalo sie wygenerowac pliku PDF.");
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    }
 
     useEffect(() => {
         async function loadViolations() {
@@ -64,9 +79,19 @@ export default function ViolationsPage() {
                     <p>Podstawowa analiza czasu jazdy na podstawie danych DDD.</p>
                 </div>
                 {!isLoading && !error && (
-                    <span className="violations-count">
-                        {violations.length} naruszen
-                    </span>
+                    <div className="violations-heading-actions">
+                        <span className="violations-count">
+                            {violations.length} naruszen
+                        </span>
+                        <button
+                            className="violations-pdf-button"
+                            type="button"
+                            onClick={() => void handlePdfExport()}
+                            disabled={violations.length === 0 || isGeneratingPdf}
+                        >
+                            {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                        </button>
+                    </div>
                 )}
             </div>
 
