@@ -1,0 +1,115 @@
+.account-page {
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.account-heading p,
+.account-card-heading p {
+    margin: 6px 0 0;
+}
+
+.account-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    margin-top: 28px;
+}
+
+.account-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 26px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+}
+
+.account-card label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.account-card label > span {
+    color: var(--color-danger);
+}
+
+.account-card input {
+    min-height: 43px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+    font: inherit;
+}
+
+.account-card input:focus {
+    border-color: var(--color-primary);
+    outline: 3px solid rgb(37 99 235 / 15%);
+}
+
+.account-card button {
+    min-height: 43px;
+    margin-top: auto;
+    padding: 10px 18px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.account-card button:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    transform: translateY(-1px);
+}
+
+.account-card button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.account-message {
+    margin: 0;
+    padding: 13px 15px;
+    border-radius: var(--radius-sm);
+}
+
+.account-message.error {
+    border: 1px solid var(--color-danger-border);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.account-message.success {
+    border: 1px solid var(--color-success-border);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.account-skeleton {
+    min-height: 360px;
+    margin-top: 24px;
+    border-radius: var(--radius-card);
+}
+
+@media (max-width: 820px) {
+    .account-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .account-card {
+        padding: 19px;
+    }
+}

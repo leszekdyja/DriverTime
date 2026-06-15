@@ -31,6 +31,8 @@ public static class DependencyInjection
 
         services.AddScoped<ICompanySettingsService, CompanySettingsService>();
 
+        services.AddScoped<IAccountService, AccountService>();
+
         services.AddScoped<IDriverService, DriverService>();
 
         services.AddScoped<IDashboardService, DashboardService>();

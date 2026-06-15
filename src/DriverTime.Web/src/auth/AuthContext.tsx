@@ -48,12 +48,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 : current);
         }
 
+        function updateProfile(event: Event) {
+            const detail = (event as CustomEvent<Partial<CurrentUser>>).detail;
+            setUser((current) => current ? { ...current, ...detail } : current);
+        }
+
         window.addEventListener("drivertime:logout", clearExpiredSession);
         window.addEventListener("drivertime:company-updated", updateCompany);
+        window.addEventListener("drivertime:profile-updated", updateProfile);
 
         return () => {
             window.removeEventListener("drivertime:logout", clearExpiredSession);
             window.removeEventListener("drivertime:company-updated", updateCompany);
+            window.removeEventListener("drivertime:profile-updated", updateProfile);
         };
     }, []);
 

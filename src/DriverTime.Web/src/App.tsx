@@ -5,6 +5,7 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./layouts/AppLayout";
 
 import DashboardPage from "./pages/DashboardPage";
+import AccountPage from "./pages/AccountPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
@@ -30,6 +31,7 @@ export default function App() {
                             <Route path="reports" element={<ReportsPage />} />
                             <Route path="violations" element={<ViolationsPage />} />
                             <Route path="company-settings" element={<CompanySettingsPage />} />
+                            <Route path="account" element={<AccountPage />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Route>
                     </Route>

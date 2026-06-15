@@ -10,6 +10,7 @@ const navigationItems = [
     { to: "/violations", label: "Naruszenia", shortLabel: "N" },
     { to: "/imports", label: "Importy DDD", shortLabel: "I" },
     { to: "/company-settings", label: "Ustawienia firmy", shortLabel: "U" },
+    { to: "/account", label: "Moje konto", shortLabel: "M" },
 ];
 
 const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
