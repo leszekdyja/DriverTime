@@ -49,6 +49,19 @@ app.UseSwaggerUI(options =>
     options.RoutePrefix = "swagger";
 });
 
+app.Map("/health", healthApp =>
+{
+    healthApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            status = "Healthy",
+            application = "DriverTime"
+        });
+    });
+});
+
 app.UseCors(policy =>
 {
     var allowedOrigins = builder.Configuration
@@ -75,12 +88,6 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
-
-app.MapGet("/health", () => Results.Ok(new
-{
-    status = "Healthy",
-    application = "DriverTime"
-})).AllowAnonymous();
 
 app.MapControllers();
 
