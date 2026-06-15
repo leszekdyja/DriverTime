@@ -6,5 +6,6 @@ public interface IDriverActivityService
 {
     Task<List<DriverActivityDto>> GetActivitiesAsync(
         DateTime? from,
-        DateTime? to);
+        DateTime? to,
+        string? driverCardNumber);
 }

@@ -18,10 +18,11 @@ public class DriverActivitiesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetActivities(
         [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to)
+        [FromQuery] DateTime? to,
+        [FromQuery] string? driverCardNumber)
     {
         var result = await _driverActivityService
-            .GetActivitiesAsync(from, to);
+            .GetActivitiesAsync(from, to, driverCardNumber);
 
         return Ok(result);
     }
