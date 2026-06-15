@@ -255,6 +255,25 @@
     background-color: #eff6ff;
 }
 
+.driver-import-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.driver-import-status.new {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.driver-import-status.existing {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+}
+
 @media (max-width: 768px) {
     .ddd-upload-card {
         padding: 18px;

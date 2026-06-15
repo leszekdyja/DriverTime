@@ -9,6 +9,8 @@ type DriverDto = {
     firstName: string;
     lastName: string;
     cardNumber: string;
+    cardExpiryDate: string | null;
+    cardIssuingCountry: string;
 };
 
 type CreateDriverDto = {
@@ -171,6 +173,8 @@ export default function DriversPage() {
                                         <th>Imie</th>
                                         <th>Nazwisko</th>
                                         <th>Numer karty</th>
+                                        <th>Wazna do</th>
+                                        <th>Kraj wydania</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -179,6 +183,12 @@ export default function DriversPage() {
                                             <td>{driver.firstName}</td>
                                             <td>{driver.lastName}</td>
                                             <td>{driver.cardNumber}</td>
+                                            <td>
+                                                {driver.cardExpiryDate
+                                                    ? new Date(driver.cardExpiryDate).toLocaleDateString("pl-PL")
+                                                    : "Brak danych"}
+                                            </td>
+                                            <td>{driver.cardIssuingCountry || "Brak danych"}</td>
                                         </tr>
                                     ))}
                                 </tbody>

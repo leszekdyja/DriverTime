@@ -4,6 +4,15 @@ namespace DriverTime.Application.DDD.DTOs;
 
 public class DddParseResultDto
 {
+    [JsonPropertyName("driver")]
+    public ParsedDriverDto Driver { get; set; } = new();
+
+    public Guid ImportId { get; set; }
+
+    public bool DriverCreated { get; set; }
+
+    public string ImportMessage { get; set; } = string.Empty;
+
     [JsonPropertyName("parser_name")]
     public string ParserName { get; set; } = string.Empty;
 

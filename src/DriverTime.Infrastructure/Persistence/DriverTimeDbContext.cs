@@ -70,6 +70,7 @@ public class DriverTimeDbContext : DbContext
         modelBuilder.Entity<DddFile>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.FileHash }).IsUnique();
 
             entity.Property(x => x.FileName)
                 .HasMaxLength(500);
@@ -80,9 +81,17 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.DriverLastName)
                 .HasMaxLength(200);
 
+            entity.Property(x => x.FileHash)
+                .HasMaxLength(64);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.DddFiles)
                 .HasForeignKey(x => x.CompanyId);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.DddFiles)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<DriverActivity>(entity =>
@@ -103,6 +112,7 @@ public class DriverTimeDbContext : DbContext
         modelBuilder.Entity<Driver>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.CardNumber }).IsUnique();
 
             entity.Property(x => x.FirstName)
                 .HasMaxLength(100);
@@ -112,6 +122,9 @@ public class DriverTimeDbContext : DbContext
 
             entity.Property(x => x.CardNumber)
                 .HasMaxLength(100);
+
+            entity.Property(x => x.CardIssuingCountry)
+                .HasMaxLength(10);
 
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)

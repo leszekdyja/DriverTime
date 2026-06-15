@@ -908,6 +908,7 @@ EMBEDDED_PARSER_NAME = "wbudowany parser DDD EF 0x0504"
 DDD_DRIVER_ACTIVITY_TAG = b"\x05\x04"
 DDD_DRIVER_VEHICLES_TAG = b"\x05\x05"
 DDD_DRIVER_PLACES_TAG = b"\x05\x06"
+DDD_DRIVER_IDENTIFICATION_TAG = b"\x05\x20"
 
 
 def _be16(data: bytes, offset: int) -> int:
@@ -990,6 +991,44 @@ def _find_tlv_blocks(raw: bytes, tag: bytes) -> list[tuple[int, bytes]]:
                     blocks.append(candidate)
         start = pos + 2
     return blocks
+
+
+def _decode_card_text(value: bytes) -> str:
+    """Decode tachograph card text, ignoring the leading code-page byte."""
+    payload = value[1:] if value and value[0] < 0x20 else value
+    return payload.decode("latin-1", errors="ignore").replace("\x00", "").strip(" \xff")
+
+
+def parse_ddd_driver_identification_embedded(ddd_path: Path) -> dict[str, Any]:
+    """Parse CardIdentification EF 0x0520 using the standard driver-card layout."""
+    raw = ddd_path.read_bytes()
+
+    for _, block in _find_tlv_blocks(raw, DDD_DRIVER_IDENTIFICATION_TAG):
+        if len(block) < 141:
+            continue
+
+        issuing_country = normalize_country_code(block[0])
+        card_number = _decode_card_text(block[1:17])
+        expiry = _safe_time_real(_be32(block, 61))
+        surname = _decode_card_text(block[65:101])
+        first_name = _decode_card_text(block[101:137])
+
+        if card_number:
+            return {
+                "first_name": first_name,
+                "last_name": surname,
+                "card_number": card_number,
+                "card_expiry_date": expiry.date().isoformat() if expiry else "",
+                "card_issuing_country": issuing_country if issuing_country != "---" else "",
+            }
+
+    return {
+        "first_name": "",
+        "last_name": "",
+        "card_number": "",
+        "card_expiry_date": "",
+        "card_issuing_country": "",
+    }
 
 
 def _entry_type_label(value: int) -> str:
@@ -1287,13 +1326,15 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
         vehicle_uses,
     )
     country_entries = parse_ddd_country_code_entries_embedded(ddd_path)
+    driver = parse_ddd_driver_identification_embedded(ddd_path)
     file_modified = _file_modified_date(ddd_path)
     return {
+        "driver": driver,
         "parser": {
             "name": EMBEDDED_PARSER_NAME,
-            "version": "0.3-newest-day-fix",
+            "version": "0.4-driver-identification",
             "file_type": "driver_card",
-            "scope": "DriverActivityData EF 0x0504; no external dddparser.exe required",
+            "scope": "Driver identification EF 0x0520 and activity data EF 0x0504-0x0506",
             "card_read_date": file_modified.isoformat() if file_modified else "",
             "card_read_date_source": "data modyfikacji pliku .DDD",
             "default_control_period_days": 56,

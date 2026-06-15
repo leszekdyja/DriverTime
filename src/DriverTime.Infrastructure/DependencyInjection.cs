@@ -20,6 +20,9 @@ public static class DependencyInjection
             options.UseNpgsql(
                 configuration.GetConnectionString("DefaultConnection")));
 
+        services.Configure<DddParserOptions>(
+            configuration.GetSection("DddParser"));
+
         services.AddScoped<ICompanyService, DriverTime.Application.Companies.Services.CompanyService>();
 
         services.AddScoped<IDddParserGateway, DddParserGateway>();

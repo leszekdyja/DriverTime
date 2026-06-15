@@ -117,9 +117,11 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                 updateItem(item.id, {
                     status: "success",
                     progress: 100,
+                    message: result.importMessage,
                     result,
                 });
                 hasSuccessfulImport = true;
+                window.dispatchEvent(new Event("drivertime:data-changed"));
             } catch (uploadError) {
                 updateItem(item.id, {
                     status: "error",
@@ -220,6 +222,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
 
                             {item.result && (
                                 <p>
+                                    <strong>{item.result.importMessage}</strong>{" "}
                                     Aktywnosci: {item.result.activities.length}, pojazdy:{" "}
                                     {item.result.vehicle_uses.length}, kraje:{" "}
                                     {item.result.country_code_entries.length}

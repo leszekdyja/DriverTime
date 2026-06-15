@@ -1,4 +1,5 @@
-﻿using DriverTime.Application.DDD.DTOs;
+using System.Security.Cryptography;
+using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
@@ -37,19 +38,63 @@ public class DddFileService : IDddFileService
 
         try
         {
+            var fileHash = await CalculateHashAsync(tempFilePath);
+
+            if (await _dbContext.DddFiles.AnyAsync(x =>
+                x.CompanyId == _currentUser.CompanyId && x.FileHash == fileHash))
+            {
+                throw new InvalidOperationException("Ten plik DDD zostal juz zaimportowany.");
+            }
+
             var parseResult = await _dddParserGateway.ParseAsync(tempFilePath);
+            var cardNumber = NormalizeCardNumber(parseResult.Driver.CardNumber);
+
+            if (string.IsNullOrWhiteSpace(cardNumber))
+            {
+                throw new InvalidOperationException(
+                    "Nie udalo sie odczytac numeru karty kierowcy z pliku DDD.");
+            }
+
+            var driver = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
+                x.CompanyId == _currentUser.CompanyId && x.CardNumber == cardNumber);
+            var driverCreated = driver is null;
+
+            if (driver is null)
+            {
+                driver = CreateDriver(parseResult.Driver, cardNumber);
+                _dbContext.Drivers.Add(driver);
+            }
+            else
+            {
+                UpdateMissingDriverData(driver, parseResult.Driver);
+            }
 
             var dddFile = new DddFile
             {
                 Id = Guid.NewGuid(),
                 CompanyId = _currentUser.CompanyId,
+                DriverId = driver.Id,
                 FileName = originalFileName,
-                UploadedAtUtc = DateTime.UtcNow
+                FileHash = fileHash,
+                UploadedAtUtc = DateTime.UtcNow,
+                DriverCardNumber = cardNumber,
+                DriverFirstName = driver.FirstName,
+                DriverLastName = driver.LastName,
+                DriverCreatedDuringImport = driverCreated
             };
 
+            AddActivities(dddFile, parseResult.Activities);
+            AddVehicleUses(dddFile, parseResult.VehicleUses);
+            AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
             _dbContext.DddFiles.Add(dddFile);
 
             await _dbContext.SaveChangesAsync();
+
+            parseResult.ImportId = dddFile.Id;
+            parseResult.DriverCreated = driverCreated;
+            parseResult.ImportMessage = driverCreated
+                ? "Utworzono nowego kierowce."
+                : "Import przypisano do istniejacego kierowcy.";
 
             return parseResult;
         }
@@ -74,6 +119,7 @@ public class DddFileService : IDddFileService
                 DriverFirstName = x.DriverFirstName,
                 DriverLastName = x.DriverLastName,
                 DriverCardNumber = x.DriverCardNumber,
+                DriverStatus = x.DriverCreatedDuringImport ? "new" : "existing",
                 UploadedAtUtc = x.UploadedAtUtc,
                 ActivitiesCount = x.DriverActivities.Count
             })
@@ -109,7 +155,8 @@ public class DddFileService : IDddFileService
                 {
                     Start = x.StartUtc.ToString("O"),
                     End = x.EndUtc.ToString("O"),
-                    Activity = x.ActivityType
+                    Activity = x.ActivityType,
+                    ActivityCode = x.ActivityType
                 })
                 .ToList(),
             CountryEntries = dddFile.CountryEntries
@@ -130,5 +177,144 @@ public class DddFileService : IDddFileService
                 })
                 .ToList()
         };
+    }
+
+    private Driver CreateDriver(ParsedDriverDto parsedDriver, string cardNumber)
+    {
+        return new Driver
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = _currentUser.CompanyId,
+            CardNumber = cardNumber,
+            FirstName = parsedDriver.FirstName.Trim(),
+            LastName = parsedDriver.LastName.Trim(),
+            CardExpiryDate = ParseDate(parsedDriver.CardExpiryDate),
+            CardIssuingCountry = parsedDriver.CardIssuingCountry.Trim()
+        };
+    }
+
+    private static async Task<string> CalculateHashAsync(string filePath)
+    {
+        await using var stream = File.OpenRead(filePath);
+        var hash = await SHA256.HashDataAsync(stream);
+
+        return Convert.ToHexString(hash);
+    }
+
+    private static string NormalizeCardNumber(string value) =>
+        value.Trim().ToUpperInvariant();
+
+    private static DateTime? ParseDate(string value)
+    {
+        return DateTime.TryParse(value, out var date)
+            ? DateTime.SpecifyKind(date.Date, DateTimeKind.Utc)
+            : null;
+    }
+
+    private static DateTime? ParseDateTime(string value)
+    {
+        return DateTime.TryParse(value, out var date)
+            ? DateTime.SpecifyKind(date, DateTimeKind.Utc)
+            : null;
+    }
+
+    private static void UpdateMissingDriverData(
+        Driver driver,
+        ParsedDriverDto parsedDriver)
+    {
+        if (string.IsNullOrWhiteSpace(driver.FirstName)
+            && !string.IsNullOrWhiteSpace(parsedDriver.FirstName))
+        {
+            driver.FirstName = parsedDriver.FirstName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(driver.LastName)
+            && !string.IsNullOrWhiteSpace(parsedDriver.LastName))
+        {
+            driver.LastName = parsedDriver.LastName.Trim();
+        }
+
+        if (!driver.CardExpiryDate.HasValue)
+        {
+            driver.CardExpiryDate = ParseDate(parsedDriver.CardExpiryDate);
+        }
+
+        if (string.IsNullOrWhiteSpace(driver.CardIssuingCountry)
+            && !string.IsNullOrWhiteSpace(parsedDriver.CardIssuingCountry))
+        {
+            driver.CardIssuingCountry = parsedDriver.CardIssuingCountry.Trim();
+        }
+    }
+
+    private static void AddActivities(
+        DddFile dddFile,
+        IEnumerable<ParsedDriverActivityDto> activities)
+    {
+        foreach (var activity in activities)
+        {
+            var start = ParseDateTime(activity.Start);
+            var end = ParseDateTime(activity.End);
+
+            if (!start.HasValue || !end.HasValue || end <= start)
+            {
+                continue;
+            }
+
+            dddFile.DriverActivities.Add(new DriverActivity
+            {
+                Id = Guid.NewGuid(),
+                StartUtc = start.Value,
+                EndUtc = end.Value,
+                ActivityType = string.IsNullOrWhiteSpace(activity.ActivityCode)
+                    ? activity.Activity
+                    : activity.ActivityCode
+            });
+        }
+    }
+
+    private static void AddVehicleUses(
+        DddFile dddFile,
+        IEnumerable<ParsedVehicleUseDto> vehicleUses)
+    {
+        foreach (var vehicleUse in vehicleUses)
+        {
+            var start = ParseDateTime(vehicleUse.Start);
+            var end = ParseDateTime(vehicleUse.End);
+
+            if (!start.HasValue || !end.HasValue || end <= start)
+            {
+                continue;
+            }
+
+            dddFile.VehicleUses.Add(new VehicleUse
+            {
+                Id = Guid.NewGuid(),
+                StartUtc = start.Value,
+                EndUtc = end.Value,
+                RegistrationNumber = vehicleUse.VehicleRegistration
+            });
+        }
+    }
+
+    private static void AddCountryEntries(
+        DddFile dddFile,
+        IEnumerable<ParsedCountryEntryDto> countryEntries)
+    {
+        foreach (var countryEntry in countryEntries)
+        {
+            var timestamp = ParseDateTime(countryEntry.Timestamp);
+
+            if (!timestamp.HasValue)
+            {
+                continue;
+            }
+
+            dddFile.CountryEntries.Add(new CountryEntry
+            {
+                Id = Guid.NewGuid(),
+                EntryTimeUtc = timestamp.Value,
+                CountryCode = countryEntry.CountryCode
+            });
+        }
     }
 }

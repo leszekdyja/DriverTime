@@ -112,18 +112,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     table.PrimaryKey("PK_Roles", x => x.Id);
                 });
 
-            migrationBuilder.InsertData(
-                table: "Companies",
-                columns: new[] { "Id", "Active", "Address", "CreatedAt", "Name", "VatNumber" },
-                values: new object[]
-                {
-                    new Guid("10000000-0000-0000-0000-000000000001"),
-                    true,
-                    string.Empty,
-                    DateTime.UtcNow,
-                    "DriverTime Demo",
-                    string.Empty
-                });
+            migrationBuilder.Sql(
+                "INSERT INTO \"Companies\" (\"Id\", \"Active\", \"Address\", \"CreatedAt\", \"Name\", \"VatNumber\") " +
+                "VALUES ('10000000-0000-0000-0000-000000000001', TRUE, '', NOW(), 'DriverTime Demo', '') " +
+                "ON CONFLICT (\"Id\") DO NOTHING");
 
             migrationBuilder.InsertData(
                 table: "Roles",

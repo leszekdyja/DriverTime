@@ -2,6 +2,16 @@ import { API_URL } from "../config/api";
 import { getAuthToken } from "./apiClient";
 
 export type DddUploadResult = {
+    importId: string;
+    driverCreated: boolean;
+    importMessage: string;
+    driver: {
+        first_name: string;
+        last_name: string;
+        card_number: string;
+        card_expiry_date: string;
+        card_issuing_country: string;
+    };
     parser_name: string;
     parser_version: string;
     file_type: string;

@@ -31,11 +31,18 @@ public class DddFilesController : ControllerBase
 
         await using var stream = file.OpenReadStream();
 
-        var result = await _dddFileService.UploadAndParseAsync(
-            stream,
-            file.FileName);
+        try
+        {
+            var result = await _dddFileService.UploadAndParseAsync(
+                stream,
+                file.FileName);
 
-        return Ok(result);
+            return Ok(result);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Conflict(exception.Message);
+        }
     }
 
     [HttpGet]

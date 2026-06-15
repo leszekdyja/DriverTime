@@ -91,6 +91,7 @@ export default function ImportsPage() {
                                     <th>Numer karty</th>
                                     <th>Data importu</th>
                                     <th>Aktywnosci</th>
+                                    <th>Status kierowcy</th>
                                     <th aria-label="Akcje" />
                                 </tr>
                             </thead>
@@ -111,6 +112,13 @@ export default function ImportsPage() {
                                         <td>{displayValue(dddImport.driverCardNumber)}</td>
                                         <td>{formatUploadDate(dddImport.uploadedAtUtc)}</td>
                                         <td>{dddImport.activitiesCount}</td>
+                                        <td>
+                                            <span className={`driver-import-status ${dddImport.driverStatus}`}>
+                                                {dddImport.driverStatus === "new"
+                                                    ? "Nowy kierowca"
+                                                    : "Istniejacy kierowca"}
+                                            </span>
+                                        </td>
                                         <td>
                                             <Link
                                                 className="details-button"

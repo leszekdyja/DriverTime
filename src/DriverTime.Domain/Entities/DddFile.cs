@@ -8,7 +8,15 @@ public class DddFile
 
     public Company Company { get; set; } = null!;
 
+    public Guid? DriverId { get; set; }
+
+    public Driver? Driver { get; set; }
+
     public string FileName { get; set; } = string.Empty;
+
+    public string FileHash { get; set; } = string.Empty;
+
+    public bool DriverCreatedDuringImport { get; set; }
 
     public DateTime UploadedAtUtc { get; set; }
 

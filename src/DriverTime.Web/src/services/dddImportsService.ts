@@ -6,6 +6,7 @@ export type DddImport = {
     driverFirstName: string;
     driverLastName: string;
     driverCardNumber: string;
+    driverStatus: "new" | "existing";
     uploadedAtUtc: string;
     activitiesCount: number;
 };

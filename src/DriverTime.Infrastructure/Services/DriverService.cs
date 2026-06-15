@@ -31,6 +31,8 @@ public class DriverService : IDriverService
                 FirstName = x.FirstName,
                 LastName = x.LastName,
                 CardNumber = x.CardNumber,
+                CardExpiryDate = x.CardExpiryDate,
+                CardIssuingCountry = x.CardIssuingCountry,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .ToListAsync();
@@ -46,6 +48,8 @@ public class DriverService : IDriverService
                 FirstName = x.FirstName,
                 LastName = x.LastName,
                 CardNumber = x.CardNumber,
+                CardExpiryDate = x.CardExpiryDate,
+                CardIssuingCountry = x.CardIssuingCountry,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .FirstOrDefaultAsync();
@@ -73,6 +77,8 @@ public class DriverService : IDriverService
             FirstName = driver.FirstName,
             LastName = driver.LastName,
             CardNumber = driver.CardNumber,
+            CardExpiryDate = driver.CardExpiryDate,
+            CardIssuingCountry = driver.CardIssuingCountry,
             CreatedAtUtc = driver.CreatedAtUtc
         };
     }

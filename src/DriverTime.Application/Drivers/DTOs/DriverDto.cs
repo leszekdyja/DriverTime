@@ -10,5 +10,9 @@ public class DriverDto
 
     public string CardNumber { get; set; } = string.Empty;
 
+    public DateTime? CardExpiryDate { get; set; }
+
+    public string CardIssuingCountry { get; set; } = string.Empty;
+
     public DateTime CreatedAtUtc { get; set; }
 }
