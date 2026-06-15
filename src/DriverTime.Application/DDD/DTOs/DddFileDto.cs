@@ -6,5 +6,11 @@ public class DddFileDto
 
     public string FileName { get; set; } = string.Empty;
 
+    public string DriverFirstName { get; set; } = string.Empty;
+
+    public string DriverLastName { get; set; } = string.Empty;
+
+    public string DriverCardNumber { get; set; } = string.Empty;
+
     public DateTime UploadedAtUtc { get; set; }
 }

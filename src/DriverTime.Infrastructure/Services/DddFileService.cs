@@ -66,6 +66,9 @@ public class DddFileService : IDddFileService
             {
                 Id = x.Id,
                 FileName = x.FileName,
+                DriverFirstName = x.DriverFirstName,
+                DriverLastName = x.DriverLastName,
+                DriverCardNumber = x.DriverCardNumber,
                 UploadedAtUtc = x.UploadedAtUtc
             })
             .ToListAsync();
