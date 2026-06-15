@@ -22,6 +22,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "Elementy rozwiązania", "{8FB176BD-0036-D269-15EA-F86E90622887}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
+		AGENTS.md = AGENTS.md
 	EndProjectSection
 EndProject
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "drivertime.web", "src\DriverTime.Web\drivertime.web.esproj", "{3C037CF4-7A71-D650-FD4D-83F4B5ABD801}"
