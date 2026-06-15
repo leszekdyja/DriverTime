@@ -328,13 +328,14 @@ public class DriverReportExportService : IDriverReportExportService
             WriteZipEntry(archive, "xl/workbook.xml", WorkbookXml);
             WriteZipEntry(archive, "xl/_rels/workbook.xml.rels", WorkbookRelationshipsXml);
             WriteZipEntry(archive, "xl/styles.xml", StylesXml);
-            WriteWorksheet(archive, report);
+            WriteSummaryWorksheet(archive, report);
+            WriteActivitiesWorksheet(archive, report);
         }
 
         return stream.ToArray();
     }
 
-    private static void WriteWorksheet(ZipArchive archive, DriverReportDto report)
+    private static void WriteSummaryWorksheet(ZipArchive archive, DriverReportDto report)
     {
         var entry = archive.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Fastest);
         using var stream = entry.Open();
@@ -350,74 +351,174 @@ public class DriverReportExportService : IDriverReportExportService
         writer.WriteStartElement("sheetView");
         writer.WriteAttributeString("workbookViewId", "0");
         writer.WriteStartElement("pane");
-        writer.WriteAttributeString("ySplit", "18");
-        writer.WriteAttributeString("topLeftCell", "A19");
+        writer.WriteAttributeString("ySplit", "3");
+        writer.WriteAttributeString("topLeftCell", "A4");
         writer.WriteAttributeString("state", "frozen");
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteStartElement("cols");
-        WriteColumn(writer, 1, 8);
-        WriteColumn(writer, 2, 22);
-        WriteColumn(writer, 3, 22);
-        WriteColumn(writer, 4, 22);
-        WriteColumn(writer, 5, 20);
+        WriteColumn(writer, 1, 24);
+        WriteColumn(writer, 2, 28);
+        WriteColumn(writer, 3, 24);
+        WriteColumn(writer, 4, 28);
         writer.WriteEndElement();
         writer.WriteStartElement("sheetData");
 
-        WriteRow(writer, 1, 2, "DriverTime");
-        WriteRow(writer, 2, 1, "Raport aktywnosci kierowcy");
-        WriteKeyValueRow(writer, 4, "Firma", DisplayValue(report.CompanyName));
-        WriteKeyValueRow(writer, 5, "NIP", DisplayValue(report.CompanyVatNumber));
-        WriteKeyValueRow(writer, 6, "Adres", DisplayValue(report.CompanyAddress));
-        WriteKeyValueRow(writer, 7, "Email", DisplayValue(report.CompanyEmail));
-        WriteKeyValueRow(writer, 8, "Telefon", DisplayValue(report.CompanyPhone));
-        WriteKeyValueRow(writer, 10, "Kierowca", GetDriverName(report));
-        WriteKeyValueRow(writer, 11, "Numer karty", DisplayValue(report.DriverCardNumber));
-        WriteKeyValueRow(writer, 12, "Zakres dat", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
-        WriteKeyValueRow(writer, 13, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
-        WriteStringRow(writer, 15, 3, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc");
-        WriteStringRow(writer, 16, 1,
+        WriteStringRow(writer, 1, 1, "DriverTime");
+        WriteStringRow(writer, 2, 2, "Raport aktywnosci kierowcy");
+        WriteStringRow(writer, 4, 3, "Dane firmy");
+        WriteKeyValueRow(writer, 5, "Nazwa firmy", DisplayValue(report.CompanyName));
+        WriteKeyValueRow(writer, 6, "NIP", DisplayValue(report.CompanyVatNumber));
+        WriteKeyValueRow(writer, 7, "Adres", DisplayValue(report.CompanyAddress));
+        WriteKeyValueRow(writer, 8, "Email", DisplayValue(report.CompanyEmail));
+        WriteKeyValueRow(writer, 9, "Telefon", DisplayValue(report.CompanyPhone));
+        WriteStringRow(writer, 11, 3, "Dane kierowcy");
+        WriteKeyValueRow(writer, 12, "Kierowca", GetDriverName(report));
+        WriteKeyValueRow(writer, 13, "Numer karty", DisplayValue(report.DriverCardNumber));
+        WriteKeyValueRow(writer, 14, "Zakres raportu", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
+        WriteKeyValueRow(writer, 15, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
+        WriteStringRow(writer, 17, 3, "Podsumowanie czasu");
+        WriteStringRow(writer, 18, 6, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc");
+        WriteStringRow(writer, 19, 7,
             FormatDuration(report.DrivingSeconds),
             FormatDuration(report.WorkSeconds),
             FormatDuration(report.RestSeconds),
             FormatDuration(report.AvailabilitySeconds));
-        WriteStringRow(writer, 18, 4, "Lp.", "Poczatek", "Koniec", "Typ", "Czas");
-
-        for (var index = 0; index < report.Activities.Count; index++)
-        {
-            var activity = report.Activities[index];
-            WriteStringRow(writer, index + 19, 0,
-                (index + 1).ToString(),
-                FormatDateTime(activity.StartUtc),
-                FormatDateTime(activity.EndUtc),
-                GetActivityLabel(activity.ActivityType),
-                FormatDuration(activity.DurationSeconds));
-        }
+        WriteKeyValueRow(writer, 21, "Liczba aktywnosci", report.Activities.Count.ToString(CultureInfo.InvariantCulture));
 
         writer.WriteEndElement();
-        writer.WriteStartElement("autoFilter");
-        writer.WriteAttributeString("ref", $"A18:E{Math.Max(18, report.Activities.Count + 18)}");
+        WriteMergedCells(writer, "A1:D1", "A2:D2", "A4:D4", "A11:D11", "A17:D17");
+        writer.WriteStartElement("pageMargins");
+        writer.WriteAttributeString("left", "0.5");
+        writer.WriteAttributeString("right", "0.5");
+        writer.WriteAttributeString("top", "0.6");
+        writer.WriteAttributeString("bottom", "0.6");
+        writer.WriteAttributeString("header", "0.3");
+        writer.WriteAttributeString("footer", "0.3");
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteEndDocument();
     }
 
-    private static void WriteColumn(XmlWriter writer, int index, int width)
+    private static void WriteActivitiesWorksheet(ZipArchive archive, DriverReportDto report)
+    {
+        var entry = archive.CreateEntry("xl/worksheets/sheet2.xml", CompressionLevel.Fastest);
+        using var stream = entry.Open();
+        using var writer = XmlWriter.Create(stream, new XmlWriterSettings
+        {
+            Encoding = new UTF8Encoding(false),
+            Indent = false
+        });
+
+        var widths = GetActivityColumnWidths(report.Activities);
+
+        writer.WriteStartDocument();
+        writer.WriteStartElement("worksheet", SpreadsheetNamespace);
+        writer.WriteStartElement("sheetViews");
+        writer.WriteStartElement("sheetView");
+        writer.WriteAttributeString("workbookViewId", "0");
+        writer.WriteStartElement("pane");
+        writer.WriteAttributeString("ySplit", "1");
+        writer.WriteAttributeString("topLeftCell", "A2");
+        writer.WriteAttributeString("activePane", "bottomLeft");
+        writer.WriteAttributeString("state", "frozen");
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteStartElement("cols");
+
+        for (var index = 0; index < widths.Length; index++)
+        {
+            WriteColumn(writer, index + 1, widths[index]);
+        }
+
+        writer.WriteEndElement();
+        writer.WriteStartElement("sheetData");
+        WriteStringRow(writer, 1, 8, "Lp.", "Poczatek", "Koniec", "Aktywnosc", "Czas");
+
+        for (var index = 0; index < report.Activities.Count; index++)
+        {
+            var activity = report.Activities[index];
+            var row = index + 2;
+            var style = index % 2 == 0 ? 9 : 10;
+
+            writer.WriteStartElement("row");
+            writer.WriteAttributeString("r", row.ToString(CultureInfo.InvariantCulture));
+            WriteNumberCell(writer, $"A{row}", index + 1, style);
+            WriteDateCell(writer, $"B{row}", activity.StartUtc, 11);
+            WriteDateCell(writer, $"C{row}", activity.EndUtc, 11);
+            WriteStringCell(writer, $"D{row}", GetActivityLabel(activity.ActivityType), style);
+            WriteDurationCell(writer, $"E{row}", activity.DurationSeconds, 12);
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+        writer.WriteStartElement("autoFilter");
+        writer.WriteAttributeString("ref", $"A1:E{Math.Max(1, report.Activities.Count + 1)}");
+        writer.WriteEndElement();
+        writer.WriteStartElement("pageMargins");
+        writer.WriteAttributeString("left", "0.4");
+        writer.WriteAttributeString("right", "0.4");
+        writer.WriteAttributeString("top", "0.5");
+        writer.WriteAttributeString("bottom", "0.5");
+        writer.WriteAttributeString("header", "0.3");
+        writer.WriteAttributeString("footer", "0.3");
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+
+    private static double[] GetActivityColumnWidths(
+        IReadOnlyCollection<DriverReportActivityDto> activities)
+    {
+        var activityWidth = activities.Count == 0
+            ? 18
+            : activities.Max(x => GetActivityLabel(x.ActivityType).Length) + 4;
+
+        return new[]
+        {
+            8d,
+            21d,
+            21d,
+            Math.Clamp(activityWidth, 18, 34),
+            18d
+        };
+    }
+
+    private static void WriteMergedCells(XmlWriter writer, params string[] ranges)
+    {
+        writer.WriteStartElement("mergeCells");
+        writer.WriteAttributeString("count", ranges.Length.ToString(CultureInfo.InvariantCulture));
+
+        foreach (var range in ranges)
+        {
+            writer.WriteStartElement("mergeCell");
+            writer.WriteAttributeString("ref", range);
+            writer.WriteEndElement();
+        }
+
+        writer.WriteEndElement();
+    }
+
+    private static void WriteColumn(XmlWriter writer, int index, double width)
     {
         writer.WriteStartElement("col");
-        writer.WriteAttributeString("min", index.ToString());
-        writer.WriteAttributeString("max", index.ToString());
-        writer.WriteAttributeString("width", width.ToString());
+        writer.WriteAttributeString("min", index.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("max", index.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("width", width.ToString("0.##", CultureInfo.InvariantCulture));
         writer.WriteAttributeString("customWidth", "1");
         writer.WriteEndElement();
     }
 
-    private static void WriteKeyValueRow(XmlWriter writer, int row, string key, string value) =>
-        WriteStringRow(writer, row, 0, key, value);
-
-    private static void WriteRow(XmlWriter writer, int row, int style, string value) =>
-        WriteStringRow(writer, row, style, value);
+    private static void WriteKeyValueRow(XmlWriter writer, int row, string key, string value)
+    {
+        writer.WriteStartElement("row");
+        writer.WriteAttributeString("r", row.ToString(CultureInfo.InvariantCulture));
+        WriteStringCell(writer, $"A{row}", key, 4);
+        WriteStringCell(writer, $"B{row}", value, 5);
+        writer.WriteEndElement();
+    }
 
     private static void WriteStringRow(
         XmlWriter writer,
@@ -430,18 +531,58 @@ public class DriverReportExportService : IDriverReportExportService
 
         for (var index = 0; index < values.Length; index++)
         {
-            writer.WriteStartElement("c");
-            writer.WriteAttributeString("r", $"{GetColumnName(index + 1)}{rowNumber}");
-            writer.WriteAttributeString("t", "inlineStr");
-            writer.WriteAttributeString("s", style.ToString());
-            writer.WriteStartElement("is");
-            writer.WriteElementString("t", values[index]);
-            writer.WriteEndElement();
-            writer.WriteEndElement();
+            WriteStringCell(
+                writer,
+                $"{GetColumnName(index + 1)}{rowNumber}",
+                values[index],
+                style);
         }
 
         writer.WriteEndElement();
     }
+
+    private static void WriteStringCell(
+        XmlWriter writer,
+        string reference,
+        string value,
+        int style)
+    {
+        writer.WriteStartElement("c");
+        writer.WriteAttributeString("r", reference);
+        writer.WriteAttributeString("t", "inlineStr");
+        writer.WriteAttributeString("s", style.ToString(CultureInfo.InvariantCulture));
+        writer.WriteStartElement("is");
+        writer.WriteElementString("t", value);
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+    }
+
+    private static void WriteNumberCell(
+        XmlWriter writer,
+        string reference,
+        double value,
+        int style)
+    {
+        writer.WriteStartElement("c");
+        writer.WriteAttributeString("r", reference);
+        writer.WriteAttributeString("s", style.ToString(CultureInfo.InvariantCulture));
+        writer.WriteElementString("v", value.ToString("0.###############", CultureInfo.InvariantCulture));
+        writer.WriteEndElement();
+    }
+
+    private static void WriteDateCell(
+        XmlWriter writer,
+        string reference,
+        DateTime value,
+        int style) =>
+        WriteNumberCell(writer, reference, value.ToOADate(), style);
+
+    private static void WriteDurationCell(
+        XmlWriter writer,
+        string reference,
+        long seconds,
+        int style) =>
+        WriteNumberCell(writer, reference, Math.Max(seconds, 0) / 86400d, style);
 
     private static string GetColumnName(int index) => ((char)('A' + index - 1)).ToString();
 
@@ -675,6 +816,7 @@ public class DriverReportExportService : IDriverReportExportService
           <Default Extension="xml" ContentType="application/xml"/>
           <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
           <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+          <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
           <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
         </Types>
         """;
@@ -687,24 +829,64 @@ public class DriverReportExportService : IDriverReportExportService
     private const string WorkbookXml = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-          <sheets><sheet name="Raport kierowcy" sheetId="1" r:id="rId1"/></sheets>
+          <sheets>
+            <sheet name="Podsumowanie" sheetId="1" r:id="rId1"/>
+            <sheet name="Aktywno&#347;ci" sheetId="2" r:id="rId2"/>
+          </sheets>
         </workbook>
         """;
     private const string WorkbookRelationshipsXml = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
           <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
         </Relationships>
         """;
     private const string StylesXml = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-          <fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF2563EB"/><name val="Calibri"/></font><font><b/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>
-          <fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFF6FF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1E3A8A"/></patternFill></fill></fills>
-          <borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders>
+          <numFmts count="2">
+            <numFmt numFmtId="164" formatCode="dd.mm.yyyy hh:mm"/>
+            <numFmt numFmtId="165" formatCode="[h]&quot; godz. &quot;mm&quot; min&quot;"/>
+          </numFmts>
+          <fonts count="5">
+            <font><sz val="11"/><color rgb="FF334155"/><name val="Calibri"/></font>
+            <font><b/><sz val="22"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+            <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+            <font><b/><sz val="11"/><color rgb="FF334155"/><name val="Calibri"/></font>
+            <font><b/><sz val="14"/><color rgb="FF0F172A"/><name val="Calibri"/></font>
+          </fonts>
+          <fills count="7">
+            <fill><patternFill patternType="none"/></fill>
+            <fill><patternFill patternType="gray125"/></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FF0F172A"/></patternFill></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FF2563EB"/></patternFill></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FFEFF6FF"/></patternFill></fill>
+            <fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/></patternFill></fill>
+          </fills>
+          <borders count="2">
+            <border/>
+            <border><left style="thin"><color rgb="FFE2E8F0"/></left><right style="thin"><color rgb="FFE2E8F0"/></right><top style="thin"><color rgb="FFE2E8F0"/></top><bottom style="thin"><color rgb="FFE2E8F0"/></bottom></border>
+          </borders>
           <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-          <cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0"/><xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0"/></cellXfs>
+          <cellXfs count="13">
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+            <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="0" fontId="0" fillId="4" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>
+            <xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+            <xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+            <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+            <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" applyAlignment="1"><alignment vertical="center"/></xf>
+            <xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+            <xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+          </cellXfs>
+          <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
         </styleSheet>
         """;
 }
