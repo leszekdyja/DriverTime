@@ -1,4 +1,7 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+
+import { API_URL } from "../config/api";
+import "../styles/drivers.css";
 
 type DriverDto = {
     id: string;
@@ -13,67 +16,57 @@ type CreateDriverDto = {
     cardNumber: string;
 };
 
-const API_URL = "https://localhost:65468/api/drivers";
+const driversApiUrl = `${API_URL}/api/drivers`;
 
-function DriversPage() {
+export default function DriversPage() {
     const [drivers, setDrivers] = useState<DriverDto[]>([]);
-
     const [form, setForm] = useState<CreateDriverDto>({
         firstName: "",
         lastName: "",
         cardNumber: "",
     });
-
     const [isLoading, setIsLoading] = useState(false);
-
+    const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState("");
+    const [isError, setIsError] = useState(false);
 
     const loadDrivers = useCallback(async () => {
         setIsLoading(true);
-
         setMessage("");
 
         try {
-            const response = await fetch(API_URL);
+            const response = await fetch(driversApiUrl);
 
             if (!response.ok) {
                 throw new Error("Nie udalo sie pobrac kierowcow.");
             }
 
-            const data = await response.json();
-
-            setDrivers(data);
-        }
-        catch {
+            setDrivers((await response.json()) as DriverDto[]);
+        } catch {
+            setIsError(true);
             setMessage("Blad podczas pobierania kierowcow.");
-        }
-        finally {
+        } finally {
             setIsLoading(false);
         }
     }, []);
 
-    async function addDriver(
-        event: React.SyntheticEvent<HTMLFormElement>
-    ) {
+    async function addDriver(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-
         setMessage("");
+        setIsError(false);
 
-        if (
-            !form.firstName ||
-            !form.lastName ||
-            !form.cardNumber
-        ) {
+        if (!form.firstName || !form.lastName || !form.cardNumber) {
+            setIsError(true);
             setMessage("Uzupelnij wszystkie pola.");
             return;
         }
 
+        setIsSaving(true);
+
         try {
-            const response = await fetch(API_URL, {
+            const response = await fetch(driversApiUrl, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(form),
             });
 
@@ -81,18 +74,14 @@ function DriversPage() {
                 throw new Error("Nie udalo sie dodac kierowcy.");
             }
 
-            setForm({
-                firstName: "",
-                lastName: "",
-                cardNumber: "",
-            });
-
-            setMessage("Kierowca zostal dodany.");
-
+            setForm({ firstName: "", lastName: "", cardNumber: "" });
             await loadDrivers();
-        }
-        catch {
+            setMessage("Kierowca zostal dodany.");
+        } catch {
+            setIsError(true);
             setMessage("Blad podczas dodawania kierowcy.");
+        } finally {
+            setIsSaving(false);
         }
     }
 
@@ -101,115 +90,102 @@ function DriversPage() {
     }, [loadDrivers]);
 
     return (
-        <div style={{ padding: "20px" }}>
-            <h1>Kierowcy</h1>
-
-            <form
-                onSubmit={addDriver}
-                style={{
-                    marginBottom: "20px",
-                    border: "1px solid #cccccc",
-                    padding: "20px",
-                }}
-            >
-                <h2>Dodaj kierowce</h2>
-
-                <div style={{ marginBottom: "10px" }}>
-                    <label>Imie</label>
-
-                    <br />
-
-                    <input
-                        type="text"
-                        value={form.firstName}
-                        onChange={(e) =>
-                            setForm({
-                                ...form,
-                                firstName: e.target.value,
-                            })
-                        }
-                    />
+        <div className="drivers-page">
+            <div className="drivers-heading">
+                <div>
+                    <h2>Kierowcy</h2>
+                    <p>Zarzadzaj kierowcami i numerami kart kierowcow.</p>
                 </div>
+                <span className="drivers-count">{drivers.length} kierowcow</span>
+            </div>
 
-                <div style={{ marginBottom: "10px" }}>
-                    <label>Nazwisko</label>
+            <div className="drivers-grid">
+                <form className="driver-form" onSubmit={addDriver}>
+                    <div className="section-heading">
+                        <h3>Dodaj kierowce</h3>
+                        <p>Wprowadz podstawowe dane nowego kierowcy.</p>
+                    </div>
 
-                    <br />
+                    <label>
+                        Imie
+                        <input
+                            type="text"
+                            value={form.firstName}
+                            onChange={(event) =>
+                                setForm({ ...form, firstName: event.target.value })
+                            }
+                        />
+                    </label>
 
-                    <input
-                        type="text"
-                        value={form.lastName}
-                        onChange={(e) =>
-                            setForm({
-                                ...form,
-                                lastName: e.target.value,
-                            })
-                        }
-                    />
-                </div>
+                    <label>
+                        Nazwisko
+                        <input
+                            type="text"
+                            value={form.lastName}
+                            onChange={(event) =>
+                                setForm({ ...form, lastName: event.target.value })
+                            }
+                        />
+                    </label>
 
-                <div style={{ marginBottom: "10px" }}>
-                    <label>Numer karty kierowcy</label>
+                    <label>
+                        Numer karty kierowcy
+                        <input
+                            type="text"
+                            value={form.cardNumber}
+                            onChange={(event) =>
+                                setForm({ ...form, cardNumber: event.target.value })
+                            }
+                        />
+                    </label>
 
-                    <br />
+                    <button type="submit" disabled={isSaving}>
+                        {isSaving ? "Zapisywanie..." : "Dodaj kierowce"}
+                    </button>
+                </form>
 
-                    <input
-                        type="text"
-                        value={form.cardNumber}
-                        onChange={(e) =>
-                            setForm({
-                                ...form,
-                                cardNumber: e.target.value,
-                            })
-                        }
-                    />
-                </div>
+                <section className="drivers-panel">
+                    <div className="section-heading">
+                        <h3>Lista kierowcow</h3>
+                        <p>Aktualna baza kierowcow DriverTime.</p>
+                    </div>
 
-                <button type="submit">
-                    Dodaj kierowce
-                </button>
-            </form>
+                    {message && (
+                        <p className={`drivers-message${isError ? " error" : " success"}`}>
+                            {message}
+                        </p>
+                    )}
 
-            {message && (
-                <p>{message}</p>
-            )}
-
-            <h2>Lista kierowcow</h2>
-
-            {isLoading && (
-                <p>Ladowanie...</p>
-            )}
-
-            {!isLoading && drivers.length === 0 && (
-                <p>Brak kierowcow.</p>
-            )}
-
-            {!isLoading && drivers.length > 0 && (
-                <table
-                    border={1}
-                    cellPadding={10}
-                >
-                    <thead>
-                        <tr>
-                            <th>Imie</th>
-                            <th>Nazwisko</th>
-                            <th>Numer karty</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        {drivers.map((driver) => (
-                            <tr key={driver.id}>
-                                <td>{driver.firstName}</td>
-                                <td>{driver.lastName}</td>
-                                <td>{driver.cardNumber}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
+                    {isLoading ? (
+                        <p className="drivers-status" role="status">
+                            Ladowanie kierowcow...
+                        </p>
+                    ) : drivers.length === 0 ? (
+                        <p>Brak kierowcow.</p>
+                    ) : (
+                        <div className="drivers-table-wrapper">
+                            <table className="drivers-table">
+                                <thead>
+                                    <tr>
+                                        <th>Imie</th>
+                                        <th>Nazwisko</th>
+                                        <th>Numer karty</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {drivers.map((driver) => (
+                                        <tr key={driver.id}>
+                                            <td>{driver.firstName}</td>
+                                            <td>{driver.lastName}</td>
+                                            <td>{driver.cardNumber}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </section>
+            </div>
         </div>
     );
 }
-
-export default DriversPage;

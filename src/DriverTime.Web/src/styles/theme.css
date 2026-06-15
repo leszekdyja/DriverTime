@@ -1,0 +1,213 @@
+.dashboard-page,
+.drivers-page,
+.reports-page,
+.imports-page,
+.import-details-page {
+    margin: 0 auto;
+}
+
+.summary-card,
+.dashboard-panel,
+.reports-filters,
+.report-summary-card,
+.reports-panel,
+.ddd-upload-card,
+.details-card,
+.activity-summary-card {
+    border-color: var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+}
+
+.dashboard-heading p,
+.reports-heading p,
+.imports-page > p,
+.dashboard-status,
+.reports-status,
+.status-message,
+.details-summary dt,
+.summary-card span,
+.report-summary-card span,
+.activity-summary-card span,
+.activity-statistic div span,
+.upload-item-heading span,
+.upload-item p {
+    color: var(--color-muted);
+}
+
+.summary-card strong,
+.report-summary-card strong,
+.activity-summary-card strong,
+.panel-heading h3,
+.reports-panel-heading h3,
+.imports-list h3,
+.details-card h3,
+.details-section h3,
+.details-summary dd,
+.activity-statistic strong,
+.upload-item-heading strong,
+.ddd-dropzone strong {
+    color: var(--color-heading);
+}
+
+.dashboard-action,
+.csv-button,
+.reports-filters button,
+.select-files-button,
+.upload-files-button {
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    box-shadow: 0 6px 16px rgb(37 99 235 / 18%);
+}
+
+.dashboard-action:hover,
+.csv-button:hover:not(:disabled),
+.reports-filters button:hover:not(:disabled),
+.select-files-button:hover:not(:disabled),
+.upload-files-button:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    transform: translateY(-1px);
+}
+
+.panel-heading a,
+.dashboard-table a,
+.details-button,
+.back-link {
+    color: var(--color-primary);
+}
+
+.details-button,
+.back-link {
+    border-color: var(--color-primary);
+    border-radius: var(--radius-sm);
+}
+
+.details-button:hover,
+.back-link:hover {
+    background: var(--color-primary-soft);
+}
+
+.reports-filters label {
+    color: var(--color-text);
+}
+
+.reports-filters select,
+.reports-filters input {
+    border-color: var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-heading);
+}
+
+.activity-statistic,
+.upload-item,
+.ddd-dropzone {
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.ddd-dropzone {
+    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.ddd-dropzone.is-dragging {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+
+.upload-progress {
+    background: var(--color-border);
+}
+
+.upload-progress span {
+    background: var(--color-primary);
+}
+
+.dashboard-table-wrapper,
+.reports-table-wrapper,
+.imports-table-wrapper,
+.details-table-wrapper {
+    border-color: var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.dashboard-table,
+.reports-table,
+.imports-table,
+.details-table {
+    color: var(--color-text);
+}
+
+.dashboard-table th,
+.dashboard-table td,
+.reports-table th,
+.reports-table td,
+.imports-table th,
+.imports-table td,
+.details-table th,
+.details-table td {
+    border-bottom-color: var(--color-border);
+}
+
+.dashboard-table th,
+.reports-table th,
+.imports-table th,
+.details-table th {
+    background: var(--color-surface-muted);
+    color: var(--color-muted);
+    font-size: 12px;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+}
+
+.dashboard-table tbody tr,
+.reports-table tbody tr,
+.imports-table tbody tr,
+.details-table tbody tr {
+    transition: background-color 0.18s;
+}
+
+.dashboard-table tbody tr:hover,
+.reports-table tbody tr:hover,
+.imports-table tbody tr:hover,
+.details-table tbody tr:hover {
+    background: var(--color-surface-hover);
+}
+
+.message,
+.dashboard-error,
+.reports-error,
+.drivers-message {
+    box-shadow: var(--shadow-sm);
+}
+
+.error-message,
+.dashboard-error,
+.reports-error,
+.upload-item.error,
+.upload-item.unsupported {
+    border-color: var(--color-danger-border);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.success-message,
+.upload-item.success {
+    border-color: var(--color-success-border);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+@media (max-width: 640px) {
+    .dashboard-heading,
+    .reports-heading {
+        gap: 16px;
+    }
+
+    .summary-card,
+    .report-summary-card,
+    .activity-summary-card {
+        min-height: 104px;
+    }
+}
