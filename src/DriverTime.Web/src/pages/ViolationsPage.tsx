@@ -5,6 +5,7 @@ import {
     type DriverViolation,
 } from "../services/violationsService";
 import { exportViolationsPdf } from "../services/pdfExportService";
+import { exportViolationsExcel } from "../services/excelExportService";
 import "../styles/violations.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -38,6 +39,7 @@ export default function ViolationsPage() {
     const [violations, setViolations] = useState<DriverViolation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [error, setError] = useState("");
 
     async function handlePdfExport() {
@@ -50,6 +52,19 @@ export default function ViolationsPage() {
             setError("Nie udalo sie wygenerowac pliku PDF.");
         } finally {
             setIsGeneratingPdf(false);
+        }
+    }
+
+    async function handleExcelExport() {
+        setIsGeneratingExcel(true);
+        setError("");
+
+        try {
+            await exportViolationsExcel(violations);
+        } catch {
+            setError("Nie udalo sie wygenerowac pliku Excel.");
+        } finally {
+            setIsGeneratingExcel(false);
         }
     }
 
@@ -87,9 +102,17 @@ export default function ViolationsPage() {
                             className="violations-pdf-button"
                             type="button"
                             onClick={() => void handlePdfExport()}
-                            disabled={violations.length === 0 || isGeneratingPdf}
+                            disabled={violations.length === 0 || isGeneratingPdf || isGeneratingExcel}
                         >
                             {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                        </button>
+                        <button
+                            className="violations-export-button"
+                            type="button"
+                            onClick={() => void handleExcelExport()}
+                            disabled={violations.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                        >
+                            {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
                         </button>
                     </div>
                 )}

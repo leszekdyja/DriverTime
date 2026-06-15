@@ -7,6 +7,7 @@ import {
     type ReportDriver,
 } from "../services/reportsService";
 import { exportReportPdf } from "../services/pdfExportService";
+import { exportReportExcel } from "../services/excelExportService";
 import "../styles/reports.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -42,6 +43,7 @@ export default function ReportsPage() {
     const [dateTo, setDateTo] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [error, setError] = useState("");
 
     async function loadActivities(
@@ -177,6 +179,25 @@ export default function ReportsPage() {
         }
     }
 
+    async function handleExcelExport() {
+        setIsGeneratingExcel(true);
+        setError("");
+
+        try {
+            await exportReportExcel({
+                activities,
+                driver: drivers.find((driver) => driver.cardNumber === driverCardNumber),
+                dateFrom,
+                dateTo,
+                totals,
+            });
+        } catch {
+            setError("Nie udalo sie wygenerowac pliku Excel.");
+        } finally {
+            setIsGeneratingExcel(false);
+        }
+    }
+
     return (
         <div className="reports-page">
             <div className="reports-heading">
@@ -189,7 +210,7 @@ export default function ReportsPage() {
                         className="csv-button"
                         type="button"
                         onClick={exportCsv}
-                        disabled={activities.length === 0 || isGeneratingPdf}
+                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
                     >
                         Eksportuj CSV
                     </button>
@@ -197,9 +218,17 @@ export default function ReportsPage() {
                         className="pdf-button"
                         type="button"
                         onClick={() => void handlePdfExport()}
-                        disabled={activities.length === 0 || isGeneratingPdf}
+                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
                     >
                         {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                    </button>
+                    <button
+                        className="excel-button"
+                        type="button"
+                        onClick={() => void handleExcelExport()}
+                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                    >
+                        {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
                     </button>
                 </div>
             </div>

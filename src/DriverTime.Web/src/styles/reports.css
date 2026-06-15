@@ -22,6 +22,7 @@
 
 .csv-button,
 .pdf-button,
+.excel-button,
 .reports-filters button {
     padding: 10px 16px;
     border: 0;
@@ -34,6 +35,7 @@
 
 .csv-button:disabled,
 .pdf-button:disabled,
+.excel-button:disabled,
 .reports-filters button:disabled {
     background-color: #9ca3af;
     cursor: not-allowed;
@@ -181,7 +183,8 @@
 
     .reports-actions,
     .csv-button,
-    .pdf-button {
+    .pdf-button,
+    .excel-button {
         width: 100%;
     }
 
