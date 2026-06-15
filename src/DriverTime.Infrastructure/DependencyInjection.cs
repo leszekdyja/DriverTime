@@ -37,6 +37,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverViolationService, DriverViolationService>();
 
+        services.AddScoped<IDriverReportExportService, DriverReportExportService>();
+
         services.AddScoped<IAuthService, AuthService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenService, TokenService>();

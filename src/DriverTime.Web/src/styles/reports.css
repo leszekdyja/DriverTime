@@ -17,6 +17,7 @@
 
 .reports-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
 }
 
@@ -27,10 +28,23 @@
     padding: 10px 16px;
     border: 0;
     border-radius: 6px;
-    background-color: #2563eb;
+    background-color: var(--color-primary);
     color: white;
     cursor: pointer;
     font-weight: 600;
+}
+
+.csv-button:hover:not(:disabled),
+.pdf-button:hover:not(:disabled),
+.excel-button:hover:not(:disabled),
+.reports-filters button:hover:not(:disabled) {
+    background-color: var(--color-primary-hover);
+    transform: translateY(-1px);
+}
+
+.pdf-button,
+.excel-button {
+    box-shadow: var(--shadow-sm);
 }
 
 .csv-button:disabled,

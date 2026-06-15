@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import {
+    downloadDriverReport,
     getReportActivities,
     getReportDrivers,
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
-import { exportReportPdf } from "../services/pdfExportService";
-import { exportReportExcel } from "../services/excelExportService";
 import "../styles/reports.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -161,38 +160,62 @@ export default function ReportsPage() {
     }
 
     async function handlePdfExport() {
+        const driver = drivers.find(
+            (item) => item.cardNumber === driverCardNumber,
+        );
+
+        if (!driver || !dateFrom || !dateTo) {
+            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+            return;
+        }
+
+        if (dateFrom > dateTo) {
+            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            return;
+        }
+
         setIsGeneratingPdf(true);
         setError("");
 
         try {
-            await exportReportPdf({
-                activities,
-                driver: drivers.find((driver) => driver.cardNumber === driverCardNumber),
-                dateFrom,
-                dateTo,
-                totals,
-            });
-        } catch {
-            setError("Nie udalo sie wygenerowac pliku PDF.");
+            await downloadDriverReport(driver.id, dateFrom, dateTo, "pdf");
+        } catch (exportError) {
+            setError(
+                exportError instanceof Error
+                    ? exportError.message
+                    : "Nie udalo sie pobrac pliku PDF.",
+            );
         } finally {
             setIsGeneratingPdf(false);
         }
     }
 
     async function handleExcelExport() {
+        const driver = drivers.find(
+            (item) => item.cardNumber === driverCardNumber,
+        );
+
+        if (!driver || !dateFrom || !dateTo) {
+            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+            return;
+        }
+
+        if (dateFrom > dateTo) {
+            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            return;
+        }
+
         setIsGeneratingExcel(true);
         setError("");
 
         try {
-            await exportReportExcel({
-                activities,
-                driver: drivers.find((driver) => driver.cardNumber === driverCardNumber),
-                dateFrom,
-                dateTo,
-                totals,
-            });
-        } catch {
-            setError("Nie udalo sie wygenerowac pliku Excel.");
+            await downloadDriverReport(driver.id, dateFrom, dateTo, "excel");
+        } catch (exportError) {
+            setError(
+                exportError instanceof Error
+                    ? exportError.message
+                    : "Nie udalo sie pobrac pliku Excel.",
+            );
         } finally {
             setIsGeneratingExcel(false);
         }
@@ -218,7 +241,13 @@ export default function ReportsPage() {
                         className="pdf-button"
                         type="button"
                         onClick={() => void handlePdfExport()}
-                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                        disabled={
+                            !driverCardNumber
+                            || !dateFrom
+                            || !dateTo
+                            || isGeneratingPdf
+                            || isGeneratingExcel
+                        }
                     >
                         {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
                     </button>
@@ -226,7 +255,13 @@ export default function ReportsPage() {
                         className="excel-button"
                         type="button"
                         onClick={() => void handleExcelExport()}
-                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                        disabled={
+                            !driverCardNumber
+                            || !dateFrom
+                            || !dateTo
+                            || isGeneratingPdf
+                            || isGeneratingExcel
+                        }
                     >
                         {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
                     </button>

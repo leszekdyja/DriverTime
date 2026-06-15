@@ -61,3 +61,44 @@ export function getReportActivities(
         "Nie udalo sie pobrac danych raportu.",
     );
 }
+
+export async function downloadDriverReport(
+    driverId: string,
+    dateFrom: string,
+    dateTo: string,
+    format: "pdf" | "excel",
+): Promise<void> {
+    const parameters = new URLSearchParams({
+        from: dateFrom,
+        to: dateTo,
+    });
+    const response = await apiFetch(
+        `/api/reports/driver/${driverId}/export/${format}?${parameters.toString()}`,
+    );
+
+    if (!response.ok) {
+        let message = `Nie udalo sie pobrac raportu ${format.toUpperCase()}.`;
+
+        try {
+            const error = (await response.json()) as { message?: string };
+            message = error.message || message;
+        } catch {
+            // Response may not contain JSON.
+        }
+
+        throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = format === "pdf"
+        ? "raport-kierowcy.pdf"
+        : "raport-kierowcy.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
