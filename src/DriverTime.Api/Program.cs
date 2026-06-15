@@ -43,11 +43,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(options =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    options.RoutePrefix = "swagger";
+});
 
 app.UseCors(policy =>
 {
@@ -75,6 +75,12 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "Healthy",
+    application = "DriverTime"
+})).AllowAnonymous();
 
 app.MapControllers();
 
