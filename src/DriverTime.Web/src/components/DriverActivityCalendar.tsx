@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { EmptyState } from "./UiStates";
 
@@ -82,7 +82,7 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
 
-    async function loadCalendar(from = dateFrom, to = dateTo) {
+    const loadCalendar = useCallback(async (from: string, to: string) => {
         if (from > to) {
             setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
             return;
@@ -103,15 +103,15 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
         } finally {
             setIsLoading(false);
         }
-    }
+    }, [driverId]);
 
     useEffect(() => {
         void loadCalendar(initialRange.from, initialRange.to);
-    }, [driverId]);
+    }, [initialRange.from, initialRange.to, loadCalendar]);
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-        void loadCalendar();
+        void loadCalendar(dateFrom, dateTo);
     }
 
     const hasData = days.some((day) =>

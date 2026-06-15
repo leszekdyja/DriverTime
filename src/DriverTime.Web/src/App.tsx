@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
@@ -28,6 +28,7 @@ export default function App() {
                             <Route path="drivers/:id" element={<DriverDetailsPage />} />
                             <Route path="reports" element={<ReportsPage />} />
                             <Route path="violations" element={<ViolationsPage />} />
+                            <Route path="*" element={<Navigate to="/" replace />} />
                         </Route>
                     </Route>
                 </Routes>

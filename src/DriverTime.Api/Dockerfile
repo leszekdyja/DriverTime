@@ -19,7 +19,7 @@ RUN dotnet publish src/DriverTime.Api/DriverTime.Api.csproj \
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends python3 python3-tk \
+    && apt-get install --yes --no-install-recommends curl python3 python3-tk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

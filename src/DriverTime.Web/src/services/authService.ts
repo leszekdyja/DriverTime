@@ -18,11 +18,17 @@ export type AuthResponse = {
 };
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
-    const response = await fetch(`${API_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-    });
+    let response: Response;
+
+    try {
+        response = await fetch(`${API_URL}/api/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+        });
+    } catch {
+        throw new Error("Nie udalo sie polaczyc z API DriverTime.");
+    }
 
     if (!response.ok) {
         throw new Error("Nieprawidlowy adres e-mail lub haslo.");

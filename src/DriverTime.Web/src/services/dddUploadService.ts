@@ -1,5 +1,5 @@
 import { API_URL } from "../config/api";
-import { getAuthToken } from "./apiClient";
+import { clearAuthSession, getAuthToken } from "./apiClient";
 
 export type DddUploadResult = {
     importId: string;
@@ -45,6 +45,10 @@ export function uploadDddFile(
         });
 
         request.addEventListener("load", () => {
+            if (request.status === 401 && token) {
+                clearAuthSession();
+            }
+
             if (request.status < 200 || request.status >= 300) {
                 reject(new Error(getUploadErrorMessage(request.responseText)));
                 return;
