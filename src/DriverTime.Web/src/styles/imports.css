@@ -120,6 +120,11 @@
     color: #4b5563;
 }
 
+.upload-item-heading span {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
 .upload-item.error .upload-item-heading span,
 .upload-item.unsupported .upload-item-heading span {
     color: #991b1b;

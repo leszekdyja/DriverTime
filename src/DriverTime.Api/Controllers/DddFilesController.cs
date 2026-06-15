@@ -41,7 +41,7 @@ public class DddFilesController : ControllerBase
         }
         catch (InvalidOperationException exception)
         {
-            return Conflict(exception.Message);
+            return Conflict(new { message = exception.Message });
         }
     }
 

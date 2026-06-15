@@ -46,11 +46,7 @@ export function uploadDddFile(
 
         request.addEventListener("load", () => {
             if (request.status < 200 || request.status >= 300) {
-                reject(
-                    new Error(
-                        request.responseText || "Nie udalo sie przeslac pliku DDD.",
-                    ),
-                );
+                reject(new Error(getUploadErrorMessage(request.responseText)));
                 return;
             }
 
@@ -71,4 +67,24 @@ export function uploadDddFile(
 
         request.send(formData);
     });
+}
+
+function getUploadErrorMessage(responseText: string): string {
+    const fallbackMessage = "Nie udalo sie przeslac pliku DDD.";
+
+    if (!responseText.trim()) {
+        return fallbackMessage;
+    }
+
+    try {
+        const response = JSON.parse(responseText) as {
+            message?: string;
+            detail?: string;
+            title?: string;
+        };
+
+        return response.message || response.detail || response.title || fallbackMessage;
+    } catch {
+        return responseText;
+    }
 }

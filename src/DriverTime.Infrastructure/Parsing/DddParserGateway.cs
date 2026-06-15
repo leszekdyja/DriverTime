@@ -49,7 +49,10 @@ public sealed class DddParserGateway : IDddParserGateway
         await process.WaitForExitAsync(cancellationToken);
 
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"DDD parser failed: {stderr}");
+        {
+            var parserError = GetParserError(stdout, stderr, process.ExitCode);
+            throw new InvalidOperationException($"DDD parser failed: {parserError}");
+        }
 
         if (string.IsNullOrWhiteSpace(stdout))
             throw new InvalidOperationException("DDD parser returned empty output.");
@@ -81,6 +84,45 @@ public sealed class DddParserGateway : IDddParserGateway
             throw new InvalidOperationException("DDD parser output does not contain JSON object.");
 
         return text.Substring(firstBrace, lastBrace - firstBrace + 1);
+    }
+
+    private static string GetParserError(string stdout, string stderr, int exitCode)
+    {
+        var details = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(ExtractJson(stdout));
+                var root = document.RootElement;
+
+                if (root.TryGetProperty("error", out var error)
+                    && !string.IsNullOrWhiteSpace(error.GetString()))
+                {
+                    details.Add(error.GetString()!);
+                }
+
+                if (root.TryGetProperty("trace", out var trace)
+                    && !string.IsNullOrWhiteSpace(trace.GetString()))
+                {
+                    details.Add(trace.GetString()!);
+                }
+            }
+            catch (JsonException)
+            {
+                details.Add(stdout.Trim());
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            details.Add(stderr.Trim());
+        }
+
+        return details.Count > 0
+            ? string.Join(Environment.NewLine, details)
+            : $"Process exited with code {exitCode}.";
     }
 
     private static JsonElement FindDataElement(JsonElement element)
