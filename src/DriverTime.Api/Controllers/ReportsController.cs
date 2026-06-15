@@ -14,6 +14,27 @@ public class ReportsController : ControllerBase
         _reportExportService = reportExportService;
     }
 
+    [HttpGet("driver/{driverId:guid}")]
+    public async Task<IActionResult> GetDriverReport(
+        Guid driverId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (from > to)
+        {
+            return BadRequest(new { message = "Data from nie moze byc pozniejsza niz data to." });
+        }
+
+        var report = await _reportExportService.GetReportAsync(
+            driverId,
+            from,
+            to,
+            cancellationToken);
+
+        return report is null ? NotFound() : Ok(report);
+    }
+
     [HttpGet("driver/{driverId:guid}/export/pdf")]
     public async Task<IActionResult> ExportDriverPdf(
         Guid driverId,

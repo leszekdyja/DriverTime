@@ -9,15 +9,29 @@ export type ReportDriver = {
 };
 
 export type ReportActivity = {
-    id: string;
-    dddFileId: string;
-    driverFirstName: string;
-    driverLastName: string;
-    driverCardNumber: string;
     startUtc: string;
     endUtc: string;
     activityType: string;
     durationSeconds: number;
+};
+
+export type DriverReport = {
+    companyName: string;
+    companyVatNumber: string;
+    companyAddress: string;
+    companyEmail: string;
+    companyPhone: string;
+    driverId: string;
+    driverFirstName: string;
+    driverLastName: string;
+    driverCardNumber: string;
+    from: string;
+    to: string;
+    drivingSeconds: number;
+    workSeconds: number;
+    restSeconds: number;
+    availabilitySeconds: number;
+    activities: ReportActivity[];
 };
 
 async function getJson<T>(url: string, errorMessage: string): Promise<T> {
@@ -37,27 +51,18 @@ export function getReportDrivers(): Promise<ReportDriver[]> {
     );
 }
 
-export function getReportActivities(
-    driverCardNumber: string,
+export function getDriverReport(
+    driverId: string,
     dateFrom: string,
     dateTo: string,
-): Promise<ReportActivity[]> {
-    const parameters = new URLSearchParams();
+): Promise<DriverReport> {
+    const parameters = new URLSearchParams({
+        from: dateFrom,
+        to: dateTo,
+    });
 
-    if (driverCardNumber) {
-        parameters.set("driverCardNumber", driverCardNumber);
-    }
-
-    if (dateFrom) {
-        parameters.set("from", `${dateFrom}T00:00:00Z`);
-    }
-
-    if (dateTo) {
-        parameters.set("to", `${dateTo}T23:59:59Z`);
-    }
-
-    return getJson<ReportActivity[]>(
-        `${API_URL}/api/driver-activities?${parameters.toString()}`,
+    return getJson<DriverReport>(
+        `${API_URL}/api/reports/driver/${driverId}?${parameters.toString()}`,
         "Nie udalo sie pobrac danych raportu.",
     );
 }

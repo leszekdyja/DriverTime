@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Pagination from "../components/Pagination";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    getDriverReport,
     downloadDriverReport,
-    getReportActivities,
     getReportDrivers,
-    type ReportActivity,
+    type DriverReport,
     type ReportDriver,
 } from "../services/reportsService";
 import "../styles/reports.css";
@@ -40,52 +40,47 @@ function escapeCsv(value: string | number) {
 
 export default function ReportsPage() {
     const [drivers, setDrivers] = useState<ReportDriver[]>([]);
-    const [activities, setActivities] = useState<ReportActivity[]>([]);
-    const [driverCardNumber, setDriverCardNumber] = useState("");
+    const [report, setReport] = useState<DriverReport | null>(null);
+    const [driverId, setDriverId] = useState("");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingDrivers, setIsLoadingDrivers] = useState(true);
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [error, setError] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
 
-    async function loadActivities(
-        cardNumber = driverCardNumber,
-        from = dateFrom,
-        to = dateTo,
-    ) {
-        setIsLoading(true);
+    const activities = report?.activities ?? [];
+
+    async function loadReport() {
+        setIsGeneratingReport(true);
         setError("");
 
         try {
-            const loadedActivities = await getReportActivities(cardNumber, from, to);
+            const loadedReport = await getDriverReport(driverId, dateFrom, dateTo);
             setCurrentPage(1);
-            setActivities(loadedActivities);
+            setReport(loadedReport);
         } catch (loadError) {
+            setReport(null);
             setError(
                 loadError instanceof Error
                     ? loadError.message
                     : "Wystapil blad podczas pobierania raportu.",
             );
         } finally {
-            setIsLoading(false);
+            setIsGeneratingReport(false);
         }
     }
 
     useEffect(() => {
         async function loadInitialData() {
-            setIsLoading(true);
+            setIsLoadingDrivers(true);
+            setError("");
 
             try {
-                const [loadedDrivers, loadedActivities] = await Promise.all([
-                    getReportDrivers(),
-                    getReportActivities("", "", ""),
-                ]);
-
-                setCurrentPage(1);
+                const loadedDrivers = await getReportDrivers();
                 setDrivers(loadedDrivers);
-                setActivities(loadedActivities);
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
@@ -93,7 +88,7 @@ export default function ReportsPage() {
                         : "Wystapil blad podczas pobierania raportu.",
                 );
             } finally {
-                setIsLoading(false);
+                setIsLoadingDrivers(false);
             }
         }
 
@@ -101,26 +96,12 @@ export default function ReportsPage() {
     }, []);
 
     const totals = useMemo(() => {
-        const result = { driving: 0, rest: 0, work: 0 };
-
-        for (const activity of activities) {
-            const duration = Math.max(activity.durationSeconds, 0);
-
-            switch (activity.activityType.toUpperCase()) {
-                case "DRIVING":
-                    result.driving += duration;
-                    break;
-                case "REST":
-                    result.rest += duration;
-                    break;
-                case "WORK":
-                    result.work += duration;
-                    break;
-            }
-        }
-
-        return result;
-    }, [activities]);
+        return {
+            driving: report?.drivingSeconds ?? 0,
+            rest: report?.restSeconds ?? 0,
+            work: report?.workSeconds ?? 0,
+        };
+    }, [report]);
 
     const visibleActivities = useMemo(() => {
         const start = (currentPage - 1) * pageSize;
@@ -135,7 +116,12 @@ export default function ReportsPage() {
             return;
         }
 
-        void loadActivities();
+        if (!driverId || !dateFrom || !dateTo) {
+            setError("Wybierz kierowce oraz pelny zakres dat.");
+            return;
+        }
+
+        void loadReport();
     }
 
     function exportCsv() {
@@ -149,8 +135,8 @@ export default function ReportsPage() {
                 "Czas trwania (sekundy)",
             ],
             ...activities.map((activity) => [
-                `${activity.driverFirstName} ${activity.driverLastName}`.trim(),
-                activity.driverCardNumber,
+                report ? `${report.driverFirstName} ${report.driverLastName}`.trim() : "",
+                report?.driverCardNumber ?? "",
                 activity.startUtc,
                 activity.endUtc,
                 activity.activityType,
@@ -173,12 +159,8 @@ export default function ReportsPage() {
     }
 
     async function handlePdfExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
-
-        if (!driver || !dateFrom || !dateTo) {
-            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+        if (!report || !driverId || !dateFrom || !dateTo) {
+            setError("Najpierw wygeneruj raport dla kierowcy i zakresu dat.");
             return;
         }
 
@@ -191,7 +173,7 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await downloadDriverReport(driver.id, dateFrom, dateTo, "pdf");
+            await downloadDriverReport(driverId, dateFrom, dateTo, "pdf");
         } catch (exportError) {
             setError(
                 exportError instanceof Error
@@ -204,12 +186,8 @@ export default function ReportsPage() {
     }
 
     async function handleExcelExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
-
-        if (!driver || !dateFrom || !dateTo) {
-            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+        if (!report || !driverId || !dateFrom || !dateTo) {
+            setError("Najpierw wygeneruj raport dla kierowcy i zakresu dat.");
             return;
         }
 
@@ -222,7 +200,7 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await downloadDriverReport(driver.id, dateFrom, dateTo, "excel");
+            await downloadDriverReport(driverId, dateFrom, dateTo, "excel");
         } catch (exportError) {
             setError(
                 exportError instanceof Error
@@ -255,7 +233,7 @@ export default function ReportsPage() {
                         type="button"
                         onClick={() => void handlePdfExport()}
                         disabled={
-                            !driverCardNumber
+                            !report
                             || !dateFrom
                             || !dateTo
                             || isGeneratingPdf
@@ -269,7 +247,7 @@ export default function ReportsPage() {
                         type="button"
                         onClick={() => void handleExcelExport()}
                         disabled={
-                            !driverCardNumber
+                            !report
                             || !dateFrom
                             || !dateTo
                             || isGeneratingPdf
@@ -285,12 +263,16 @@ export default function ReportsPage() {
                 <label>
                     Kierowca
                     <select
-                        value={driverCardNumber}
-                        onChange={(event) => setDriverCardNumber(event.target.value)}
+                        value={driverId}
+                        onChange={(event) => {
+                            setDriverId(event.target.value);
+                            setReport(null);
+                            setCurrentPage(1);
+                        }}
                     >
-                        <option value="">Wszyscy kierowcy</option>
+                        <option value="">Wybierz kierowce</option>
                         {drivers.map((driver) => (
-                            <option key={driver.id} value={driver.cardNumber}>
+                            <option key={driver.id} value={driver.id}>
                                 {driver.firstName} {driver.lastName} ({driver.cardNumber})
                             </option>
                         ))}
@@ -302,7 +284,11 @@ export default function ReportsPage() {
                     <input
                         type="date"
                         value={dateFrom}
-                        onChange={(event) => setDateFrom(event.target.value)}
+                        onChange={(event) => {
+                            setDateFrom(event.target.value);
+                            setReport(null);
+                            setCurrentPage(1);
+                        }}
                     />
                 </label>
 
@@ -311,12 +297,16 @@ export default function ReportsPage() {
                     <input
                         type="date"
                         value={dateTo}
-                        onChange={(event) => setDateTo(event.target.value)}
+                        onChange={(event) => {
+                            setDateTo(event.target.value);
+                            setReport(null);
+                            setCurrentPage(1);
+                        }}
                     />
                 </label>
 
-                <button type="submit" disabled={isLoading}>
-                    {isLoading ? "Ladowanie..." : "Generuj raport"}
+                <button type="submit" disabled={isLoadingDrivers || isGeneratingReport}>
+                    {isGeneratingReport ? "Generowanie..." : "Generuj raport"}
                 </button>
             </form>
 
@@ -326,7 +316,7 @@ export default function ReportsPage() {
                 </p>
             )}
 
-            {isLoading && activities.length === 0 ? (
+            {isGeneratingReport && activities.length === 0 ? (
                 <section className="report-summary report-summary-skeleton" aria-label="Ladowanie podsumowania">
                     {Array.from({ length: 3 }, (_, index) => <div className="ui-skeleton report-card-skeleton" key={index} />)}
                 </section>
@@ -344,15 +334,20 @@ export default function ReportsPage() {
                     <span>{activities.length} rekordow</span>
                 </div>
 
-                {isLoading && activities.length === 0 ? (
+                {isGeneratingReport && activities.length === 0 ? (
                     <TableSkeleton rows={7} columns={6} />
+                ) : !report ? (
+                    <EmptyState
+                        title="Wybierz parametry raportu"
+                        description="Wybierz kierowce i zakres dat, a nastepnie kliknij Generuj raport."
+                    />
                 ) : activities.length === 0 ? (
                     <EmptyState
                         title="Brak danych raportu"
                         description="Dla wybranego kierowcy i zakresu dat nie znaleziono aktywnosci."
                     />
                 ) : (
-                    <div className={isLoading ? "reports-content is-refreshing" : "reports-content"} aria-busy={isLoading}>
+                    <div className={isGeneratingReport ? "reports-content is-refreshing" : "reports-content"} aria-busy={isGeneratingReport}>
                         <div className="reports-table-wrapper">
                             <table className="reports-table">
                             <thead>
@@ -366,12 +361,12 @@ export default function ReportsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {visibleActivities.map((activity) => (
-                                    <tr key={activity.id}>
+                                {visibleActivities.map((activity, index) => (
+                                    <tr key={`${activity.startUtc}-${activity.endUtc}-${activity.activityType}-${index}`}>
                                         <td>
-                                            {`${activity.driverFirstName} ${activity.driverLastName}`.trim() || "Brak danych"}
+                                            {`${report.driverFirstName} ${report.driverLastName}`.trim() || "Brak danych"}
                                         </td>
-                                        <td>{activity.driverCardNumber || "Brak danych"}</td>
+                                        <td>{report.driverCardNumber || "Brak danych"}</td>
                                         <td>{formatDate(activity.startUtc)}</td>
                                         <td>{formatDate(activity.endUtc)}</td>
                                         <td>{activity.activityType || "Brak danych"}</td>

@@ -61,11 +61,11 @@ public class DriverReportExportService : IDriverReportExportService
             };
     }
 
-    private async Task<DriverReportDto?> GetReportAsync(
+    public async Task<DriverReportDto?> GetReportAsync(
         Guid driverId,
         DateOnly from,
         DateOnly to,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var driver = await _dbContext.Drivers
             .AsNoTracking()
@@ -102,7 +102,9 @@ public class DriverReportExportService : IDriverReportExportService
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
-                && x.DddFile.DriverId == driverId
+                && (x.DddFile.DriverId == driverId
+                    || (driver.CardNumber != string.Empty
+                        && x.DddFile.DriverCardNumber == driver.CardNumber))
                 && x.StartUtc < toUtcExclusive
                 && x.EndUtc > fromUtc)
             .OrderBy(x => x.StartUtc)
