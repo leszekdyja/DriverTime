@@ -13,4 +13,6 @@ public class DddFileDto
     public string DriverCardNumber { get; set; } = string.Empty;
 
     public DateTime UploadedAtUtc { get; set; }
+
+    public int ActivitiesCount { get; set; }
 }

@@ -121,13 +121,18 @@
     border-bottom: 0;
 }
 
-.details-link {
+.details-button {
+    display: inline-block;
+    padding: 8px 12px;
+    border: 1px solid #2563eb;
+    border-radius: 6px;
     color: #2563eb;
     font-weight: 600;
+    white-space: nowrap;
 }
 
-.details-link:hover {
-    text-decoration: underline;
+.details-button:hover {
+    background-color: #eff6ff;
 }
 
 @media (max-width: 768px) {

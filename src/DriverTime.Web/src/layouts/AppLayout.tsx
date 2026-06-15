@@ -12,16 +12,16 @@ export default function AppLayout() {
                 <nav className="menu">
                     <Link to="/">Dashboard</Link>
 
-                    <Link to="/imports">
-                        Importy DDD
-                    </Link>
-
                     <Link to="/drivers">
                         Kierowcy
                     </Link>
 
                     <Link to="/reports">
                         Raporty
+                    </Link>
+
+                    <Link to="/imports">
+                        Importy DDD
                     </Link>
                 </nav>
             </aside>

@@ -69,7 +69,8 @@ public class DddFileService : IDddFileService
                 DriverFirstName = x.DriverFirstName,
                 DriverLastName = x.DriverLastName,
                 DriverCardNumber = x.DriverCardNumber,
-                UploadedAtUtc = x.UploadedAtUtc
+                UploadedAtUtc = x.UploadedAtUtc,
+                ActivitiesCount = x.DriverActivities.Count
             })
             .ToListAsync();
     }

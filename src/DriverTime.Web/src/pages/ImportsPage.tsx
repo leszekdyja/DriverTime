@@ -195,27 +195,38 @@ export default function ImportsPage() {
                             <thead>
                                 <tr>
                                     <th>Nazwa pliku</th>
-                                    <th>Imie kierowcy</th>
-                                    <th>Nazwisko kierowcy</th>
+                                    <th>Kierowca</th>
                                     <th>Numer karty</th>
                                     <th>Data importu</th>
+                                    <th>Aktywnosci</th>
+                                    <th aria-label="Akcje" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {imports.map((dddImport) => (
                                     <tr key={dddImport.id}>
+                                        <td>{displayValue(dddImport.fileName)}</td>
                                         <td>
-                                            <Link
-                                                className="details-link"
-                                                to={`/imports/${dddImport.id}`}
-                                            >
-                                                {displayValue(dddImport.fileName)}
-                                            </Link>
+                                            {displayValue(
+                                                [
+                                                    dddImport.driverFirstName,
+                                                    dddImport.driverLastName,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(" "),
+                                            )}
                                         </td>
-                                        <td>{displayValue(dddImport.driverFirstName)}</td>
-                                        <td>{displayValue(dddImport.driverLastName)}</td>
                                         <td>{displayValue(dddImport.driverCardNumber)}</td>
                                         <td>{formatUploadDate(dddImport.uploadedAtUtc)}</td>
+                                        <td>{dddImport.activitiesCount}</td>
+                                        <td>
+                                            <Link
+                                                className="details-button"
+                                                to={`/imports/${dddImport.id}`}
+                                            >
+                                                Szczegoly
+                                            </Link>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

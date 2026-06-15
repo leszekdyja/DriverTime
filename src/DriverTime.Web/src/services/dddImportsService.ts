@@ -7,6 +7,7 @@ export type DddImport = {
     driverLastName: string;
     driverCardNumber: string;
     uploadedAtUtc: string;
+    activitiesCount: number;
 };
 
 export async function getDddImports(): Promise<DddImport[]> {
