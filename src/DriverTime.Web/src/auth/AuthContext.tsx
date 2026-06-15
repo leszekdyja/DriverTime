@@ -40,9 +40,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
         }
 
-        window.addEventListener("drivertime:logout", clearExpiredSession);
+        function updateCompany(event: Event) {
+            const detail = (event as CustomEvent<{ name?: string }>).detail;
+            if (!detail?.name) return;
+            setUser((current) => current
+                ? { ...current, companyName: detail.name ?? current.companyName }
+                : current);
+        }
 
-        return () => window.removeEventListener("drivertime:logout", clearExpiredSession);
+        window.addEventListener("drivertime:logout", clearExpiredSession);
+        window.addEventListener("drivertime:company-updated", updateCompany);
+
+        return () => {
+            window.removeEventListener("drivertime:logout", clearExpiredSession);
+            window.removeEventListener("drivertime:company-updated", updateCompany);
+        };
     }, []);
 
     async function login(email: string, password: string) {

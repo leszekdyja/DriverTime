@@ -29,6 +29,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDddFileService, DddFileService>();
 
+        services.AddScoped<ICompanySettingsService, CompanySettingsService>();
+
         services.AddScoped<IDriverService, DriverService>();
 
         services.AddScoped<IDashboardService, DashboardService>();

@@ -78,6 +78,19 @@ public class DriverReportExportService : IDriverReportExportService
             return null;
         }
 
+        var company = await _dbContext.Companies
+            .AsNoTracking()
+            .Where(x => x.Id == _currentUser.CompanyId)
+            .Select(x => new
+            {
+                x.Name,
+                x.VatNumber,
+                x.Address,
+                x.Email,
+                x.Phone
+            })
+            .FirstAsync(cancellationToken);
+
         var fromUtc = DateTime.SpecifyKind(
             from.ToDateTime(TimeOnly.MinValue),
             DateTimeKind.Utc);
@@ -103,6 +116,11 @@ public class DriverReportExportService : IDriverReportExportService
 
         var report = new DriverReportDto
         {
+            CompanyName = company.Name,
+            CompanyVatNumber = company.VatNumber,
+            CompanyAddress = company.Address,
+            CompanyEmail = company.Email,
+            CompanyPhone = company.Phone,
             DriverId = driver.Id,
             DriverFirstName = driver.FirstName,
             DriverLastName = driver.LastName,
@@ -143,6 +161,9 @@ public class DriverReportExportService : IDriverReportExportService
             var lines = new List<string>
             {
                 "DriverTime - Raport aktywnosci kierowcy",
+                $"Firma: {DisplayValue(report.CompanyName)} | NIP: {DisplayValue(report.CompanyVatNumber)}",
+                $"Adres: {DisplayValue(report.CompanyAddress)}",
+                $"Kontakt: {FormatCompanyContact(report)}",
                 $"Kierowca: {GetDriverName(report)}",
                 $"Numer karty: {DisplayValue(report.DriverCardNumber)}",
                 $"Zakres: {FormatDate(report.From)} - {FormatDate(report.To)}",
@@ -273,8 +294,8 @@ public class DriverReportExportService : IDriverReportExportService
         writer.WriteStartElement("sheetView");
         writer.WriteAttributeString("workbookViewId", "0");
         writer.WriteStartElement("pane");
-        writer.WriteAttributeString("ySplit", "12");
-        writer.WriteAttributeString("topLeftCell", "A13");
+        writer.WriteAttributeString("ySplit", "18");
+        writer.WriteAttributeString("topLeftCell", "A19");
         writer.WriteAttributeString("state", "frozen");
         writer.WriteEndElement();
         writer.WriteEndElement();
@@ -290,22 +311,27 @@ public class DriverReportExportService : IDriverReportExportService
 
         WriteRow(writer, 1, 2, "DriverTime");
         WriteRow(writer, 2, 1, "Raport aktywnosci kierowcy");
-        WriteKeyValueRow(writer, 4, "Kierowca", GetDriverName(report));
-        WriteKeyValueRow(writer, 5, "Numer karty", DisplayValue(report.DriverCardNumber));
-        WriteKeyValueRow(writer, 6, "Zakres dat", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
-        WriteKeyValueRow(writer, 7, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
-        WriteStringRow(writer, 9, 3, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc");
-        WriteStringRow(writer, 10, 1,
+        WriteKeyValueRow(writer, 4, "Firma", DisplayValue(report.CompanyName));
+        WriteKeyValueRow(writer, 5, "NIP", DisplayValue(report.CompanyVatNumber));
+        WriteKeyValueRow(writer, 6, "Adres", DisplayValue(report.CompanyAddress));
+        WriteKeyValueRow(writer, 7, "Email", DisplayValue(report.CompanyEmail));
+        WriteKeyValueRow(writer, 8, "Telefon", DisplayValue(report.CompanyPhone));
+        WriteKeyValueRow(writer, 10, "Kierowca", GetDriverName(report));
+        WriteKeyValueRow(writer, 11, "Numer karty", DisplayValue(report.DriverCardNumber));
+        WriteKeyValueRow(writer, 12, "Zakres dat", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
+        WriteKeyValueRow(writer, 13, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
+        WriteStringRow(writer, 15, 3, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc");
+        WriteStringRow(writer, 16, 1,
             FormatDuration(report.DrivingSeconds),
             FormatDuration(report.WorkSeconds),
             FormatDuration(report.RestSeconds),
             FormatDuration(report.AvailabilitySeconds));
-        WriteStringRow(writer, 12, 4, "Lp.", "Poczatek", "Koniec", "Typ", "Czas");
+        WriteStringRow(writer, 18, 4, "Lp.", "Poczatek", "Koniec", "Typ", "Czas");
 
         for (var index = 0; index < report.Activities.Count; index++)
         {
             var activity = report.Activities[index];
-            WriteStringRow(writer, index + 13, 0,
+            WriteStringRow(writer, index + 19, 0,
                 (index + 1).ToString(),
                 FormatDateTime(activity.StartUtc),
                 FormatDateTime(activity.EndUtc),
@@ -315,7 +341,7 @@ public class DriverReportExportService : IDriverReportExportService
 
         writer.WriteEndElement();
         writer.WriteStartElement("autoFilter");
-        writer.WriteAttributeString("ref", $"A12:E{Math.Max(12, report.Activities.Count + 12)}");
+        writer.WriteAttributeString("ref", $"A18:E{Math.Max(18, report.Activities.Count + 18)}");
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteEndDocument();
@@ -393,6 +419,14 @@ public class DriverReportExportService : IDriverReportExportService
     {
         var name = $"{report.DriverFirstName} {report.DriverLastName}".Trim();
         return DisplayValue(name);
+    }
+
+    private static string FormatCompanyContact(DriverReportDto report)
+    {
+        var values = new[] { report.CompanyEmail, report.CompanyPhone }
+            .Where(x => !string.IsNullOrWhiteSpace(x));
+        var contact = string.Join(" | ", values);
+        return DisplayValue(contact);
     }
 
     private static string GetFileName(DriverReportDto report, string extension)

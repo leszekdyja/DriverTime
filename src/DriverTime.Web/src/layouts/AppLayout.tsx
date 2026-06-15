@@ -9,6 +9,7 @@ const navigationItems = [
     { to: "/reports", label: "Raporty", shortLabel: "R" },
     { to: "/violations", label: "Naruszenia", shortLabel: "N" },
     { to: "/imports", label: "Importy DDD", shortLabel: "I" },
+    { to: "/company-settings", label: "Ustawienia firmy", shortLabel: "U" },
 ];
 
 const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {

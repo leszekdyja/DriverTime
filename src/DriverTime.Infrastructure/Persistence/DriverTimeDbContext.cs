@@ -42,6 +42,12 @@ public class DriverTimeDbContext : DbContext
 
             entity.Property(x => x.Address)
                 .HasMaxLength(500);
+
+            entity.Property(x => x.Email)
+                .HasMaxLength(320);
+
+            entity.Property(x => x.Phone)
+                .HasMaxLength(50);
         });
 
         modelBuilder.Entity<Role>(entity =>
