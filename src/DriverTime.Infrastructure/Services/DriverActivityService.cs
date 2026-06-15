@@ -7,9 +7,9 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DriverActivityService : IDriverActivityService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly DriverTimeDbContext _dbContext;
 
-    public DriverActivityService(ApplicationDbContext dbContext)
+    public DriverActivityService(DriverTimeDbContext dbContext)
     {
         _dbContext = dbContext;
     }

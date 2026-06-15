@@ -27,6 +27,10 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverService, DriverService>();
 
+        services.AddScoped<IDashboardService, DashboardService>();
+
+        services.AddScoped<IDriverActivityService, DriverActivityService>();
+
         return services;
     }
 }

@@ -7,9 +7,9 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DashboardService : IDashboardService
 {
-    private readonly ApplicationDbContext _dbContext;
+    private readonly DriverTimeDbContext _dbContext;
 
-    public DashboardService(ApplicationDbContext dbContext)
+    public DashboardService(DriverTimeDbContext dbContext)
     {
         _dbContext = dbContext;
     }
