@@ -9,6 +9,13 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (!builder.Environment.IsDevelopment()
+    && string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Secret"]))
+{
+    throw new InvalidOperationException(
+        "Jwt:Secret must be configured outside the Development environment.");
+}
+
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
@@ -44,8 +51,21 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors(policy =>
 {
+    var allowedOrigins = builder.Configuration
+        .GetSection("Cors:AllowedOrigins")
+        .Get<string[]>()
+        ?? Array.Empty<string>();
+
+    if (app.Environment.IsDevelopment())
+    {
+        policy.AllowAnyOrigin();
+    }
+    else if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins);
+    }
+
     policy
-        .AllowAnyOrigin()
         .AllowAnyHeader()
         .AllowAnyMethod()
         .WithExposedHeaders("Content-Disposition");
@@ -62,7 +82,11 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<DriverTimeDbContext>();
     await dbContext.Database.MigrateAsync();
-    await scope.ServiceProvider.GetRequiredService<DatabaseSeeder>().SeedAsync();
+    var seedDemoData = app.Environment.IsDevelopment()
+        || builder.Configuration.GetValue<bool>("DemoData:Enabled");
+    await scope.ServiceProvider
+        .GetRequiredService<DatabaseSeeder>()
+        .SeedAsync(seedDemoData);
 }
 
 app.Run();

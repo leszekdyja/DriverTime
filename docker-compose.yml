@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-drivertime}
       POSTGRES_USER: ${POSTGRES_USER:-drivertime}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-drivertime_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
@@ -23,16 +23,21 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-drivertime};Username=${POSTGRES_USER:-drivertime};Password=${POSTGRES_PASSWORD:-drivertime_dev}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-drivertime};Username=${POSTGRES_USER:-drivertime};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       DddParser__PythonExecutable: python3
       DddParser__ParserScriptPath: /app/parser/parser_cli.py
       DddParser__TimeoutSeconds: 60
       Jwt__Issuer: DriverTime
       Jwt__Audience: DriverTime
-      Jwt__Secret: ${JWT_SECRET:-local-docker-development-secret-change-before-deployment}
-      SeedAdmin__CompanyName: DriverTime Demo
+      Jwt__Secret: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      SeedAdmin__CompanyName: ${SEED_ADMIN_COMPANY:-DriverTime}
       SeedAdmin__Email: ${SEED_ADMIN_EMAIL:-admin@drivertime.local}
-      SeedAdmin__Password: ${SEED_ADMIN_PASSWORD:-ChangeMe123!}
+      SeedAdmin__Password: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD in .env}
+      DemoData__Enabled: ${DEMO_DATA_ENABLED:-false}
+      DemoData__CompanyName: ${DEMO_COMPANY_NAME:-Northline Logistics}
+      DemoData__Email: ${DEMO_EMAIL:-demo@drivertime.app}
+      DemoData__Password: ${DEMO_PASSWORD:-DriverTimeDemo123!}
+      Cors__AllowedOrigins__0: ${PUBLIC_APP_URL:-http://localhost:8080}
     ports:
       - "${API_PORT:-8081}:8080"
     depends_on:
@@ -49,7 +54,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: src/DriverTime.Web/Dockerfile
+      dockerfile: src/drivertime.web/Dockerfile
       args:
         VITE_API_URL: ""
     ports:

@@ -11,6 +11,7 @@ import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
 import ImportDetailsPage from "./pages/ImportDetailsPage";
 import ImportsPage from "./pages/ImportsPage";
+import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import ReportsPage from "./pages/ReportsPage";
 import ViolationsPage from "./pages/ViolationsPage";
@@ -20,6 +21,7 @@ export default function App() {
         <BrowserRouter>
             <AuthProvider>
                 <Routes>
+                    <Route path="/welcome" element={<LandingPage />} />
                     <Route path="/login" element={<LoginPage />} />
                     <Route element={<ProtectedRoute />}>
                         <Route path="/" element={<AppLayout />}>

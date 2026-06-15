@@ -57,7 +57,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: src/DriverTime.Web
+        working-directory: src/drivertime.web
 
     steps:
       - name: Checkout repository
@@ -68,7 +68,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: src/DriverTime.Web/package-lock.json
+          cache-dependency-path: src/drivertime.web/package-lock.json
 
       - name: Install frontend dependencies
         run: npm ci

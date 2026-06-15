@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="DriverTime">
   <defs>
     <linearGradient id="a" x1="8" y1="5" x2="55" y2="59" gradientUnits="userSpaceOnUse">
       <stop stop-color="#38bdf8"/>
-      <stop offset="1" stop-color="#1d4ed8"/>
+      <stop offset="1" stop-color="#2563eb"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="17" fill="#0f2343"/>
+  <rect width="64" height="64" rx="17" fill="#102a56"/>
   <path d="M16 17h17.5C45.4 17 52 23.2 52 32S45.4 47 33.5 47H16V17Z" fill="url(#a)"/>
   <path d="M25 25h8.2c6.1 0 9.8 2.4 9.8 7s-3.7 7-9.8 7H25V25Z" fill="#fff"/>
-  <path d="M9 27h19v10H9z" fill="#0f2343"/>
+  <path d="M9 27h19v10H9z" fill="#102a56"/>
 </svg>
