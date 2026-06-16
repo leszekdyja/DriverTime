@@ -1,5 +1,6 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance.Rules;
 
@@ -15,6 +16,13 @@ public class DailyRestViolationRule : IComplianceRule
 
     public string Name => "Daily rest";
 
+    private readonly ILogger<DailyRestViolationRule> _logger;
+
+    public DailyRestViolationRule(ILogger<DailyRestViolationRule> logger)
+    {
+        _logger = logger;
+    }
+
     public ComplianceRuleResult Evaluate(
         Guid driverId,
         IReadOnlyList<TimelineActivity> timeline)
@@ -27,6 +35,10 @@ public class DailyRestViolationRule : IComplianceRule
         var ordered = timeline
             .OrderBy(x => x.StartUtc)
             .ToList();
+        var workDays = 0;
+        var daysBelowRegularRest = 0;
+        var daysBelowReducedRest = 0;
+        var maxLongestRest = TimeSpan.Zero;
 
         foreach (var day in ordered
                      .Where(IsWorkPeriodActivity)
@@ -48,17 +60,22 @@ public class DailyRestViolationRule : IComplianceRule
                 continue;
             }
 
+            workDays++;
+
             var longestRest = dayActivities
                 .Where(IsRest)
                 .Select(x => x.Duration)
                 .DefaultIfEmpty(TimeSpan.Zero)
                 .Max();
             var restMinutes = (long)Math.Round(longestRest.TotalMinutes);
+            maxLongestRest = Max(maxLongestRest, longestRest);
 
             if (longestRest >= RegularDailyRest)
             {
                 continue;
             }
+
+            daysBelowRegularRest++;
 
             if (longestRest >= ReducedDailyRest)
             {
@@ -72,6 +89,8 @@ public class DailyRestViolationRule : IComplianceRule
                 continue;
             }
 
+            daysBelowReducedRest++;
+
             result.Violations.Add(CreateViolation(
                 severity: "HIGH",
                 description: "Brak prawidłowego odpoczynku dziennego minimum 9 godzin między okresami pracy lub jazdy.",
@@ -79,6 +98,16 @@ public class DailyRestViolationRule : IComplianceRule
                 endUtc: workActivities[^1].EndUtc,
                 restMinutes: restMinutes));
         }
+
+        _logger.LogInformation(
+            "Compliance rule {RuleCode} driver {DriverId}: workDays={WorkDays}, maxLongestRestMinutes={MaxLongestRestMinutes}, daysBelow11h={DaysBelowRegularRest}, daysBelow9h={DaysBelowReducedRest}, violations={ViolationCount}.",
+            RuleCode,
+            driverId,
+            workDays,
+            (long)Math.Round(maxLongestRest.TotalMinutes),
+            daysBelowRegularRest,
+            daysBelowReducedRest,
+            result.Violations.Count);
 
         return result;
     }
@@ -119,4 +148,7 @@ public class DailyRestViolationRule : IComplianceRule
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours} godz. {duration.Minutes} min";
+
+    private static TimeSpan Max(TimeSpan left, TimeSpan right) =>
+        left >= right ? left : right;
 }

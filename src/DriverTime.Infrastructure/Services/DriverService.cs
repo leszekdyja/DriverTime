@@ -4,6 +4,7 @@ using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -12,19 +13,43 @@ public class DriverService : IDriverService
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
     private readonly IDriverViolationService _driverViolationService;
+    private readonly ILogger<DriverService> _logger;
 
     public DriverService(
         DriverTimeDbContext dbContext,
         ICurrentUserService currentUser,
-        IDriverViolationService driverViolationService)
+        IDriverViolationService driverViolationService,
+        ILogger<DriverService> logger)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
         _driverViolationService = driverViolationService;
+        _logger = logger;
     }
 
     public async Task<List<DriverDto>> GetAllAsync()
     {
+        var isAuthenticated = _currentUser.IsAuthenticated;
+        var userId = _currentUser.UserId;
+        var companyId = _currentUser.CompanyId;
+        var allDriversCount = await _dbContext.Drivers.CountAsync();
+        var filteredDriversCount = await _dbContext.Drivers
+            .CountAsync(x => x.CompanyId == companyId);
+        var driverCompanyIds = await _dbContext.Drivers
+            .Select(x => x.CompanyId)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync();
+
+        _logger.LogInformation(
+            "GET /api/drivers diagnostics: IsAuthenticated={IsAuthenticated}, UserId={UserId}, CurrentUserCompanyId={CompanyId}, DriversBeforeFilter={DriversBeforeFilter}, DriversAfterCompanyFilter={DriversAfterCompanyFilter}, DriverCompanyIds={DriverCompanyIds}.",
+            isAuthenticated,
+            userId,
+            companyId,
+            allDriversCount,
+            filteredDriversCount,
+            string.Join(", ", driverCompanyIds));
+
         return await _dbContext.Drivers
             .Where(x => x.CompanyId == _currentUser.CompanyId)
             .OrderBy(x => x.LastName)

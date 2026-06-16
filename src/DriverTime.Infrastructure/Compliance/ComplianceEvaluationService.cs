@@ -87,7 +87,7 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
             .Distinct()
             .ToList();
 
-        await _dbContext.Violations
+        var deletedCount = await _dbContext.Violations
             .Where(x =>
                 x.DriverId == driverId &&
                 replaceableCodes.Contains(x.RegulationReference))
@@ -96,8 +96,12 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         if (preview.Violations.Count == 0)
         {
             _logger.LogInformation(
-                "Compliance evaluation completed for driver {DriverId}. No violations detected.",
-                driverId);
+                "Compliance evaluation completed for driver {DriverId}. No violations detected. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, ReplaceableCodes={ReplaceableCodes}.",
+                driverId,
+                companyId,
+                preview.Timeline.Count,
+                deletedCount,
+                string.Join(", ", replaceableCodes));
 
             return 0;
         }
@@ -111,8 +115,11 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Compliance evaluation completed for driver {DriverId}. Saved violations: {Count}.",
+            "Compliance evaluation completed for driver {DriverId}. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, Saved violations: {Count}.",
             driverId,
+            companyId,
+            preview.Timeline.Count,
+            deletedCount,
             violations.Count);
 
         return violations.Count;

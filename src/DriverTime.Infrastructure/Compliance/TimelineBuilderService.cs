@@ -82,24 +82,76 @@ public class TimelineBuilderService : ITimelineBuilderService
                 string.Join(", ", unknownActivities.Distinct().Take(10)));
         }
 
-        LogActivityTypeMetrics(driverId, normalizedActivities, unknownActivities.Count);
+        var timeline = NormalizeTimeline(normalizedActivities);
 
-        return NormalizeTimeline(normalizedActivities);
+        LogActivityTypeMetrics(
+            driverId,
+            rawActivities.Count,
+            normalizedActivities,
+            timeline,
+            unknownActivities.Count);
+
+        return timeline;
     }
 
     private void LogActivityTypeMetrics(
         Guid driverId,
+        int rawCount,
         IReadOnlyCollection<TimelineActivity> activities,
+        IReadOnlyCollection<TimelineActivity> timeline,
         int unknownCount)
     {
+        var firstStart = timeline.Count == 0
+            ? (DateTime?)null
+            : timeline.Min(x => x.StartUtc);
+
+        var lastEnd = timeline.Count == 0
+            ? (DateTime?)null
+            : timeline.Max(x => x.EndUtc);
+
+        var normalizedDrivingMinutes = activities
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Driving)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
+        var normalizedWorkMinutes = activities
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Work)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
+        var normalizedRestMinutes = activities
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Rest)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
+        var timelineDrivingMinutes = timeline
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Driving)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
+        var timelineWorkMinutes = timeline
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Work)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
+        var timelineRestMinutes = timeline
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Rest)
+            .Sum(x => (int)Math.Round((x.EndUtc - x.StartUtc).TotalMinutes));
+
         _logger.LogInformation(
-            "Compliance timeline activity counts for driver {DriverId}: DRIVING={DrivingCount}, WORK={WorkCount}, REST={RestCount}, AVAILABILITY={AvailabilityCount}, UNKNOWN={UnknownCount}",
+            "Compliance timeline activity counts for driver {DriverId}: RAW={RawCount}, NORMALIZED={NormalizedCount}, TIMELINE={TimelineCount}, DRIVING={DrivingCount}, WORK={WorkCount}, REST={RestCount}, AVAILABILITY={AvailabilityCount}, UNKNOWN={UnknownCount}, FirstStart={FirstStart:o}, LastEnd={LastEnd:o}. Minutes normalized: DRIVING={NormalizedDrivingMinutes}, WORK={NormalizedWorkMinutes}, REST={NormalizedRestMinutes}. Minutes timeline: DRIVING={TimelineDrivingMinutes}, WORK={TimelineWorkMinutes}, REST={TimelineRestMinutes}.",
             driverId,
+            rawCount,
+            activities.Count,
+            timeline.Count,
             activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Driving),
             activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Work),
             activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Rest),
             activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Availability),
-            unknownCount);
+            unknownCount,
+            firstStart,
+            lastEnd,
+            normalizedDrivingMinutes,
+            normalizedWorkMinutes,
+            normalizedRestMinutes,
+            timelineDrivingMinutes,
+            timelineWorkMinutes,
+            timelineRestMinutes);
     }
 
     private static IReadOnlyList<TimelineActivity> NormalizeTimeline(
@@ -110,6 +162,7 @@ public class TimelineBuilderService : ITimelineBuilderService
             .OrderBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
+
         var timeline = new List<TimelineActivity>();
 
         foreach (var activity in ordered)

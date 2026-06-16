@@ -2,6 +2,7 @@ using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -22,10 +23,14 @@ public class ViolationDetectionService : IViolationDetectionService
     };
 
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ILogger<ViolationDetectionService> _logger;
 
-    public ViolationDetectionService(DriverTimeDbContext dbContext)
+    public ViolationDetectionService(
+        DriverTimeDbContext dbContext,
+        ILogger<ViolationDetectionService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<int> DetectForDriverAsync(
@@ -65,9 +70,11 @@ public class ViolationDetectionService : IViolationDetectionService
             .OrderBy(x => x.StartUtc)
             .ToListAsync(cancellationToken);
 
+        LogDetectionInput(companyId, driverId, fromUtc, toUtc, activities);
+
         var violations = Detect(driverId, activities);
 
-        await _dbContext.Violations
+        var deletedCount = await _dbContext.Violations
             .Where(x =>
                 x.DriverId == driverId &&
                 AutomaticViolationReferences.Contains(x.RegulationReference) &&
@@ -77,11 +84,26 @@ public class ViolationDetectionService : IViolationDetectionService
 
         if (violations.Count == 0)
         {
+            _logger.LogInformation(
+                "Violation detection completed with no results for driver {DriverId}. CompanyId={CompanyId}, DeletedExisting={DeletedCount}.",
+                driverId,
+                companyId,
+                deletedCount);
+
             return 0;
         }
 
         _dbContext.Violations.AddRange(violations);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Violation detection saved {SavedCount} violations for driver {DriverId}. CompanyId={CompanyId}, DeletedExisting={DeletedCount}, Range={FromUtc:o}..{ToUtc:o}.",
+            violations.Count,
+            driverId,
+            companyId,
+            deletedCount,
+            fromUtc,
+            toUtc);
 
         return violations.Count;
     }
@@ -110,6 +132,37 @@ public class ViolationDetectionService : IViolationDetectionService
             from,
             to,
             cancellationToken);
+    }
+
+    private void LogDetectionInput(
+        Guid companyId,
+        Guid driverId,
+        DateTime fromUtc,
+        DateTime toUtc,
+        IReadOnlyCollection<DriverActivity> activities)
+    {
+        var firstStart = activities.Count == 0
+            ? (DateTime?)null
+            : activities.Min(x => x.StartUtc);
+        var lastEnd = activities.Count == 0
+            ? (DateTime?)null
+            : activities.Max(x => x.EndUtc);
+        var typeCounts = activities
+            .GroupBy(x => x.ActivityType)
+            .OrderByDescending(x => x.Count())
+            .Take(10)
+            .Select(x => $"{x.Key}:{x.Count()}");
+
+        _logger.LogInformation(
+            "Violation detection input for driver {DriverId}. CompanyId={CompanyId}, QueryRange={FromUtc:o}..{ToUtc:o}, Activities={ActivityCount}, FirstStart={FirstStart:o}, LastEnd={LastEnd:o}, Types={ActivityTypes}.",
+            driverId,
+            companyId,
+            fromUtc,
+            toUtc,
+            activities.Count,
+            firstStart,
+            lastEnd,
+            string.Join(", ", typeCounts));
     }
 
     private static List<Violation> Detect(

@@ -1,5 +1,6 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance.Rules;
 
@@ -15,6 +16,13 @@ public class ContinuousDrivingBreakRule : IComplianceRule
 
     public string Name => "Continuous driving break";
 
+    private readonly ILogger<ContinuousDrivingBreakRule> _logger;
+
+    public ContinuousDrivingBreakRule(ILogger<ContinuousDrivingBreakRule> logger)
+    {
+        _logger = logger;
+    }
+
     public ComplianceRuleResult Evaluate(
         Guid driverId,
         IReadOnlyList<TimelineActivity> timeline)
@@ -25,14 +33,19 @@ public class ContinuousDrivingBreakRule : IComplianceRule
         };
 
         var continuousDriving = TimeSpan.Zero;
+        var maxContinuousDriving = TimeSpan.Zero;
+        var drivingSegments = 0;
+        var resettingBreaks = 0;
         DateTime? continuousStartUtc = null;
 
         foreach (var activity in timeline.OrderBy(x => x.StartUtc))
         {
             if (IsDriving(activity))
             {
+                drivingSegments++;
                 continuousStartUtc ??= activity.StartUtc;
                 continuousDriving += activity.Duration;
+                maxContinuousDriving = Max(maxContinuousDriving, continuousDriving);
 
                 if (continuousDriving > ContinuousDrivingLimit)
                 {
@@ -63,10 +76,20 @@ public class ContinuousDrivingBreakRule : IComplianceRule
 
             if (IsResettingBreak(activity))
             {
+                resettingBreaks++;
                 continuousDriving = TimeSpan.Zero;
                 continuousStartUtc = null;
             }
         }
+
+        _logger.LogInformation(
+            "Compliance rule {RuleCode} driver {DriverId}: drivingSegments={DrivingSegments}, resettingBreaks={ResettingBreaks}, maxContinuousDrivingMinutes={MaxContinuousDrivingMinutes}, violations={ViolationCount}.",
+            RuleCode,
+            driverId,
+            drivingSegments,
+            resettingBreaks,
+            (long)Math.Round(maxContinuousDriving.TotalMinutes),
+            result.Violations.Count);
 
         return result;
     }
@@ -81,4 +104,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours} godz. {duration.Minutes} min";
+
+    private static TimeSpan Max(TimeSpan left, TimeSpan right) =>
+        left >= right ? left : right;
 }

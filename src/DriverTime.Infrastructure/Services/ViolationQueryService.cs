@@ -3,16 +3,21 @@ using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Services;
 
 public class ViolationQueryService : IViolationQueryService
 {
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ILogger<ViolationQueryService> _logger;
 
-    public ViolationQueryService(DriverTimeDbContext dbContext)
+    public ViolationQueryService(
+        DriverTimeDbContext dbContext,
+        ILogger<ViolationQueryService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<ViolationDto>> GetAsync(
@@ -61,6 +66,16 @@ public class ViolationQueryService : IViolationQueryService
             .OrderByDescending(x => x.ViolationStart)
             .Take(500)
             .ToListAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Violation query returned {Count} rows for company {CompanyId}. DriverId={DriverId}, FromDate={FromDate:o}, ToDate={ToDate:o}, Severity={Severity}, Type={Type}.",
+            violations.Count,
+            companyId,
+            driverId,
+            fromDate,
+            toDate,
+            severity,
+            type);
 
         return violations.Select(Map).ToList();
     }

@@ -1,5 +1,6 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance.Rules;
 
@@ -13,6 +14,13 @@ public class DailyDrivingLimitRule : IComplianceRule
 
     public string Name => "Daily driving limit";
 
+    private readonly ILogger<DailyDrivingLimitRule> _logger;
+
+    public DailyDrivingLimitRule(ILogger<DailyDrivingLimitRule> logger)
+    {
+        _logger = logger;
+    }
+
     public ComplianceRuleResult Evaluate(
         Guid driverId,
         IReadOnlyList<TimelineActivity> timeline)
@@ -25,49 +33,69 @@ public class DailyDrivingLimitRule : IComplianceRule
         var dailyDriving = timeline
             .Where(IsDriving)
             .GroupBy(x => x.StartUtc.Date)
-            .OrderBy(x => x.Key);
+            .OrderBy(x => x.Key)
+            .Select(day =>
+            {
+                var activities = day
+                    .OrderBy(x => x.StartUtc)
+                    .ToList();
+                var totalDriving = activities.Aggregate(
+                    TimeSpan.Zero,
+                    (sum, activity) => sum + activity.Duration);
+
+                return new
+                {
+                    Day = day.Key,
+                    Activities = activities,
+                    TotalDriving = totalDriving
+                };
+            })
+            .ToList();
 
         foreach (var day in dailyDriving)
         {
-            var activities = day
-                .OrderBy(x => x.StartUtc)
-                .ToList();
-            var totalDriving = activities.Aggregate(
-                TimeSpan.Zero,
-                (sum, activity) => sum + activity.Duration);
-
-            if (totalDriving <= StandardDailyLimit)
+            if (day.TotalDriving <= StandardDailyLimit)
             {
                 continue;
             }
 
-            var severity = totalDriving > ExtendedDailyLimit
+            var severity = day.TotalDriving > ExtendedDailyLimit
                 ? "HIGH"
                 : "MEDIUM";
-            var limit = totalDriving > ExtendedDailyLimit
+            var limit = day.TotalDriving > ExtendedDailyLimit
                 ? ExtendedDailyLimit
                 : StandardDailyLimit;
             var exceededMinutes = Math.Max(
                 0,
-                (long)Math.Round((totalDriving - StandardDailyLimit).TotalMinutes));
+                (long)Math.Round((day.TotalDriving - StandardDailyLimit).TotalMinutes));
 
             result.Violations.Add(new ComplianceViolationCandidate
             {
                 Code = RuleCode,
                 RuleName = Name,
                 Severity = severity,
-                Description = BuildMessage(totalDriving, severity),
-                PeriodStartUtc = activities[0].StartUtc,
-                PeriodEndUtc = activities[^1].EndUtc,
-                ActualMinutes = (long)Math.Round(totalDriving.TotalMinutes),
+                Description = BuildMessage(day.TotalDriving, severity),
+                PeriodStartUtc = day.Activities[0].StartUtc,
+                PeriodEndUtc = day.Activities[^1].EndUtc,
+                ActualMinutes = (long)Math.Round(day.TotalDriving.TotalMinutes),
                 LimitMinutes = (long)limit.TotalMinutes,
                 Metadata = new Dictionary<string, long>
                 {
-                    ["totalDrivingMinutes"] = (long)Math.Round(totalDriving.TotalMinutes),
+                    ["totalDrivingMinutes"] = (long)Math.Round(day.TotalDriving.TotalMinutes),
                     ["exceededMinutes"] = exceededMinutes
                 }
             });
         }
+
+        _logger.LogInformation(
+            "Compliance rule {RuleCode} driver {DriverId}: drivingDays={DrivingDays}, maxDailyDrivingMinutes={MaxDailyDrivingMinutes}, daysOver9h={DaysOverStandardLimit}, daysOver10h={DaysOverExtendedLimit}, violations={ViolationCount}.",
+            RuleCode,
+            driverId,
+            dailyDriving.Count,
+            dailyDriving.Count == 0 ? 0 : (long)Math.Round(dailyDriving.Max(x => x.TotalDriving.TotalMinutes)),
+            dailyDriving.Count(x => x.TotalDriving > StandardDailyLimit),
+            dailyDriving.Count(x => x.TotalDriving > ExtendedDailyLimit),
+            result.Violations.Count);
 
         return result;
     }
