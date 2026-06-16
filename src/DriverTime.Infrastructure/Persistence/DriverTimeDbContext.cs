@@ -18,6 +18,9 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<DddFile> DddFiles => Set<DddFile>();
 
+    public DbSet<DddImportMonitoringEntry> DddImportMonitoringEntries =>
+        Set<DddImportMonitoringEntry>();
+
     public DbSet<DriverActivity> DriverActivities => Set<DriverActivity>();
 
     public DbSet<VehicleUse> VehicleUses => Set<VehicleUse>();
@@ -97,6 +100,33 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Driver)
                 .WithMany(x => x.DddFiles)
                 .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DddImportMonitoringEntry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.CreatedAtUtc });
+            entity.HasIndex(x => x.UserId);
+
+            entity.Property(x => x.FileName)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(4000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.DddImportMonitoringEntries)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

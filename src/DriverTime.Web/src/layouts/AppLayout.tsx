@@ -11,6 +11,7 @@ const navigationItems = [
     { to: "/reports", label: "Raporty", icon: "reports" },
     { to: "/violations", label: "Naruszenia", icon: "alerts" },
     { to: "/imports", label: "Importy DDD", icon: "imports" },
+    { to: "/import-monitoring", label: "Monitoring importów", icon: "monitoring" },
     { to: "/company-settings", label: "Ustawienia firmy", icon: "company" },
     { to: "/account", label: "Moje konto", icon: "account" },
 ];
@@ -115,6 +116,7 @@ function NavigationIcon({ name }: { name: string }) {
         reports: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /><path d="M2 21h22" /></>,
         alerts: <><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v5" /><path d="M12 17.5h.01" /></>,
         imports: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 19h16" /></>,
+        monitoring: <><path d="M4 19V5" /><path d="M4 19h16" /><path d="M8 15l3-3 3 2 4-6" /><circle cx="18" cy="8" r="1.5" /></>,
         company: <><path d="M4 21V7l8-4v18" /><path d="M12 9h8v12" /><path d="M7 9h2M7 13h2M7 17h2M15 13h2M15 17h2" /></>,
         account: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
     };

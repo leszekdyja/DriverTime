@@ -1,0 +1,77 @@
+.import-monitoring-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.import-monitoring-header p {
+    margin-top: 8px;
+}
+
+.import-monitoring-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.import-monitoring-meta span {
+    padding: 7px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    font-weight: 700;
+}
+
+.import-monitoring-table {
+    min-width: 880px;
+}
+
+.import-monitoring-status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.import-monitoring-status.pending {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
+.import-monitoring-status.processing {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+}
+
+.import-monitoring-status.completed {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.import-monitoring-status.failed {
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.import-monitoring-error {
+    max-width: 360px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 768px) {
+    .import-monitoring-header {
+        flex-direction: column;
+    }
+
+    .import-monitoring-meta {
+        align-items: flex-start;
+    }
+}

@@ -11,6 +11,7 @@ import CompanySettingsPage from "./pages/CompanySettingsPage";
 import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
 import ImportDetailsPage from "./pages/ImportDetailsPage";
+import ImportMonitoringPage from "./pages/ImportMonitoringPage";
 import ImportsPage from "./pages/ImportsPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
@@ -29,6 +30,7 @@ export default function App() {
                             <Route path="/" element={<AppLayout />}>
                                 <Route index element={<DashboardPage />} />
                                 <Route path="imports" element={<ImportsPage />} />
+                                <Route path="import-monitoring" element={<ImportMonitoringPage />} />
                                 <Route path="imports/:id" element={<ImportDetailsPage />} />
                                 <Route path="drivers" element={<DriversPage />} />
                                 <Route path="drivers/:id" element={<DriverDetailsPage />} />

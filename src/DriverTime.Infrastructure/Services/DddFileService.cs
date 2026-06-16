@@ -9,18 +9,25 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DddFileService : IDddFileService
 {
+    private const string DevCompanyName = "DriverTime Dev Company";
+    private const string DevCompanyVatNumber = "DEV";
+    private const string DevCompanyAddress = "Local development";
+
     private readonly DriverTimeDbContext _dbContext;
     private readonly IDddParserGateway _dddParserGateway;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDddImportMonitoringService _importMonitoringService;
 
     public DddFileService(
         DriverTimeDbContext dbContext,
         IDddParserGateway dddParserGateway,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IDddImportMonitoringService importMonitoringService)
     {
         _dbContext = dbContext;
         _dddParserGateway = dddParserGateway;
         _currentUser = currentUser;
+        _importMonitoringService = importMonitoringService;
     }
 
     public async Task<DddParseResultDto> UploadAndParseAsync(
@@ -36,12 +43,17 @@ public class DddFileService : IDddFileService
             await fileStream.CopyToAsync(output);
         }
 
+        var monitoringEntry = await _importMonitoringService.CreateAsync(originalFileName);
+
         try
         {
+            await _importMonitoringService.MarkProcessingAsync(monitoringEntry.Id);
+
+            var companyId = await ResolveImportCompanyIdAsync();
             var fileHash = await CalculateHashAsync(tempFilePath);
 
             if (await _dbContext.DddFiles.AnyAsync(x =>
-                x.CompanyId == _currentUser.CompanyId && x.FileHash == fileHash))
+                x.CompanyId == companyId && x.FileHash == fileHash))
             {
                 throw new InvalidOperationException("Ten plik DDD zostal juz zaimportowany.");
             }
@@ -56,12 +68,12 @@ public class DddFileService : IDddFileService
             }
 
             var driver = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
-                x.CompanyId == _currentUser.CompanyId && x.CardNumber == cardNumber);
+                x.CompanyId == companyId && x.CardNumber == cardNumber);
             var driverCreated = driver is null;
 
             if (driver is null)
             {
-                driver = CreateDriver(parseResult.Driver, cardNumber);
+                driver = CreateDriver(parseResult.Driver, cardNumber, companyId);
                 _dbContext.Drivers.Add(driver);
             }
             else
@@ -72,7 +84,7 @@ public class DddFileService : IDddFileService
             var dddFile = new DddFile
             {
                 Id = Guid.NewGuid(),
-                CompanyId = _currentUser.CompanyId,
+                CompanyId = companyId,
                 DriverId = driver.Id,
                 FileName = originalFileName,
                 FileHash = fileHash,
@@ -96,7 +108,17 @@ public class DddFileService : IDddFileService
                 ? "Utworzono nowego kierowce."
                 : "Import przypisano do istniejacego kierowcy.";
 
+            await _importMonitoringService.MarkCompletedAsync(monitoringEntry.Id);
+
             return parseResult;
+        }
+        catch (Exception exception)
+        {
+            await _importMonitoringService.MarkFailedAsync(
+                monitoringEntry.Id,
+                exception.Message);
+
+            throw;
         }
         finally
         {
@@ -215,12 +237,57 @@ public class DddFileService : IDddFileService
         return true;
     }
 
-    private Driver CreateDriver(ParsedDriverDto parsedDriver, string cardNumber)
+    private async Task<Guid> ResolveImportCompanyIdAsync()
+    {
+        if (_currentUser.IsAuthenticated && _currentUser.CompanyId != Guid.Empty)
+        {
+            var existingCompanyId = await _dbContext.Companies
+                .AsNoTracking()
+                .Where(x => x.Id == _currentUser.CompanyId)
+                .Select(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (existingCompanyId != Guid.Empty)
+            {
+                return existingCompanyId;
+            }
+        }
+
+        var devCompanyId = await _dbContext.Companies
+            .AsNoTracking()
+            .Where(x => x.VatNumber == DevCompanyVatNumber)
+            .OrderBy(x => x.CreatedAt)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync();
+
+        if (devCompanyId != Guid.Empty)
+        {
+            return devCompanyId;
+        }
+
+        var devCompany = new Company
+        {
+            Id = Guid.NewGuid(),
+            Name = DevCompanyName,
+            VatNumber = DevCompanyVatNumber,
+            Address = DevCompanyAddress
+        };
+
+        _dbContext.Companies.Add(devCompany);
+        await _dbContext.SaveChangesAsync();
+
+        return devCompany.Id;
+    }
+
+    private Driver CreateDriver(
+        ParsedDriverDto parsedDriver,
+        string cardNumber,
+        Guid companyId)
     {
         return new Driver
         {
             Id = Guid.NewGuid(),
-            CompanyId = _currentUser.CompanyId,
+            CompanyId = companyId,
             CardNumber = cardNumber,
             FirstName = parsedDriver.FirstName.Trim(),
             LastName = parsedDriver.LastName.Trim(),

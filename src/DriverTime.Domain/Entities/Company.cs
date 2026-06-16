@@ -22,6 +22,9 @@ public class Company : BaseEntity
 
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
 
+    public ICollection<DddImportMonitoringEntry> DddImportMonitoringEntries { get; set; }
+        = new List<DddImportMonitoringEntry>();
+
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 
     public ICollection<ImportFile> ImportFiles { get; set; } = new List<ImportFile>();
