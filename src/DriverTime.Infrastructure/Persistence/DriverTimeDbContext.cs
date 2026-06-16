@@ -119,6 +119,12 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.ErrorMessage)
                 .HasMaxLength(4000);
 
+            entity.Property(x => x.LastError)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.StoredFilePath)
+                .HasMaxLength(1000);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.DddImportMonitoringEntries)
                 .HasForeignKey(x => x.CompanyId)

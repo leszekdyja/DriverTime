@@ -1,6 +1,7 @@
 using DriverTime.Application;
 using DriverTime.Application.Interfaces;
 using DriverTime.Api.Authentication;
+using DriverTime.Api.Services;
 using DriverTime.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -53,6 +54,7 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHostedService<DddImportRetryWorker>();
 
 var app = builder.Build();
 

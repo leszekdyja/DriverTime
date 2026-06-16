@@ -27,8 +27,36 @@
     font-weight: 700;
 }
 
+.retry-failed-button,
+.retry-import-button {
+    padding: 8px 12px;
+    border: 1px solid var(--color-primary);
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.retry-failed-button:hover:not(:disabled),
+.retry-import-button:hover:not(:disabled) {
+    filter: brightness(0.96);
+}
+
+.retry-failed-button:disabled,
+.retry-import-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.retry-import-button {
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
 .import-monitoring-table {
-    min-width: 880px;
+    min-width: 1040px;
 }
 
 .import-monitoring-status {
@@ -64,6 +92,10 @@
     max-width: 360px;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
+}
+
+.import-monitoring-muted {
+    color: var(--color-muted);
 }
 
 @media (max-width: 768px) {

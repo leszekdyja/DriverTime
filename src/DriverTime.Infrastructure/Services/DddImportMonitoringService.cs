@@ -84,6 +84,58 @@ public class DddImportMonitoringService : IDddImportMonitoringService
             cancellationToken);
     }
 
+    public Task SetStoredFilePathAsync(
+        Guid id,
+        string storedFilePath,
+        CancellationToken cancellationToken = default)
+    {
+        return QueryCurrentCompanyForUpdate(id)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    x => x.StoredFilePath,
+                    storedFilePath),
+                cancellationToken);
+    }
+
+    public Task MarkRetryProcessingAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+
+        return QueryCurrentCompanyForUpdate(id)
+            .Where(x => x.Status == DddImportMonitoringStatus.Failed)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, DddImportMonitoringStatus.Processing)
+                    .SetProperty(x => x.StartedAtUtc, now)
+                    .SetProperty(x => x.FinishedAtUtc, (DateTime?)null)
+                    .SetProperty(x => x.LastRetryAtUtc, now)
+                    .SetProperty(x => x.RetryCount, x => x.RetryCount + 1)
+                    .SetProperty(x => x.ErrorMessage, string.Empty),
+                cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<DddImportMonitoringDto>> GetFailedRetryCandidatesAsync(
+        int maxRetryCount,
+        int take = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var safeTake = Math.Clamp(take, 1, MaxRecentItems);
+
+        var entries = await _dbContext.DddImportMonitoringEntries
+            .AsNoTracking()
+            .Where(x =>
+                x.Status == DddImportMonitoringStatus.Failed &&
+                x.RetryCount < maxRetryCount &&
+                x.StoredFilePath != string.Empty)
+            .OrderBy(x => x.FinishedAtUtc ?? x.CreatedAtUtc)
+            .Take(safeTake)
+            .ToListAsync(cancellationToken);
+
+        return entries.Select(Map).ToList();
+    }
+
     public async Task<IReadOnlyList<DddImportMonitoringDto>> GetRecentAsync(
         int take = 20,
         CancellationToken cancellationToken = default)
@@ -119,7 +171,7 @@ public class DddImportMonitoringService : IDddImportMonitoringService
                 x.CompanyId == null);
         }
 
-        return query.Where(x => x.CompanyId == null);
+        return query;
     }
 
     private async Task UpdateStatusAsync(
@@ -150,6 +202,7 @@ public class DddImportMonitoringService : IDddImportMonitoringService
                 setters => setters
                     .SetProperty(x => x.Status, status)
                     .SetProperty(x => x.ErrorMessage, errorMessage)
+                    .SetProperty(x => x.LastError, errorMessage)
                     .SetProperty(x => x.FinishedAtUtc, finishedAtUtc),
                 cancellationToken);
 
@@ -174,7 +227,7 @@ public class DddImportMonitoringService : IDddImportMonitoringService
                 x.CompanyId == null);
         }
 
-        return query.Where(x => x.CompanyId == null);
+        return query;
     }
 
     private async Task<Guid?> GetExistingCompanyIdAsync(CancellationToken cancellationToken)
@@ -213,6 +266,9 @@ public class DddImportMonitoringService : IDddImportMonitoringService
             FileName = entry.FileName,
             Status = entry.Status.ToString(),
             ErrorMessage = entry.ErrorMessage,
+            RetryCount = entry.RetryCount,
+            LastRetryAtUtc = entry.LastRetryAtUtc,
+            LastError = entry.LastError,
             StartedAtUtc = entry.StartedAtUtc,
             FinishedAtUtc = entry.FinishedAtUtc,
             CreatedAtUtc = entry.CreatedAtUtc,

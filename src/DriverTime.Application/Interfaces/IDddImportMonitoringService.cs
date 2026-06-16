@@ -21,6 +21,20 @@ public interface IDddImportMonitoringService
         string errorMessage,
         CancellationToken cancellationToken = default);
 
+    Task SetStoredFilePathAsync(
+        Guid id,
+        string storedFilePath,
+        CancellationToken cancellationToken = default);
+
+    Task MarkRetryProcessingAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DddImportMonitoringDto>> GetFailedRetryCandidatesAsync(
+        int maxRetryCount,
+        int take = 10,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<DddImportMonitoringDto>> GetRecentAsync(
         int take = 20,
         CancellationToken cancellationToken = default);

@@ -23,6 +23,9 @@ public static class DependencyInjection
         services.Configure<DddParserOptions>(
             configuration.GetSection("DddParser"));
 
+        services.Configure<ImportRetryOptions>(
+            configuration.GetSection("ImportRetry"));
+
         services.AddScoped<ICompanyService, DriverTime.Application.Companies.Services.CompanyService>();
 
         services.AddScoped<IDddParserGateway, DddParserGateway>();

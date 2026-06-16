@@ -4,6 +4,7 @@ using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -17,17 +18,20 @@ public class DddFileService : IDddFileService
     private readonly IDddParserGateway _dddParserGateway;
     private readonly ICurrentUserService _currentUser;
     private readonly IDddImportMonitoringService _importMonitoringService;
+    private readonly ImportRetryOptions _retryOptions;
 
     public DddFileService(
         DriverTimeDbContext dbContext,
         IDddParserGateway dddParserGateway,
         ICurrentUserService currentUser,
-        IDddImportMonitoringService importMonitoringService)
+        IDddImportMonitoringService importMonitoringService,
+        IOptions<ImportRetryOptions> retryOptions)
     {
         _dbContext = dbContext;
         _dddParserGateway = dddParserGateway;
         _currentUser = currentUser;
         _importMonitoringService = importMonitoringService;
+        _retryOptions = retryOptions.Value;
     }
 
     public async Task<DddParseResultDto> UploadAndParseAsync(
@@ -44,73 +48,22 @@ public class DddFileService : IDddFileService
         }
 
         var monitoringEntry = await _importMonitoringService.CreateAsync(originalFileName);
+        var retryFilePath = await StoreRetryFileAsync(tempFilePath, monitoringEntry.Id, originalFileName);
+        await _importMonitoringService.SetStoredFilePathAsync(
+            monitoringEntry.Id,
+            retryFilePath);
 
         try
         {
-            await _importMonitoringService.MarkProcessingAsync(monitoringEntry.Id);
+            var result = await ImportFromPathAsync(
+                tempFilePath,
+                originalFileName,
+                monitoringEntry.Id,
+                companyIdOverride: null);
 
-            var companyId = await ResolveImportCompanyIdAsync();
-            var fileHash = await CalculateHashAsync(tempFilePath);
+            TryDeleteFile(retryFilePath);
 
-            if (await _dbContext.DddFiles.AnyAsync(x =>
-                x.CompanyId == companyId && x.FileHash == fileHash))
-            {
-                throw new InvalidOperationException("Ten plik DDD zostal juz zaimportowany.");
-            }
-
-            var parseResult = await _dddParserGateway.ParseAsync(tempFilePath);
-            var cardNumber = NormalizeCardNumber(parseResult.Driver.CardNumber);
-
-            if (string.IsNullOrWhiteSpace(cardNumber))
-            {
-                throw new InvalidOperationException(
-                    "Nie udalo sie odczytac numeru karty kierowcy z pliku DDD.");
-            }
-
-            var driver = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
-                x.CompanyId == companyId && x.CardNumber == cardNumber);
-            var driverCreated = driver is null;
-
-            if (driver is null)
-            {
-                driver = CreateDriver(parseResult.Driver, cardNumber, companyId);
-                _dbContext.Drivers.Add(driver);
-            }
-            else
-            {
-                UpdateMissingDriverData(driver, parseResult.Driver);
-            }
-
-            var dddFile = new DddFile
-            {
-                Id = Guid.NewGuid(),
-                CompanyId = companyId,
-                DriverId = driver.Id,
-                FileName = originalFileName,
-                FileHash = fileHash,
-                UploadedAtUtc = DateTime.UtcNow,
-                DriverCardNumber = cardNumber,
-                DriverFirstName = driver.FirstName,
-                DriverLastName = driver.LastName,
-                DriverCreatedDuringImport = driverCreated
-            };
-
-            AddActivities(dddFile, parseResult.Activities);
-            AddVehicleUses(dddFile, parseResult.VehicleUses);
-            AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
-            _dbContext.DddFiles.Add(dddFile);
-
-            await _dbContext.SaveChangesAsync();
-
-            parseResult.ImportId = dddFile.Id;
-            parseResult.DriverCreated = driverCreated;
-            parseResult.ImportMessage = driverCreated
-                ? "Utworzono nowego kierowce."
-                : "Import przypisano do istniejacego kierowcy.";
-
-            await _importMonitoringService.MarkCompletedAsync(monitoringEntry.Id);
-
-            return parseResult;
+            return result;
         }
         catch (Exception exception)
         {
@@ -126,6 +79,59 @@ public class DddFileService : IDddFileService
             {
                 File.Delete(tempFilePath);
             }
+        }
+    }
+
+    public async Task<bool> RetryImportAsync(
+        Guid monitoringId,
+        CancellationToken cancellationToken = default)
+    {
+        var entry = await _dbContext.DddImportMonitoringEntries
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == monitoringId, cancellationToken);
+
+        if (entry is null ||
+            entry.Status != DddImportMonitoringStatus.Failed ||
+            entry.RetryCount >= _retryOptions.MaxRetryCount)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(entry.StoredFilePath) ||
+            !File.Exists(entry.StoredFilePath))
+        {
+            await _importMonitoringService.MarkFailedAsync(
+                monitoringId,
+                "Nie mozna ponowic importu, poniewaz brakuje zachowanej kopii pliku DDD.",
+                cancellationToken);
+
+            return false;
+        }
+
+        await _importMonitoringService.MarkRetryProcessingAsync(
+            monitoringId,
+            cancellationToken);
+
+        try
+        {
+            await ImportFromPathAsync(
+                entry.StoredFilePath,
+                entry.FileName,
+                monitoringId,
+                entry.CompanyId);
+
+            TryDeleteFile(entry.StoredFilePath);
+
+            return true;
+        }
+        catch (Exception exception)
+        {
+            await _importMonitoringService.MarkFailedAsync(
+                monitoringId,
+                exception.Message,
+                cancellationToken);
+
+            return false;
         }
     }
 
@@ -235,6 +241,119 @@ public class DddFileService : IDddFileService
         await transaction.CommitAsync(cancellationToken);
 
         return true;
+    }
+
+    private async Task<DddParseResultDto> ImportFromPathAsync(
+        string filePath,
+        string originalFileName,
+        Guid monitoringId,
+        Guid? companyIdOverride)
+    {
+        await _importMonitoringService.MarkProcessingAsync(monitoringId);
+
+        var companyId = companyIdOverride ?? await ResolveImportCompanyIdAsync();
+        var fileHash = await CalculateHashAsync(filePath);
+
+        if (await _dbContext.DddFiles.AnyAsync(x =>
+            x.CompanyId == companyId && x.FileHash == fileHash))
+        {
+            throw new InvalidOperationException("Ten plik DDD zostal juz zaimportowany.");
+        }
+
+        var parseResult = await _dddParserGateway.ParseAsync(filePath);
+        var cardNumber = NormalizeCardNumber(parseResult.Driver.CardNumber);
+
+        if (string.IsNullOrWhiteSpace(cardNumber))
+        {
+            throw new InvalidOperationException(
+                "Nie udalo sie odczytac numeru karty kierowcy z pliku DDD.");
+        }
+
+        var driver = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
+            x.CompanyId == companyId && x.CardNumber == cardNumber);
+        var driverCreated = driver is null;
+
+        if (driver is null)
+        {
+            driver = CreateDriver(parseResult.Driver, cardNumber, companyId);
+            _dbContext.Drivers.Add(driver);
+        }
+        else
+        {
+            UpdateMissingDriverData(driver, parseResult.Driver);
+        }
+
+        var dddFile = new DddFile
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId,
+            DriverId = driver.Id,
+            FileName = originalFileName,
+            FileHash = fileHash,
+            UploadedAtUtc = DateTime.UtcNow,
+            DriverCardNumber = cardNumber,
+            DriverFirstName = driver.FirstName,
+            DriverLastName = driver.LastName,
+            DriverCreatedDuringImport = driverCreated
+        };
+
+        AddActivities(dddFile, parseResult.Activities);
+        AddVehicleUses(dddFile, parseResult.VehicleUses);
+        AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
+        _dbContext.DddFiles.Add(dddFile);
+
+        await _dbContext.SaveChangesAsync();
+
+        parseResult.ImportId = dddFile.Id;
+        parseResult.DriverCreated = driverCreated;
+        parseResult.ImportMessage = driverCreated
+            ? "Utworzono nowego kierowce."
+            : "Import przypisano do istniejacego kierowcy.";
+
+        await _importMonitoringService.MarkCompletedAsync(monitoringId);
+
+        return parseResult;
+    }
+
+    private static async Task<string> StoreRetryFileAsync(
+        string sourcePath,
+        Guid monitoringId,
+        string originalFileName)
+    {
+        var retryDirectory = Path.Combine(
+            AppContext.BaseDirectory,
+            "import-retry");
+        Directory.CreateDirectory(retryDirectory);
+
+        var safeFileName = string.Join(
+            "_",
+            originalFileName.Split(Path.GetInvalidFileNameChars()));
+        var retryFilePath = Path.Combine(
+            retryDirectory,
+            $"{monitoringId:N}_{safeFileName}");
+
+        await using var source = File.OpenRead(sourcePath);
+        await using var destination = File.Create(retryFilePath);
+        await source.CopyToAsync(destination);
+
+        return retryFilePath;
+    }
+
+    private static void TryDeleteFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(filePath);
+        }
+        catch
+        {
+            // Retry cache cleanup should never break a completed import.
+        }
     }
 
     private async Task<Guid> ResolveImportCompanyIdAsync()

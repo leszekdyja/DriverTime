@@ -10,6 +10,12 @@ public class DddImportMonitoringDto
 
     public string ErrorMessage { get; set; } = string.Empty;
 
+    public int RetryCount { get; set; }
+
+    public DateTime? LastRetryAtUtc { get; set; }
+
+    public string LastError { get; set; } = string.Empty;
+
     public DateTime? StartedAtUtc { get; set; }
 
     public DateTime? FinishedAtUtc { get; set; }
