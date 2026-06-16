@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+﻿import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
@@ -10,7 +10,7 @@ import {
 } from "../services/violationsService";
 import "../styles/violations.css";
 
-type SeverityLevel = "minor" | "serious" | "very-serious";
+type SeverityLevel = "info" | "warning" | "critical";
 type ViolationStatus = "open" | "in-review" | "resolved";
 type AlertSeverity = "info" | "warning" | "serious" | "critical";
 
@@ -22,15 +22,15 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 const severityLabels: Record<SeverityLevel, string> = {
-    minor: "Minor",
-    serious: "Serious",
-    "very-serious": "Very serious",
+    info: "Info",
+    warning: "Warning",
+    critical: "Critical",
 };
 
 const statusLabels: Record<ViolationStatus, string> = {
     open: "Otwarte",
     "in-review": "W analizie",
-    resolved: "Zamknięte",
+    resolved: "ZamkniÄ™te",
 };
 
 const statusTones: Record<ViolationStatus, "warning" | "info" | "success"> = {
@@ -39,10 +39,10 @@ const statusTones: Record<ViolationStatus, "warning" | "info" | "success"> = {
     resolved: "success",
 };
 
-const severityTones: Record<SeverityLevel, "warning" | "danger" | "critical"> = {
-    minor: "warning",
-    serious: "danger",
-    "very-serious": "critical",
+const severityTones: Record<SeverityLevel, "info" | "warning" | "critical"> = {
+    info: "info",
+    warning: "warning",
+    critical: "critical",
 };
 
 const alertSeverityLabels: Record<AlertSeverity, string> = {
@@ -112,21 +112,21 @@ function displayDriver(violation: DriverViolation) {
 function normalizeSeverity(severity: string): SeverityLevel {
     const value = severity.trim().toLowerCase().replaceAll("_", " ");
 
-    if (value === "high" || value === "severe" || value === "very serious") {
-        return "very-serious";
+    if (value === "critical" || value === "high" || value === "severe" || value === "very serious") {
+        return "critical";
     }
 
-    if (value === "medium" || value === "serious") {
-        return "serious";
+    if (value === "warning" || value === "medium" || value === "serious") {
+        return "warning";
     }
 
-    return "minor";
+    return "info";
 }
 
 function normalizeStatus(status?: string): ViolationStatus {
     const value = status?.trim().toLowerCase().replaceAll("_", " ");
 
-    if (value === "resolved" || value === "closed" || value === "zamknięte") {
+    if (value === "resolved" || value === "closed" || value === "zamkniÄ™te") {
         return "resolved";
     }
 
@@ -150,11 +150,11 @@ function isWithinLastDay(value: string) {
 function getAlertSeverity(violation: DriverViolation): AlertSeverity {
     const severity = normalizeSeverity(violation.severity);
 
-    if (severity === "very-serious") {
+    if (severity === "critical") {
         return "critical";
     }
 
-    if (severity === "serious") {
+    if (severity === "warning") {
         return "serious";
     }
 
@@ -193,40 +193,40 @@ function getLegalExplanation(violation: DriverViolation) {
     const code = violation.code.toUpperCase();
 
     if (code.includes("CONTINUOUS_DRIVING")) {
-        return "Po 4 godz. 30 min jazdy kierowca powinien odebrać przerwę 45 min albo poprawny podział 15 + 30 min. Brak przerwy zwiększa ryzyko naruszenia EU 561/AETR.";
+        return "Po 4 godz. 30 min jazdy kierowca powinien odebraÄ‡ przerwÄ™ 45 min albo poprawny podziaĹ‚ 15 + 30 min. Brak przerwy zwiÄ™ksza ryzyko naruszenia EU 561/AETR.";
     }
 
     if (code.includes("DAILY_DRIVING")) {
-        return "Dzienny czas jazdy standardowo nie powinien przekraczać 9 godzin. Wydłużenie do 10 godzin jest możliwe tylko w ograniczonej liczbie dni tygodnia.";
+        return "Dzienny czas jazdy standardowo nie powinien przekraczaÄ‡ 9 godzin. WydĹ‚uĹĽenie do 10 godzin jest moĹĽliwe tylko w ograniczonej liczbie dni tygodnia.";
     }
 
     if (code.includes("DAILY_REST")) {
-        return "Odpoczynek dzienny musi zostać odebrany w odpowiednim oknie czasu. Zbyt krótki lub opóźniony odpoczynek wpływa na zgodność pracy kierowcy.";
+        return "Odpoczynek dzienny musi zostaÄ‡ odebrany w odpowiednim oknie czasu. Zbyt krĂłtki lub opĂłĹşniony odpoczynek wpĹ‚ywa na zgodnoĹ›Ä‡ pracy kierowcy.";
     }
 
     if (code.includes("WEEKLY")) {
-        return "Przepisy wymagają kontroli tygodniowych limitów jazdy oraz regularnych i skróconych odpoczynków tygodniowych wraz z rekompensatą.";
+        return "Przepisy wymagajÄ… kontroli tygodniowych limitĂłw jazdy oraz regularnych i skrĂłconych odpoczynkĂłw tygodniowych wraz z rekompensatÄ….";
     }
 
     if (code.includes("FERRY") || code.includes("TRAIN")) {
-        return "Odpoczynek na promie lub w pociągu może być przerywany tylko w ograniczonym zakresie. Dłuższe przerwanie wymaga weryfikacji dokumentów.";
+        return "Odpoczynek na promie lub w pociÄ…gu moĹĽe byÄ‡ przerywany tylko w ograniczonym zakresie. DĹ‚uĹĽsze przerwanie wymaga weryfikacji dokumentĂłw.";
     }
 
-    return "Naruszenie wymaga analizy kontekstu pracy kierowcy, harmonogramu i danych źródłowych z importu DDD.";
+    return "Naruszenie wymaga analizy kontekstu pracy kierowcy, harmonogramu i danych ĹşrĂłdĹ‚owych z importu DDD.";
 }
 
 function getRecommendedAction(violation: DriverViolation) {
     const severity = normalizeSeverity(violation.severity);
 
-    if (severity === "very-serious") {
-        return "Zweryfikuj dane źródłowe, skontaktuj się z kierowcą i zaplanuj korektę harmonogramu przed kolejną trasą.";
+    if (severity === "critical") {
+        return "Zweryfikuj dane ĹşrĂłdĹ‚owe, skontaktuj siÄ™ z kierowcÄ… i zaplanuj korektÄ™ harmonogramu przed kolejnÄ… trasÄ….";
     }
 
-    if (severity === "serious") {
-        return "Sprawdź przebieg dnia pracy, przerwy oraz import DDD. Dodaj notatkę operacyjną, jeśli naruszenie ma uzasadnienie.";
+    if (severity === "warning") {
+        return "SprawdĹş przebieg dnia pracy, przerwy oraz import DDD. Dodaj notatkÄ™ operacyjnÄ…, jeĹ›li naruszenie ma uzasadnienie.";
     }
 
-    return "Monitoruj trend i uwzględnij zdarzenie przy kolejnym planowaniu pracy kierowcy.";
+    return "Monitoruj trend i uwzglÄ™dnij zdarzenie przy kolejnym planowaniu pracy kierowcy.";
 }
 
 export default function ViolationsPage() {
@@ -255,7 +255,7 @@ export default function ViolationsPage() {
                 setError(
                     loadError instanceof Error
                         ? loadError.message
-                        : "Wystąpił błąd podczas pobierania naruszeń.",
+                        : "WystÄ…piĹ‚ bĹ‚Ä…d podczas pobierania naruszeĹ„.",
                 );
             } finally {
                 setIsLoading(false);
@@ -314,20 +314,20 @@ export default function ViolationsPage() {
     const summary = useMemo(() => {
         const result = {
             total: filteredViolations.length,
-            minor: 0,
-            serious: 0,
-            verySerious: 0,
+            info: 0,
+            warning: 0,
+            critical: 0,
         };
 
         for (const violation of filteredViolations) {
             const severity = normalizeSeverity(violation.severity);
 
-            if (severity === "very-serious") {
-                result.verySerious++;
-            } else if (severity === "serious") {
-                result.serious++;
+            if (severity === "critical") {
+                result.critical++;
+            } else if (severity === "warning") {
+                result.warning++;
             } else {
-                result.minor++;
+                result.info++;
             }
         }
 
@@ -339,7 +339,7 @@ export default function ViolationsPage() {
             .filter((violation) => {
                 const severity = normalizeSeverity(violation.severity);
 
-                return severity !== "minor" || isWithinLastDay(violation.occurredAtUtc);
+                return severity !== "info" || isWithinLastDay(violation.occurredAtUtc);
             })
             .sort((left, right) => {
                 const priority: Record<AlertSeverity, number> = {
@@ -373,7 +373,7 @@ export default function ViolationsPage() {
         try {
             await exportViolationsPdf(filteredViolations);
         } catch {
-            setError("Nie udało się wygenerować pliku PDF.");
+            setError("Nie udaĹ‚o siÄ™ wygenerowaÄ‡ pliku PDF.");
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -386,7 +386,7 @@ export default function ViolationsPage() {
         try {
             await exportViolationsExcel(filteredViolations);
         } catch {
-            setError("Nie udało się wygenerować pliku Excel.");
+            setError("Nie udaĹ‚o siÄ™ wygenerowaÄ‡ pliku Excel.");
         } finally {
             setIsGeneratingExcel(false);
         }
@@ -396,7 +396,7 @@ export default function ViolationsPage() {
         event.preventDefault();
 
         if (dateFrom && dateTo && dateFrom > dateTo) {
-            setFilterError("Data początkowa nie może być późniejsza niż data końcowa.");
+            setFilterError("Data poczÄ…tkowa nie moĹĽe byÄ‡ pĂłĹşniejsza niĹĽ data koĹ„cowa.");
             return;
         }
 
@@ -439,10 +439,10 @@ export default function ViolationsPage() {
             <section className="violations-hero">
                 <div>
                     <span className="violations-eyebrow">Compliance</span>
-                    <h2>Naruszenia czasu pracy kierowców</h2>
+                    <h2>Naruszenia czasu pracy kierowcĂłw</h2>
                     <p>
-                        Monitoruj naruszenia wykryte na podstawie aktywności DDD,
-                        filtruj je według kierowcy, wagi, statusu i zakresu dat.
+                        Monitoruj naruszenia wykryte na podstawie aktywnoĹ›ci DDD,
+                        filtruj je wedĹ‚ug kierowcy, wagi, statusu i zakresu dat.
                     </p>
                 </div>
                 {!isLoading && !error && (
@@ -467,19 +467,19 @@ export default function ViolationsPage() {
                 )}
             </section>
 
-            <section className="violations-summary" aria-label="Podsumowanie naruszeń">
+            <section className="violations-summary" aria-label="Podsumowanie naruszeĹ„">
                 <SummaryCard label="Wszystkie" value={summary.total} tone="total" description="Wynik po filtrach" />
-                <SummaryCard label={severityLabels.minor} value={summary.minor} tone="minor" description="Niższy priorytet" />
-                <SummaryCard label={severityLabels.serious} value={summary.serious} tone="serious" description="Wymaga weryfikacji" />
-                <SummaryCard label={severityLabels["very-serious"]} value={summary.verySerious} tone="very-serious" description="Wysokie ryzyko" />
+                <SummaryCard label={severityLabels.info} value={summary.info} tone="info" description="NiĹĽszy priorytet" />
+                <SummaryCard label={severityLabels.warning} value={summary.warning} tone="warning" description="Wymaga weryfikacji" />
+                <SummaryCard label={severityLabels.critical} value={summary.critical} tone="critical" description="Wysokie ryzyko" />
             </section>
 
-            <section className="violation-alerts-panel" aria-label="Alerty naruszeń">
+            <section className="violation-alerts-panel" aria-label="Alerty naruszeĹ„">
                 <div className="violation-alerts-heading">
                     <div>
-                        <span>Alerty naruszeń</span>
-                        <h3>{activeAlertsCount} aktywnych alertów</h3>
-                        <p>Alerty są liczone lokalnie z aktualnej listy naruszeń.</p>
+                        <span>Alerty naruszeĹ„</span>
+                        <h3>{activeAlertsCount} aktywnych alertĂłw</h3>
+                        <p>Alerty sÄ… liczone lokalnie z aktualnej listy naruszeĹ„.</p>
                     </div>
                 </div>
 
@@ -487,14 +487,14 @@ export default function ViolationsPage() {
 
                 {!isLoading && error && (
                     <div className="violation-alerts-state" role="alert">
-                        Nie udało się pobrać danych naruszeń.
+                        Nie udaĹ‚o siÄ™ pobraÄ‡ danych naruszeĹ„.
                     </div>
                 )}
 
                 {!isLoading && !error && violationAlerts.length === 0 && (
                     <EmptyState
-                        title="Brak aktywnych alertów"
-                        description="Nie wykryto nowych ani poważnych naruszeń wymagających reakcji."
+                        title="Brak aktywnych alertĂłw"
+                        description="Nie wykryto nowych ani powaĹĽnych naruszeĹ„ wymagajÄ…cych reakcji."
                     />
                 )}
 
@@ -508,7 +508,7 @@ export default function ViolationsPage() {
                             return (
                                 <article className={`violation-alert-card ${alertSeverity}${isRead ? " is-read" : ""}`} key={key}>
                                     <div>
-                                        <span>{isWithinLastDay(violation.occurredAtUtc) ? "Nowe naruszenie" : "Poważne naruszenie"}</span>
+                                        <span>{isWithinLastDay(violation.occurredAtUtc) ? "Nowe naruszenie" : "PowaĹĽne naruszenie"}</span>
                                         <strong>{displayDriver(violation)}</strong>
                                         <p>{violation.description || violation.violationType}</p>
                                         <small>{formatDate(violation.occurredAtUtc)}</small>
@@ -549,9 +549,9 @@ export default function ViolationsPage() {
                     Waga naruszenia
                     <select value={selectedSeverity} onChange={(event) => setSelectedSeverity(event.target.value)}>
                         <option value="">Wszystkie wagi</option>
-                        <option value="minor">Minor</option>
-                        <option value="serious">Serious</option>
-                        <option value="very-serious">Very serious</option>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
                     </select>
                 </label>
                 <label>
@@ -560,7 +560,7 @@ export default function ViolationsPage() {
                         <option value="">Wszystkie statusy</option>
                         <option value="open">Otwarte</option>
                         <option value="in-review">W analizie</option>
-                        <option value="resolved">Zamknięte</option>
+                        <option value="resolved">ZamkniÄ™te</option>
                     </select>
                 </label>
                 <label>
@@ -573,13 +573,13 @@ export default function ViolationsPage() {
                 </label>
                 <div className="violations-filter-actions">
                     <button type="submit">Zastosuj</button>
-                    <button type="button" onClick={clearFilters}>Wyczyść</button>
+                    <button type="button" onClick={clearFilters}>WyczyĹ›Ä‡</button>
                 </div>
             </form>
 
             {(error || filterError) && (
                 <div className="violations-error" role="alert">
-                    <strong>Nie można wyświetlić naruszeń</strong>
+                    <strong>Nie moĹĽna wyĹ›wietliÄ‡ naruszeĹ„</strong>
                     <span>{error || filterError}</span>
                 </div>
             )}
@@ -593,8 +593,8 @@ export default function ViolationsPage() {
             {!isLoading && !error && !filterError && filteredViolations.length === 0 && (
                 <section className="violations-panel">
                     <EmptyState
-                        title="Brak naruszeń dla wybranych filtrów"
-                        description="Zmień kierowcę, wagę, status albo zakres dat. Po imporcie nowych plików DDD lista odświeży się na podstawie danych backendowych."
+                        title="Brak naruszeĹ„ dla wybranych filtrĂłw"
+                        description="ZmieĹ„ kierowcÄ™, wagÄ™, status albo zakres dat. Po imporcie nowych plikĂłw DDD lista odĹ›wieĹĽy siÄ™ na podstawie danych backendowych."
                     />
                 </section>
             )}
@@ -603,8 +603,8 @@ export default function ViolationsPage() {
                 <section className="violations-panel">
                     <div className="violations-panel-heading">
                         <div>
-                            <span>Lista naruszeń</span>
-                            <h3>{filteredViolations.length} naruszeń w tabeli</h3>
+                            <span>Lista naruszeĹ„</span>
+                            <h3>{filteredViolations.length} naruszeĹ„ w tabeli</h3>
                         </div>
                     </div>
                     <div className="violations-table-wrapper">
@@ -618,7 +618,7 @@ export default function ViolationsPage() {
                                     <th>Opis</th>
                                     <th>Poziom</th>
                                     <th>Status</th>
-                                    <th>Szczegóły</th>
+                                    <th>SzczegĂłĹ‚y</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -651,7 +651,7 @@ export default function ViolationsPage() {
                                             <td data-label="Status">
                                                 <StatusBadge label={statusLabels[status]} tone={statusTones[status]} />
                                             </td>
-                                            <td data-label="Szczegóły">
+                                            <td data-label="SzczegĂłĹ‚y">
                                                 <button
                                                     className="violation-details-button"
                                                     type="button"
@@ -660,7 +660,7 @@ export default function ViolationsPage() {
                                                         setSelectedViolation(violation);
                                                     }}
                                                 >
-                                                    Otwórz
+                                                    OtwĂłrz
                                                 </button>
                                             </td>
                                         </tr>
@@ -720,11 +720,11 @@ function ViolationDetailsModal({
             >
                 <div className="violation-details-header">
                     <div>
-                        <span>Szczegóły naruszenia</span>
+                        <span>SzczegĂłĹ‚y naruszenia</span>
                         <h3 id="violation-details-title">{violation.violationType || "Naruszenie"}</h3>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Zamknij szczegóły">
-                        ×
+                    <button type="button" onClick={onClose} aria-label="Zamknij szczegĂłĹ‚y">
+                        Ă—
                     </button>
                 </div>
 
@@ -747,14 +747,15 @@ function ViolationDetailsModal({
                     <p>{violation.description || "Brak opisu naruszenia."}</p>
                 </section>
                 <section className="violation-details-section">
-                    <h4>Wyjaśnienie prawne i biznesowe</h4>
+                    <h4>WyjaĹ›nienie prawne i biznesowe</h4>
                     <p>{getLegalExplanation(violation)}</p>
                 </section>
                 <section className="violation-details-section recommendation">
                     <h4>Rekomendowana akcja</h4>
-                    <p>{getRecommendedAction(violation)}</p>
+                    <p>{violation.recommendation || getRecommendedAction(violation)}</p>
                 </section>
             </aside>
         </div>
     );
 }
+

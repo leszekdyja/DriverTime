@@ -29,6 +29,8 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<Driver> Drivers => Set<Driver>();
 
+    public DbSet<Violation> Violations => Set<Violation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -171,6 +173,19 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)
                 .HasForeignKey(x => x.CompanyId);
+        });
+
+        modelBuilder.Entity<Violation>(entity =>
+        {
+            entity.ToTable("violations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.DriverId);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

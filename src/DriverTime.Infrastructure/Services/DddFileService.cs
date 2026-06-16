@@ -4,6 +4,7 @@ using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace DriverTime.Infrastructure.Services;
@@ -18,6 +19,8 @@ public class DddFileService : IDddFileService
     private readonly IDddParserGateway _dddParserGateway;
     private readonly ICurrentUserService _currentUser;
     private readonly IDddImportMonitoringService _importMonitoringService;
+    private readonly IViolationDetectionService _violationDetectionService;
+    private readonly ILogger<DddFileService> _logger;
     private readonly ImportRetryOptions _retryOptions;
 
     public DddFileService(
@@ -25,12 +28,16 @@ public class DddFileService : IDddFileService
         IDddParserGateway dddParserGateway,
         ICurrentUserService currentUser,
         IDddImportMonitoringService importMonitoringService,
+        IViolationDetectionService violationDetectionService,
+        ILogger<DddFileService> logger,
         IOptions<ImportRetryOptions> retryOptions)
     {
         _dbContext = dbContext;
         _dddParserGateway = dddParserGateway;
         _currentUser = currentUser;
         _importMonitoringService = importMonitoringService;
+        _violationDetectionService = violationDetectionService;
+        _logger = logger;
         _retryOptions = retryOptions.Value;
     }
 
@@ -310,9 +317,26 @@ public class DddFileService : IDddFileService
             ? "Utworzono nowego kierowce."
             : "Import przypisano do istniejacego kierowcy.";
 
+        await DetectViolationsAfterImportAsync(dddFile.Id);
+
         await _importMonitoringService.MarkCompletedAsync(monitoringId);
 
         return parseResult;
+    }
+
+    private async Task DetectViolationsAfterImportAsync(Guid importId)
+    {
+        try
+        {
+            await _violationDetectionService.DetectAfterImportAsync(importId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Violation detection failed after DDD import {ImportId}.",
+                importId);
+        }
     }
 
     private static async Task<string> StoreRetryFileAsync(

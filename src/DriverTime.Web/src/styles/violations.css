@@ -155,6 +155,9 @@
 .violation-summary-card.minor { color: #ca8a04; }
 .violation-summary-card.serious { color: #ea580c; }
 .violation-summary-card.very-serious { color: #dc2626; }
+.violation-summary-card.info { color: #2563eb; }
+.violation-summary-card.warning { color: #ca8a04; }
+.violation-summary-card.critical { color: #dc2626; }
 
 .violation-summary-card span {
     color: #667085;

@@ -54,9 +54,9 @@ function formatViolationDuration(violation: DriverViolation) {
 function getSeverityClass(severity: string) {
     const normalized = severity.toLowerCase();
 
-    if (normalized === "high" || normalized === "severe") return "high";
-    if (normalized === "medium") return "medium";
-    if (normalized === "low") return "low";
+    if (normalized === "critical" || normalized === "high" || normalized === "severe") return "high";
+    if (normalized === "warning" || normalized === "medium") return "medium";
+    if (normalized === "info" || normalized === "low") return "low";
     return "default";
 }
 

@@ -562,6 +562,37 @@
     font-size: 12px;
 }
 
+.dashboard-critical-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-border);
+}
+
+.dashboard-critical-list > strong {
+    color: var(--color-heading);
+    font-size: 13px;
+}
+
+.dashboard-critical-list article {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-danger-border);
+    border-radius: 12px;
+    background: var(--color-danger-bg);
+}
+
+.dashboard-critical-list span {
+    color: var(--color-danger);
+    font-weight: 700;
+}
+
+.dashboard-critical-list small {
+    color: var(--color-muted);
+}
+
 .dashboard-table-wrapper {
     width: 100%;
     overflow-x: auto;

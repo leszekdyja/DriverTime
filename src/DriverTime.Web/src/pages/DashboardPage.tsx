@@ -48,9 +48,9 @@ const activityDefinitions = [
 ] as const;
 
 const violationSeverityDefinitions = [
-    { severity: "minor", label: "Minor", color: "var(--chart-warning)" },
-    { severity: "serious", label: "Serious", color: "var(--chart-orange)" },
-    { severity: "very-serious", label: "Very serious", color: "var(--chart-danger)" },
+    { severity: "info", label: "Info", color: "var(--chart-warning)" },
+    { severity: "warning", label: "Warning", color: "var(--chart-orange)" },
+    { severity: "critical", label: "Critical", color: "var(--chart-danger)" },
 ] as const;
 
 function formatDate(value: string | null) {
@@ -88,11 +88,11 @@ function getDriverName(firstName: string, lastName: string) {
 function normalizeSeverity(severity: string) {
     const value = severity.trim().toLowerCase();
 
-    if (value === "high" || value === "severe" || value === "very serious" || value === "very-serious") {
+    if (value === "critical" || value === "high" || value === "severe" || value === "very serious" || value === "very-serious") {
         return "critical";
     }
 
-    if (value === "medium" || value === "serious") {
+    if (value === "warning" || value === "medium" || value === "serious") {
         return "danger";
     }
 
@@ -102,15 +102,15 @@ function normalizeSeverity(severity: string) {
 function normalizeViolationGroup(severity: string) {
     const value = severity.trim().toLowerCase();
 
-    if (value === "high" || value === "severe" || value === "very serious" || value === "very-serious") {
-        return "very-serious";
+    if (value === "critical" || value === "high" || value === "severe" || value === "very serious" || value === "very-serious") {
+        return "critical";
     }
 
-    if (value === "medium" || value === "serious") {
-        return "serious";
+    if (value === "warning" || value === "medium" || value === "serious") {
+        return "warning";
     }
 
-    return "minor";
+    return "info";
 }
 
 function toDayKey(date: Date) {
@@ -281,6 +281,10 @@ export default function DashboardPage() {
             total: violations.length,
             severe,
             serious,
+            today: violations.filter((violation) => isToday(violation.occurredAtUtc)).length,
+            latestCritical: violations
+                .filter((violation) => normalizeSeverity(violation.severity) === "critical")
+                .slice(0, 4),
             latest: violations.slice(0, 4),
         };
     }, [violations]);
@@ -397,6 +401,7 @@ export default function DashboardPage() {
                 <MetricCard label="Aktywności" value={dashboard.totalActivities} description="Zdarzenia z kart kierowców" tone="violet" icon="ACT" />
                 <MetricCard label="Pojazdy" value={dashboard.totalVehicles} description="Użycia pojazdów z DDD" tone="green" icon="TRK" />
                 <MetricCard label="Naruszenia" value={violationSummary.total} description={`${violationSummary.severe} bardzo poważnych`} tone={violationSummary.severe > 0 ? "red" : "amber"} icon="!" />
+                <MetricCard label="Naruszenia dziś" value={violationSummary.today} description="Wykryte dla bieżącej daty" tone={violationSummary.today > 0 ? "red" : "green"} icon="24H" />
             </section>
 
             <DashboardCharts
@@ -455,6 +460,17 @@ export default function DashboardPage() {
                                         label={normalizeSeverity(violation.severity) === "critical" ? "Very serious" : "Serious"}
                                         tone={normalizeSeverity(violation.severity)}
                                     />
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                    {violationSummary.latestCritical.length > 0 && (
+                        <div className="dashboard-critical-list">
+                            <strong>Ostatnie critical violations</strong>
+                            {violationSummary.latestCritical.map((violation, index) => (
+                                <article key={`${violation.id}-${index}`}>
+                                    <span>{getDriverName(violation.driverFirstName, violation.driverLastName)}</span>
+                                    <small>{violation.violationType}</small>
                                 </article>
                             ))}
                         </div>

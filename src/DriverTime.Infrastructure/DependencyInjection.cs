@@ -48,6 +48,10 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverViolationService, DriverViolationService>();
 
+        services.AddScoped<IViolationDetectionService, ViolationDetectionService>();
+
+        services.AddScoped<IViolationQueryService, ViolationQueryService>();
+
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
 
         services.AddScoped<IAuthService, AuthService>();
