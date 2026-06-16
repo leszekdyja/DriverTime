@@ -4,6 +4,7 @@ using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance;
 
@@ -22,13 +23,16 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
 
     private readonly DriverTimeDbContext _dbContext;
     private readonly IComplianceEngineService _complianceEngineService;
+    private readonly ILogger<ComplianceEvaluationService> _logger;
 
     public ComplianceEvaluationService(
         DriverTimeDbContext dbContext,
-        IComplianceEngineService complianceEngineService)
+        IComplianceEngineService complianceEngineService,
+        ILogger<ComplianceEvaluationService> logger)
     {
         _dbContext = dbContext;
         _complianceEngineService = complianceEngineService;
+        _logger = logger;
     }
 
     public async Task<int> EvaluateForDriverAsync(
@@ -44,6 +48,11 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
 
         if (!driverExists)
         {
+            _logger.LogInformation(
+                "Compliance evaluation skipped because driver {DriverId} was not found in company {CompanyId}.",
+                driverId,
+                companyId);
+
             return 0;
         }
 
@@ -72,6 +81,10 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
 
         if (preview.Violations.Count == 0)
         {
+            _logger.LogInformation(
+                "Compliance evaluation completed for driver {DriverId}. No violations detected.",
+                driverId);
+
             return 0;
         }
 
@@ -82,6 +95,11 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
 
         _dbContext.Violations.AddRange(violations);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Compliance evaluation completed for driver {DriverId}. Saved violations: {Count}.",
+            driverId,
+            violations.Count);
 
         return violations.Count;
     }
