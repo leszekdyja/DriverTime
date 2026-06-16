@@ -18,6 +18,9 @@ export type ReportActivity = {
     endUtc: string;
     activityType: string;
     durationSeconds: number;
+    vehicle?: string;
+    vehicleRegistration?: string;
+    vehicleRegistrationNumber?: string;
 };
 
 type ReportFormat = "pdf" | "excel";
@@ -46,7 +49,7 @@ async function getJson<T>(url: string, errorMessage: string): Promise<T> {
 export function getReportDrivers(): Promise<ReportDriver[]> {
     return getJson<ReportDriver[]>(
         `${API_URL}/api/drivers`,
-        "Nie udalo sie pobrac listy kierowcow.",
+        "Nie udało się pobrać listy kierowców.",
     );
 }
 
@@ -71,7 +74,7 @@ export function getReportActivities(
 
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
-        "Nie udalo sie pobrac danych raportu.",
+        "Nie udało się pobrać danych raportu.",
     );
 }
 
@@ -90,7 +93,7 @@ export async function downloadDriverReport(
     );
 
     if (!response.ok) {
-        let message = `Nie udalo sie pobrac raportu ${format.toUpperCase()}.`;
+        let message = `Nie udało się pobrać raportu ${format.toUpperCase()}.`;
 
         try {
             const error = (await response.json()) as { message?: string };
@@ -106,7 +109,7 @@ export async function downloadDriverReport(
     const responseType = response.headers.get("Content-Type")?.split(";", 1)[0];
 
     if (responseType && responseType !== file.contentType) {
-        throw new Error(`API zwrocilo nieprawidlowy format pliku ${format.toUpperCase()}.`);
+        throw new Error(`API zwróciło nieprawidłowy format pliku ${format.toUpperCase()}.`);
     }
 
     const blob = await response.blob();

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import Pagination from "../components/Pagination";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
+import { exportReportExcel } from "../services/excelExportService";
 import {
     downloadDriverReport,
     getReportActivities,
@@ -266,11 +267,7 @@ export default function ReportsPage() {
     }
 
     async function handleExcelExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
-
-        if (!driver || !dateFrom || !dateTo) {
+        if (!selectedDriver || !dateFrom || !dateTo) {
             setError("Wybierz kierowcę oraz pełny zakres dat przed eksportem.");
             return;
         }
@@ -284,12 +281,18 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await downloadDriverReport(driver.id, dateFrom, dateTo, "excel");
+            await exportReportExcel({
+                activities,
+                driver: selectedDriver,
+                dateFrom,
+                dateTo,
+                totals,
+            });
         } catch (exportError) {
             setError(
                 exportError instanceof Error
                     ? exportError.message
-                    : "Nie udało się pobrać pliku Excel.",
+                    : "Nie udało się wygenerować pliku Excel.",
             );
         } finally {
             setIsGeneratingExcel(false);
@@ -422,6 +425,7 @@ export default function ReportsPage() {
                                 !driverCardNumber
                                 || !dateFrom
                                 || !dateTo
+                                || activities.length === 0
                                 || isGeneratingPdf
                                 || isGeneratingExcel
                             }

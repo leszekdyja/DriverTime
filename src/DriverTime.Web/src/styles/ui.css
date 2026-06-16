@@ -54,6 +54,112 @@
 .ui-empty-state strong { color: var(--color-heading); }
 .ui-empty-state p { max-width: 440px; margin: 0; }
 
+.metric-card {
+    position: relative;
+    display: flex;
+    min-height: 142px;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    padding: 22px;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: linear-gradient(145deg, #fff, #f8fbff);
+    box-shadow: var(--shadow-card);
+}
+
+.metric-card::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 5px;
+    background: currentColor;
+    content: "";
+}
+
+.metric-card::after {
+    position: absolute;
+    right: -36px;
+    bottom: -46px;
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: currentColor;
+    content: "";
+    opacity: 0.055;
+}
+
+.metric-card.blue { color: #2563eb; }
+.metric-card.cyan { color: #0891b2; }
+.metric-card.green { color: #059669; }
+.metric-card.amber { color: #d97706; }
+.metric-card.violet { color: #7c3aed; }
+.metric-card.red { color: #dc2626; }
+.metric-card.slate { color: #475569; }
+
+.metric-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.metric-card-heading span {
+    color: #667085;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.metric-card-heading i {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border-radius: 13px;
+    background: color-mix(in srgb, currentColor 11%, white);
+    color: currentColor;
+    font-style: normal;
+    font-weight: 900;
+}
+
+.metric-card strong {
+    position: relative;
+    z-index: 1;
+    color: var(--color-heading);
+    font-size: clamp(28px, 3vw, 42px);
+    line-height: 1;
+    letter-spacing: -0.05em;
+}
+
+.metric-card small {
+    position: relative;
+    z-index: 1;
+    color: var(--color-muted);
+    line-height: 1.45;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 6px 10px;
+    border: 1px solid currentColor;
+    border-color: color-mix(in srgb, currentColor 24%, transparent);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.status-badge.neutral { background: #f8fafc; color: #475569; }
+.status-badge.success { background: #ecfdf5; color: #047857; }
+.status-badge.warning { background: #fffbeb; color: #b45309; }
+.status-badge.danger { background: #fff7ed; color: #c2410c; }
+.status-badge.critical { background: #fef2f2; color: #b91c1c; }
+.status-badge.info { background: #eff6ff; color: #1d4ed8; }
+
 .pagination {
     display: flex;
     align-items: center;

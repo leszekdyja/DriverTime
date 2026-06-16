@@ -10,6 +10,7 @@ export type DriverViolation = {
     periodEndUtc: string;
     description: string;
     severity: string;
+    status?: string;
     actualDurationMinutes: number;
     limitDurationMinutes: number;
 };
@@ -18,7 +19,7 @@ export async function getDriverViolations(): Promise<DriverViolation[]> {
     const response = await apiFetch("/api/driver-violations");
 
     if (!response.ok) {
-        throw new Error("Nie udalo sie pobrac naruszen kierowcow.");
+        throw new Error("Nie udało się pobrać naruszeń kierowców.");
     }
 
     return response.json() as Promise<DriverViolation[]>;

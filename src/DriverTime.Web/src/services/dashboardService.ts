@@ -31,6 +31,7 @@ export type DashboardData = {
     totalActivities: number;
     totalVehicles: number;
     latestImportDate: string | null;
+    imports: DddImport[];
     latestImports: DddImport[];
     activities: DriverActivity[];
 };
@@ -73,16 +74,16 @@ export async function getDashboardData(): Promise<DashboardData> {
     const [summary, drivers, imports, activities] = await Promise.all([
         getJson<DashboardSummary>(
             "/api/dashboard",
-            "Nie udalo sie pobrac podsumowania dashboardu.",
+            "Nie udało się pobrać podsumowania dashboardu.",
         ),
         getJson<Driver[]>(
             "/api/drivers",
-            "Nie udalo sie pobrac listy kierowcow.",
+            "Nie udało się pobrać listy kierowców.",
         ),
         getDddImports(),
         getJson<DriverActivity[]>(
             "/api/driver-activities",
-            "Nie udalo sie pobrac statystyk aktywnosci.",
+            "Nie udało się pobrać statystyk aktywności.",
         ),
     ]);
 
@@ -94,6 +95,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         totalActivities: summary.driverActivitiesCount,
         totalVehicles: summary.vehicleUsesCount,
         latestImportDate: latestImports[0]?.uploadedAtUtc ?? null,
+        imports,
         latestImports,
         activities,
     };
@@ -102,6 +104,12 @@ export async function getDashboardData(): Promise<DashboardData> {
 export function getDriverRiskOverview(): Promise<DriverRiskOverview> {
     return getJson<DriverRiskOverview>(
         "/api/dashboard/risk-overview",
-        "Nie udalo sie pobrac danych ryzyka kierowcow.",
+        "Nie udało się pobrać danych ryzyka kierowców.",
     );
+}
+
+export async function checkApiHealth(): Promise<boolean> {
+    const response = await apiFetch("/health");
+
+    return response.ok;
 }

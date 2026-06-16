@@ -41,7 +41,7 @@ function Pagination({
                     onClick={() => onPageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
                 >
-                    Nastepna
+                    Następna
                 </button>
             </div>
         </nav>

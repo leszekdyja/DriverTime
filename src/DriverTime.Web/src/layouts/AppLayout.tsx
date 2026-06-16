@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import { useAuth } from "../auth/useAuth";
+import { useTheme } from "../theme/useTheme";
 import "../styles/layout.css";
 
 const navigationItems = [
@@ -23,6 +24,7 @@ const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
 
 export default function AppLayout() {
     const { user, logout } = useAuth();
+    const { isDark, toggleTheme } = useTheme();
     const location = useLocation();
     const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}` || "U";
     const currentSection = [...navigationItems]
@@ -73,6 +75,18 @@ export default function AppLayout() {
 
                     <div className="topbar-actions">
                         <span className="topbar-date">{currentDateFormatter.format(new Date())}</span>
+                        <button
+                            className="theme-toggle"
+                            type="button"
+                            onClick={toggleTheme}
+                            aria-label={isDark ? "Przełącz na jasny motyw" : "Przełącz na ciemny motyw"}
+                            aria-pressed={isDark}
+                        >
+                            <span className="theme-toggle-track" aria-hidden="true">
+                                <span className="theme-toggle-thumb">{isDark ? "N" : "D"}</span>
+                            </span>
+                            <span>{isDark ? "Ciemny" : "Jasny"}</span>
+                        </button>
                         <Link className="profile-placeholder" aria-label="Profil uzytkownika" to="/account">
                             <span className="profile-avatar">{initials}</span>
                             <div>

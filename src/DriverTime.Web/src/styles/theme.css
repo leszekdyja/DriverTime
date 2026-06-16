@@ -1,213 +1,560 @@
-.dashboard-page,
-.drivers-page,
-.reports-page,
-.imports-page,
-.import-details-page {
-    margin: 0 auto;
+:root {
+    --bg: #f4f7fb;
+    --surface: #ffffff;
+    --surface-soft: #f8fafc;
+    --text: #334155;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --primary: #2563eb;
+    --primary-soft: #eff6ff;
+    --danger: #991b1b;
+    --success: #166534;
+    --warning: #b45309;
+    --chart-driving: #2563eb;
+    --chart-work: #7c3aed;
+    --chart-rest: #059669;
+    --chart-availability: #ea580c;
+    --chart-warning: #d97706;
+    --chart-orange: #f97316;
+    --chart-danger: #dc2626;
+
+    --color-bg: var(--bg);
+    --color-surface: var(--surface);
+    --color-surface-muted: var(--surface-soft);
+    --color-surface-hover: #f1f5f9;
+    --color-text: var(--text);
+    --color-heading: #0f172a;
+    --color-muted: var(--muted);
+    --color-border: var(--border);
+    --color-border-strong: #cbd5e1;
+    --color-primary: var(--primary);
+    --color-primary-hover: #1d4ed8;
+    --color-primary-soft: var(--primary-soft);
+    --color-success: var(--success);
+    --color-success-bg: #f0fdf4;
+    --color-success-border: #86efac;
+    --color-danger: var(--danger);
+    --color-danger-bg: #fef2f2;
+    --color-danger-border: #fca5a5;
+    --color-warning: var(--warning);
+    --color-warning-bg: #fffbeb;
+    --color-warning-border: #fcd34d;
+
+    --app-bg-gradient:
+        radial-gradient(circle at 8% 0%, rgb(37 99 235 / 8%), transparent 28rem),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 44%, #eef4fb 100%);
+    --surface-gradient: linear-gradient(145deg, #ffffff, #f8fbff);
+    --hero-gradient:
+        radial-gradient(circle at 78% 12%, rgb(56 189 248 / 22%), transparent 25rem),
+        radial-gradient(circle at 6% 94%, rgb(37 99 235 / 16%), transparent 30rem),
+        linear-gradient(135deg, #071120, #102a56 62%, #0b4a76);
+    --premium-border: rgb(226 232 240 / 88%);
+    --shadow-sm: 0 1px 2px rgb(15 23 42 / 5%);
+    --shadow-card: 0 10px 30px rgb(15 23 42 / 7%);
+    --shadow-premium: 0 22px 56px rgb(15 23 42 / 10%);
+    --radius-sm: 8px;
+    --radius-card: 14px;
+    --sidebar-width: 260px;
+
+    color: var(--color-text);
+    background: var(--color-bg);
+    color-scheme: light;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-.summary-card,
-.dashboard-panel,
-.reports-filters,
-.report-summary-card,
-.reports-panel,
-.ddd-upload-card,
-.details-card,
-.activity-summary-card {
-    border-color: var(--color-border);
-    border-radius: var(--radius-card);
-    background: var(--color-surface);
+:root[data-theme="dark"] {
+    --bg: #07111f;
+    --surface: #101827;
+    --surface-soft: #152235;
+    --text: #d6e2f1;
+    --muted: #94a3b8;
+    --border: #26364e;
+    --primary: #60a5fa;
+    --primary-soft: rgb(96 165 250 / 14%);
+    --danger: #fca5a5;
+    --success: #86efac;
+    --warning: #facc15;
+    --chart-driving: #60a5fa;
+    --chart-work: #a78bfa;
+    --chart-rest: #34d399;
+    --chart-availability: #fb923c;
+    --chart-warning: #facc15;
+    --chart-orange: #fb923c;
+    --chart-danger: #f87171;
+
+    --color-bg: var(--bg);
+    --color-surface: var(--surface);
+    --color-surface-muted: var(--surface-soft);
+    --color-surface-hover: #1d2c43;
+    --color-text: var(--text);
+    --color-heading: #f8fafc;
+    --color-muted: var(--muted);
+    --color-border: var(--border);
+    --color-border-strong: #38506f;
+    --color-primary: var(--primary);
+    --color-primary-hover: #93c5fd;
+    --color-primary-soft: var(--primary-soft);
+    --color-success: var(--success);
+    --color-success-bg: rgb(22 101 52 / 18%);
+    --color-success-border: rgb(134 239 172 / 34%);
+    --color-danger: var(--danger);
+    --color-danger-bg: rgb(127 29 29 / 24%);
+    --color-danger-border: rgb(248 113 113 / 34%);
+    --color-warning: var(--warning);
+    --color-warning-bg: rgb(133 77 14 / 26%);
+    --color-warning-border: rgb(250 204 21 / 34%);
+
+    --app-bg-gradient:
+        radial-gradient(circle at 16% -8%, rgb(37 99 235 / 26%), transparent 30rem),
+        radial-gradient(circle at 92% 8%, rgb(14 165 233 / 18%), transparent 28rem),
+        linear-gradient(180deg, #050a13 0%, #07111f 44%, #0b1220 100%);
+    --surface-gradient: linear-gradient(145deg, rgb(21 32 50 / 96%), rgb(12 20 34 / 98%));
+    --hero-gradient:
+        radial-gradient(circle at 78% 12%, rgb(56 189 248 / 18%), transparent 25rem),
+        radial-gradient(circle at 6% 94%, rgb(37 99 235 / 18%), transparent 30rem),
+        linear-gradient(135deg, #050a13, #0f2546 62%, #062d48);
+    --premium-border: rgb(71 85 105 / 54%);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 20%);
+    --shadow-card: 0 18px 46px rgb(0 0 0 / 28%);
+    --shadow-premium: 0 28px 72px rgb(0 0 0 / 34%);
+
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    min-width: 320px;
+    background: var(--color-bg);
+}
+
+body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: var(--app-bg-gradient);
+    color: var(--color-text);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+button,
+a {
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s,
+        box-shadow 0.2s, transform 0.2s;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+    outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+p {
+    margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+    color: var(--color-heading);
+}
+
+h2 {
+    margin-bottom: 8px;
+    font-size: clamp(24px, 3vw, 32px);
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+}
+
+h3 {
+    font-size: 18px;
+}
+
+p {
+    color: var(--color-muted);
+}
+
+#root {
+    min-height: 100vh;
+}
+
+table {
+    font-variant-numeric: tabular-nums;
+}
+
+[class$="table-wrapper"] {
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+}
+
+.imports-table-wrapper.is-refreshing {
+    pointer-events: none;
+    opacity: 0.55;
+}
+
+:root[data-theme="dark"] img,
+:root[data-theme="dark"] canvas,
+:root[data-theme="dark"] svg {
+    color-scheme: dark;
+}
+
+:root[data-theme="dark"] .app-main,
+:root[data-theme="dark"] .page-content {
+    background: transparent;
+}
+
+:root[data-theme="dark"] .dashboard-widget,
+:root[data-theme="dark"] .dashboard-chart-card,
+:root[data-theme="dark"] .dashboard-realtime-card,
+:root[data-theme="dark"] .dashboard-realtime-bar,
+:root[data-theme="dark"] .driver-risk-section,
+:root[data-theme="dark"] .reports-filters,
+:root[data-theme="dark"] .reports-panel,
+:root[data-theme="dark"] .ddd-upload-card,
+:root[data-theme="dark"] .details-card,
+:root[data-theme="dark"] .import-details-card,
+:root[data-theme="dark"] .drivers-panel,
+:root[data-theme="dark"] .driver-form,
+:root[data-theme="dark"] .driver-details-card,
+:root[data-theme="dark"] .activity-calendar-card,
+:root[data-theme="dark"] .account-card,
+:root[data-theme="dark"] .company-settings-card,
+:root[data-theme="dark"] .company-settings-form,
+:root[data-theme="dark"] .violations-panel,
+:root[data-theme="dark"] .violations-filters,
+:root[data-theme="dark"] .violation-summary-card,
+:root[data-theme="dark"] .metric-card,
+:root[data-theme="dark"] .summary-card,
+:root[data-theme="dark"] .report-summary-card,
+:root[data-theme="dark"] .activity-summary-card {
+    border-color: var(--premium-border);
+    background: var(--surface-gradient);
     box-shadow: var(--shadow-card);
 }
 
-.dashboard-heading p,
-.reports-heading p,
-.imports-page > p,
-.dashboard-status,
-.reports-status,
-.status-message,
-.details-summary dt,
-.summary-card span,
-.report-summary-card span,
-.activity-summary-card span,
-.activity-statistic div span,
-.upload-item-heading span,
-.upload-item p {
-    color: var(--color-muted);
+:root[data-theme="dark"] .dashboard-hero,
+:root[data-theme="dark"] .reports-hero,
+:root[data-theme="dark"] .violations-hero {
+    border-color: rgb(96 165 250 / 28%);
+    background: var(--hero-gradient);
+    box-shadow: var(--shadow-premium);
 }
 
-.summary-card strong,
-.report-summary-card strong,
-.activity-summary-card strong,
-.panel-heading h3,
-.reports-panel-heading h3,
-.imports-list h3,
-.details-card h3,
-.details-section h3,
-.details-summary dd,
-.activity-statistic strong,
-.upload-item-heading strong,
-.ddd-dropzone strong {
-    color: var(--color-heading);
+:root[data-theme="dark"] .dashboard-widget,
+:root[data-theme="dark"] .reports-panel,
+:root[data-theme="dark"] .violations-panel {
+    backdrop-filter: blur(18px);
 }
 
-.dashboard-action,
-.csv-button,
-.reports-filters button,
-.select-files-button,
-.upload-files-button {
-    border-radius: var(--radius-sm);
-    background: var(--color-primary);
-    box-shadow: 0 6px 16px rgb(37 99 235 / 18%);
-}
-
-.dashboard-action:hover,
-.csv-button:hover:not(:disabled),
-.reports-filters button:hover:not(:disabled),
-.select-files-button:hover:not(:disabled),
-.upload-files-button:hover:not(:disabled) {
-    background: var(--color-primary-hover);
-    transform: translateY(-1px);
-}
-
-.panel-heading a,
-.dashboard-table a,
-.details-button,
-.back-link {
-    color: var(--color-primary);
-}
-
-.details-button,
-.back-link {
-    border-color: var(--color-primary);
-    border-radius: var(--radius-sm);
-}
-
-.details-button:hover,
-.back-link:hover {
-    background: var(--color-primary-soft);
-}
-
-.reports-filters label {
-    color: var(--color-text);
-}
-
-.reports-filters select,
-.reports-filters input {
-    border-color: var(--color-border-strong);
+:root[data-theme="dark"] .dashboard-table-wrapper,
+:root[data-theme="dark"] .reports-table-wrapper,
+:root[data-theme="dark"] .imports-table-wrapper,
+:root[data-theme="dark"] .details-table-wrapper,
+:root[data-theme="dark"] .violations-table-wrapper,
+:root[data-theme="dark"] .drivers-table-wrapper,
+:root[data-theme="dark"] .driver-details-table,
+:root[data-theme="dark"] .driver-risk-table-wrapper {
+    border-color: var(--premium-border);
     background: var(--color-surface);
-    color: var(--color-heading);
-}
-
-.activity-statistic,
-.upload-item,
-.ddd-dropzone {
-    background: var(--color-surface-muted);
-    color: var(--color-text);
-}
-
-.ddd-dropzone {
-    border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
-}
-
-.ddd-dropzone.is-dragging {
-    border-color: var(--color-primary);
-    background: var(--color-primary-soft);
-}
-
-.upload-progress {
-    background: var(--color-border);
-}
-
-.upload-progress span {
-    background: var(--color-primary);
-}
-
-.dashboard-table-wrapper,
-.reports-table-wrapper,
-.imports-table-wrapper,
-.details-table-wrapper {
-    border-color: var(--color-border);
-    border-radius: 10px;
-    background: var(--color-surface);
-}
-
-.dashboard-table,
-.reports-table,
-.imports-table,
-.details-table {
-    color: var(--color-text);
-}
-
-.dashboard-table th,
-.dashboard-table td,
-.reports-table th,
-.reports-table td,
-.imports-table th,
-.imports-table td,
-.details-table th,
-.details-table td {
-    border-bottom-color: var(--color-border);
-}
-
-.dashboard-table th,
-.reports-table th,
-.imports-table th,
-.details-table th {
-    background: var(--color-surface-muted);
-    color: var(--color-muted);
-    font-size: 12px;
-    letter-spacing: 0.035em;
-    text-transform: uppercase;
-}
-
-.dashboard-table tbody tr,
-.reports-table tbody tr,
-.imports-table tbody tr,
-.details-table tbody tr {
-    transition: background-color 0.18s;
-}
-
-.dashboard-table tbody tr:hover,
-.reports-table tbody tr:hover,
-.imports-table tbody tr:hover,
-.details-table tbody tr:hover {
-    background: var(--color-surface-hover);
-}
-
-.message,
-.dashboard-error,
-.reports-error,
-.drivers-message {
     box-shadow: var(--shadow-sm);
 }
 
-.error-message,
-.dashboard-error,
-.reports-error,
-.upload-item.error,
-.upload-item.unsupported {
-    border-color: var(--color-danger-border);
-    background: var(--color-danger-bg);
-    color: var(--color-danger);
+:root[data-theme="dark"] .dashboard-table,
+:root[data-theme="dark"] .reports-table,
+:root[data-theme="dark"] .imports-table,
+:root[data-theme="dark"] .details-table,
+:root[data-theme="dark"] .violations-table,
+:root[data-theme="dark"] .drivers-table,
+:root[data-theme="dark"] .driver-risk-table {
+    color: var(--color-text);
 }
 
-.success-message,
-.upload-item.success {
+:root[data-theme="dark"] .dashboard-table th,
+:root[data-theme="dark"] .reports-table th,
+:root[data-theme="dark"] .imports-table th,
+:root[data-theme="dark"] .details-table th,
+:root[data-theme="dark"] .violations-table th,
+:root[data-theme="dark"] .drivers-table th,
+:root[data-theme="dark"] .driver-risk-table th,
+:root[data-theme="dark"] .dashboard-table td,
+:root[data-theme="dark"] .reports-table td,
+:root[data-theme="dark"] .imports-table td,
+:root[data-theme="dark"] .details-table td,
+:root[data-theme="dark"] .violations-table td,
+:root[data-theme="dark"] .drivers-table td,
+:root[data-theme="dark"] .driver-risk-table td {
+    border-bottom-color: var(--color-border);
+}
+
+:root[data-theme="dark"] .dashboard-table th,
+:root[data-theme="dark"] .reports-table th,
+:root[data-theme="dark"] .imports-table th,
+:root[data-theme="dark"] .details-table th,
+:root[data-theme="dark"] .violations-table th,
+:root[data-theme="dark"] .drivers-table th,
+:root[data-theme="dark"] .driver-risk-table th {
+    background: #111d2f;
+    color: #a8b6ca;
+}
+
+:root[data-theme="dark"] .dashboard-table tbody tr:hover,
+:root[data-theme="dark"] .reports-table tbody tr:hover,
+:root[data-theme="dark"] .imports-table tbody tr:hover,
+:root[data-theme="dark"] .details-table tbody tr:hover,
+:root[data-theme="dark"] .violations-table tbody tr:hover,
+:root[data-theme="dark"] .drivers-table tbody tr:hover,
+:root[data-theme="dark"] .driver-risk-table tbody tr:hover {
+    background: rgb(96 165 250 / 8%);
+}
+
+:root[data-theme="dark"] .reports-table tr,
+:root[data-theme="dark"] .violations-table tr,
+:root[data-theme="dark"] .imports-table tr,
+:root[data-theme="dark"] .drivers-table tr,
+:root[data-theme="dark"] .details-table tr {
+    background: transparent;
+}
+
+:root[data-theme="dark"] .reports-table td::before,
+:root[data-theme="dark"] .violations-table td::before,
+:root[data-theme="dark"] .imports-table td::before,
+:root[data-theme="dark"] .drivers-table td::before,
+:root[data-theme="dark"] .details-table td::before {
+    color: var(--color-muted);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+    border-color: var(--color-border-strong);
+    background: #0c1626;
+    color: var(--color-heading);
+    box-shadow: inset 0 1px rgb(255 255 255 / 3%);
+}
+
+:root[data-theme="dark"] option {
+    background: #0c1626;
+    color: var(--color-heading);
+}
+
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder {
+    color: #71839c;
+}
+
+:root[data-theme="dark"] label,
+:root[data-theme="dark"] .reports-filters label,
+:root[data-theme="dark"] .drivers-toolbar label,
+:root[data-theme="dark"] .driver-form label,
+:root[data-theme="dark"] .account-card label,
+:root[data-theme="dark"] .company-settings-form label,
+:root[data-theme="dark"] .activity-calendar-filters label {
+    color: var(--color-text);
+}
+
+:root[data-theme="dark"] .csv-button,
+:root[data-theme="dark"] .delete-import-button,
+:root[data-theme="dark"] .logout-button,
+:root[data-theme="dark"] .pagination button,
+:root[data-theme="dark"] .secondary-button {
+    border-color: var(--color-border-strong);
+    background: #0c1626;
+    color: var(--color-text);
+}
+
+:root[data-theme="dark"] .csv-button:hover:not(:disabled),
+:root[data-theme="dark"] .logout-button:hover,
+:root[data-theme="dark"] .pagination button:hover:not(:disabled),
+:root[data-theme="dark"] .secondary-button:hover:not(:disabled) {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+}
+
+:root[data-theme="dark"] .ui-empty-state,
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .dashboard-compact-list article,
+:root[data-theme="dark"] .activity-metric,
+:root[data-theme="dark"] .driver-risk-card,
+:root[data-theme="dark"] .risk-quick-stats span,
+:root[data-theme="dark"] .reports-count,
+:root[data-theme="dark"] .upload-item,
+:root[data-theme="dark"] .ddd-dropzone,
+:root[data-theme="dark"] .profile-placeholder,
+:root[data-theme="dark"] .activity-day-card,
+:root[data-theme="dark"] .activity-summary-item,
+:root[data-theme="dark"] .activity-day-violations li,
+:root[data-theme="dark"] .drivers-count,
+:root[data-theme="dark"] .imports-list-heading > span {
+    border-color: var(--premium-border);
+    background: var(--color-surface-muted);
+}
+
+:root[data-theme="dark"] .details-card h3,
+:root[data-theme="dark"] .details-section h3,
+:root[data-theme="dark"] .imports-list-heading h3,
+:root[data-theme="dark"] .reports-panel-heading h3,
+:root[data-theme="dark"] .reports-driver-name,
+:root[data-theme="dark"] .reports-table strong,
+:root[data-theme="dark"] .dashboard-table strong,
+:root[data-theme="dark"] .imports-table strong,
+:root[data-theme="dark"] .drivers-table strong,
+:root[data-theme="dark"] .details-summary dd,
+:root[data-theme="dark"] .upload-item-heading strong,
+:root[data-theme="dark"] .ddd-dropzone strong,
+:root[data-theme="dark"] .report-summary-card strong,
+:root[data-theme="dark"] .violation-summary-card strong,
+:root[data-theme="dark"] .activity-summary-card strong {
+    color: var(--color-heading);
+}
+
+:root[data-theme="dark"] .details-summary dt,
+:root[data-theme="dark"] .upload-item-heading span,
+:root[data-theme="dark"] .upload-item p,
+:root[data-theme="dark"] .status-message,
+:root[data-theme="dark"] .report-summary-card span,
+:root[data-theme="dark"] .report-summary-card small,
+:root[data-theme="dark"] .violation-summary-card span,
+:root[data-theme="dark"] .activity-summary-card span {
+    color: var(--color-muted);
+}
+
+:root[data-theme="dark"] .ddd-dropzone {
+    background:
+        radial-gradient(circle at center, rgb(96 165 250 / 12%), transparent 22rem),
+        var(--color-surface-muted);
+}
+
+:root[data-theme="dark"] .ddd-dropzone.is-dragging {
+    background: var(--color-primary-soft);
+}
+
+:root[data-theme="dark"] .success-message,
+:root[data-theme="dark"] .upload-item.success {
     border-color: var(--color-success-border);
     background: var(--color-success-bg);
     color: var(--color-success);
 }
 
-@media (max-width: 640px) {
-    .dashboard-heading,
-    .reports-heading {
-        gap: 16px;
-    }
+:root[data-theme="dark"] .error-message,
+:root[data-theme="dark"] .dashboard-error,
+:root[data-theme="dark"] .reports-error,
+:root[data-theme="dark"] .upload-item.error,
+:root[data-theme="dark"] .upload-item.unsupported,
+:root[data-theme="dark"] .driver-risk-error,
+:root[data-theme="dark"] .dashboard-error-card {
+    border-color: var(--color-danger-border);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
 
-    .summary-card,
-    .report-summary-card,
-    .activity-summary-card {
-        min-height: 104px;
+:root[data-theme="dark"] .activity-badge.driving,
+:root[data-theme="dark"] .driver-import-status.existing,
+:root[data-theme="dark"] .status-badge.info {
+    background: rgb(37 99 235 / 16%);
+    color: #93c5fd;
+}
+
+:root[data-theme="dark"] .activity-badge.work {
+    background: rgb(124 58 237 / 18%);
+    color: #c4b5fd;
+}
+
+:root[data-theme="dark"] .activity-badge.rest,
+:root[data-theme="dark"] .driver-import-status.new,
+:root[data-theme="dark"] .status-badge.success {
+    background: rgb(5 150 105 / 18%);
+    color: #86efac;
+}
+
+:root[data-theme="dark"] .activity-badge.availability,
+:root[data-theme="dark"] .status-badge.warning {
+    background: rgb(234 88 12 / 18%);
+    color: #fdba74;
+}
+
+:root[data-theme="dark"] .activity-badge.other,
+:root[data-theme="dark"] .status-badge.neutral {
+    background: rgb(148 163 184 / 14%);
+    color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .status-badge.danger,
+:root[data-theme="dark"] .status-badge.critical {
+    background: rgb(220 38 38 / 18%);
+    color: #fca5a5;
+}
+
+:root[data-theme="dark"] .risk-badge.low {
+    background: rgb(22 163 74 / 16%);
+    color: #86efac;
+}
+
+:root[data-theme="dark"] .risk-badge.medium {
+    background: rgb(234 179 8 / 16%);
+    color: #fde68a;
+}
+
+:root[data-theme="dark"] .risk-badge.high {
+    background: rgb(249 115 22 / 18%);
+    color: #fdba74;
+}
+
+:root[data-theme="dark"] .risk-badge.critical {
+    background: rgb(220 38 38 / 20%);
+    color: #fca5a5;
+}
+
+:root[data-theme="dark"] .violation-modal-backdrop {
+    background: rgb(2 6 23 / 70%);
+}
+
+:root[data-theme="dark"] .violation-details-modal {
+    border-color: var(--premium-border);
+    background: var(--surface-gradient);
+    box-shadow: 0 34px 92px rgb(0 0 0 / 46%);
+}
+
+:root[data-theme="dark"] .violation-detail-note,
+:root[data-theme="dark"] .violation-details-grid div,
+:root[data-theme="dark"] .violation-details-section,
+:root[data-theme="dark"] .violation-alert-card,
+:root[data-theme="dark"] .violation-alerts-panel,
+:root[data-theme="dark"] .critical-risk-row {
+    background: rgb(96 165 250 / 8%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
     }
 }
