@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using DriverTime.Application.Compliance;
 using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
@@ -20,6 +21,7 @@ public class DddFileService : IDddFileService
     private readonly ICurrentUserService _currentUser;
     private readonly IDddImportMonitoringService _importMonitoringService;
     private readonly IViolationDetectionService _violationDetectionService;
+    private readonly IComplianceEvaluationService _complianceEvaluationService;
     private readonly ILogger<DddFileService> _logger;
     private readonly ImportRetryOptions _retryOptions;
 
@@ -29,6 +31,7 @@ public class DddFileService : IDddFileService
         ICurrentUserService currentUser,
         IDddImportMonitoringService importMonitoringService,
         IViolationDetectionService violationDetectionService,
+        IComplianceEvaluationService complianceEvaluationService,
         ILogger<DddFileService> logger,
         IOptions<ImportRetryOptions> retryOptions)
     {
@@ -37,6 +40,7 @@ public class DddFileService : IDddFileService
         _currentUser = currentUser;
         _importMonitoringService = importMonitoringService;
         _violationDetectionService = violationDetectionService;
+        _complianceEvaluationService = complianceEvaluationService;
         _logger = logger;
         _retryOptions = retryOptions.Value;
     }
@@ -318,6 +322,7 @@ public class DddFileService : IDddFileService
             : "Import przypisano do istniejacego kierowcy.";
 
         await DetectViolationsAfterImportAsync(dddFile.Id);
+        await EvaluateComplianceAfterImportAsync(companyId, driver.Id);
 
         await _importMonitoringService.MarkCompletedAsync(monitoringId);
 
@@ -336,6 +341,25 @@ public class DddFileService : IDddFileService
                 exception,
                 "Violation detection failed after DDD import {ImportId}.",
                 importId);
+        }
+    }
+
+    private async Task EvaluateComplianceAfterImportAsync(
+        Guid companyId,
+        Guid driverId)
+    {
+        try
+        {
+            await _complianceEvaluationService.EvaluateForDriverAsync(
+                companyId,
+                driverId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Compliance evaluation failed after DDD import for driver {DriverId}.",
+                driverId);
         }
     }
 

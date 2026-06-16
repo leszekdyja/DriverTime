@@ -7,9 +7,6 @@ namespace DriverTime.Infrastructure.Compliance;
 
 public class ComplianceEngineService : IComplianceEngineService
 {
-    private static readonly Guid DevTestViolationDriverId =
-        Guid.Parse("95c0becf-6364-4cf1-9a92-bf0d489556d0");
-
     private readonly ITimelineBuilderService _timelineBuilder;
     private readonly IEnumerable<IComplianceRule> _rules;
 
@@ -53,24 +50,6 @@ public class ComplianceEngineService : IComplianceEngineService
                 Metadata = x.Metadata
             })
             .ToList();
-
-        if (driverId == DevTestViolationDriverId && violations.Count == 0)
-        {
-            // TODO: remove DEV test violation
-            var now = DateTime.UtcNow;
-            violations.Add(new ComplianceViolationPreviewDto
-            {
-                Code = "TEST_VIOLATION",
-                RuleName = "Test violation",
-                Severity = "Warning",
-                Description = "Generated for UI verification",
-                PeriodStartUtc = now,
-                PeriodEndUtc = now,
-                ActualMinutes = 0,
-                LimitMinutes = 0,
-                Metadata = new Dictionary<string, long>()
-            });
-        }
 
         var timelineEntries = timeline
             .Select(x => new ComplianceTimelineEntryDto

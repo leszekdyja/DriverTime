@@ -31,4 +31,6 @@ public class ViolationDto
     public long ActualDurationMinutes { get; set; }
 
     public long LimitDurationMinutes { get; set; }
+
+    public string MetadataJson { get; set; } = string.Empty;
 }

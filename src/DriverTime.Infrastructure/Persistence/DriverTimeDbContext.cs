@@ -182,6 +182,9 @@ public class DriverTimeDbContext : DbContext
 
             entity.HasIndex(x => x.DriverId);
 
+            entity.Property(x => x.MetadataJson)
+                .HasMaxLength(8000);
+
             entity.HasOne(x => x.Driver)
                 .WithMany()
                 .HasForeignKey(x => x.DriverId)

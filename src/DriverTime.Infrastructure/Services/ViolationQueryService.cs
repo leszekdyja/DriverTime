@@ -102,7 +102,8 @@ public class ViolationQueryService : IViolationQueryService
             Recommendation = BuildRecommendation(violation.RegulationReference),
             DetectedAtUtc = violation.CalculatedAt,
             ActualDurationMinutes = violation.DurationMinutes,
-            LimitDurationMinutes = GetLimitMinutes(violation.RegulationReference)
+            LimitDurationMinutes = GetLimitMinutes(violation.RegulationReference),
+            MetadataJson = violation.MetadataJson
         };
     }
 
@@ -118,6 +119,16 @@ public class ViolationQueryService : IViolationQueryService
                 "Kierowca nie odebrał wymaganej przerwy 45 minut po 4h30 jazdy.",
             "EU561:DAILY_REST_BELOW_11H" =>
                 "Najdłuższy odpoczynek dzienny był krótszy niż 11 godzin.",
+            "DAILY_DRIVING_LIMIT" =>
+                "Dzienny czas jazdy przekroczył limit zgodności EU561/AETR.",
+            "CONTINUOUS_DRIVING_BREAK" =>
+                "Kierowca przekroczył limit ciągłej jazdy bez wymaganej przerwy.",
+            "DAILY_REST" =>
+                "Odpoczynek dzienny nie spełnia wymaganego limitu.",
+            "EU561_WEEKLY_DRIVING_56H" or "WEEKLY_DRIVING_LIMIT" =>
+                "Tygodniowy czas jazdy przekroczył limit 56 godzin.",
+            "EU561_BIWEEKLY_DRIVING_90H" or "BI_WEEKLY_DRIVING_LIMIT" =>
+                "Czas jazdy w dwóch kolejnych tygodniach przekroczył limit 90 godzin.",
             _ => violation.ViolationType
         };
     }
@@ -134,6 +145,14 @@ public class ViolationQueryService : IViolationQueryService
                 "Sprawdź, czy wydłużenie jazdy było dopuszczalne i nie przekracza limitów tygodniowych.",
             "EU561:DAILY_REST_BELOW_11H" =>
                 "Zweryfikuj odpoczynek dzienny i zapewnij odpowiednią przerwę przed kolejną trasą.",
+            "DAILY_DRIVING_LIMIT" or
+            "CONTINUOUS_DRIVING_BREAK" or
+            "DAILY_REST" or
+            "EU561_WEEKLY_DRIVING_56H" or
+            "WEEKLY_DRIVING_LIMIT" or
+            "EU561_BIWEEKLY_DRIVING_90H" or
+            "BI_WEEKLY_DRIVING_LIMIT" =>
+                "Zweryfikuj timeline aktywności kierowcy i zaplanuj działania korygujące.",
             _ => "Zweryfikuj naruszenie w kontekście aktywności kierowcy i danych DDD."
         };
     }
@@ -146,6 +165,11 @@ public class ViolationQueryService : IViolationQueryService
             "EU561:DAILY_DRIVING_OVER_10H" => 10 * 60,
             "EU561:CONTINUOUS_DRIVING_WITHOUT_45M_BREAK" => 270,
             "EU561:DAILY_REST_BELOW_11H" => 11 * 60,
+            "DAILY_DRIVING_LIMIT" => 9 * 60,
+            "CONTINUOUS_DRIVING_BREAK" => 270,
+            "DAILY_REST" => 11 * 60,
+            "EU561_WEEKLY_DRIVING_56H" or "WEEKLY_DRIVING_LIMIT" => 56 * 60,
+            "EU561_BIWEEKLY_DRIVING_90H" or "BI_WEEKLY_DRIVING_LIMIT" => 90 * 60,
             _ => 0
         };
     }
