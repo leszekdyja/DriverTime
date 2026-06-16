@@ -1,5 +1,8 @@
 using DriverTime.Application.Companies.Services;
+using DriverTime.Application.Compliance;
 using DriverTime.Application.Interfaces;
+using DriverTime.Infrastructure.Compliance;
+using DriverTime.Infrastructure.Compliance.Rules;
 using DriverTime.Infrastructure.Parsing;
 using DriverTime.Infrastructure.Authentication;
 using DriverTime.Infrastructure.Persistence;
@@ -51,6 +54,11 @@ public static class DependencyInjection
         services.AddScoped<IViolationDetectionService, ViolationDetectionService>();
 
         services.AddScoped<IViolationQueryService, ViolationQueryService>();
+
+        services.AddScoped<ITimelineBuilderService, TimelineBuilderService>();
+        services.AddScoped<IComplianceEngineService, ComplianceEngineService>();
+        services.AddScoped<IComplianceRule, WeeklyDrivingLimitRule>();
+        services.AddScoped<IComplianceRule, BiWeeklyDrivingLimitRule>();
 
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
 
