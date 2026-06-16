@@ -11,6 +11,8 @@ public class ContinuousDrivingBreakRule : IComplianceRule
     private static readonly TimeSpan ContinuousDrivingLimit = TimeSpan.FromMinutes(LimitMinutes);
     private static readonly TimeSpan RequiredBreak = TimeSpan.FromMinutes(RequiredBreakMinutes);
 
+    public string Code => RuleCode;
+
     public string Name => "Continuous driving break";
 
     public ComplianceRuleResult Evaluate(

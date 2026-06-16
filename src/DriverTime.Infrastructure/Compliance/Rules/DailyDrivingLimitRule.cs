@@ -9,6 +9,8 @@ public class DailyDrivingLimitRule : IComplianceRule
     private static readonly TimeSpan StandardDailyLimit = TimeSpan.FromHours(9);
     private static readonly TimeSpan ExtendedDailyLimit = TimeSpan.FromHours(10);
 
+    public string Code => RuleCode;
+
     public string Name => "Daily driving limit";
 
     public ComplianceRuleResult Evaluate(

@@ -1,5 +1,7 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Compliance.DTOs;
+using DriverTime.Domain.Compliance;
+using System.Globalization;
 
 namespace DriverTime.Infrastructure.Compliance;
 
@@ -66,7 +68,90 @@ public class ComplianceEngineService : IComplianceEngineService
             TimelineCount = timelineEntries.Count,
             ViolationsCount = violations.Count,
             Timeline = timelineEntries,
-            Violations = violations
+            Violations = violations,
+            DebugSummary = BuildDebugSummary(timeline)
         };
     }
+
+    private ComplianceDebugSummaryDto BuildDebugSummary(
+        IReadOnlyList<TimelineActivity> timeline)
+    {
+        var drivingActivities = timeline
+            .Where(x => x.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return new ComplianceDebugSummaryDto
+        {
+            DrivingMinutesByDay = drivingActivities
+                .GroupBy(x => x.StartUtc.Date)
+                .OrderBy(x => x.Key)
+                .ToDictionary(
+                    x => x.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    x => SumMinutes(x)),
+            RestMinutesByDay = timeline
+                .Where(x => x.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(x => x.StartUtc.Date)
+                .OrderBy(x => x.Key)
+                .ToDictionary(
+                    x => x.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    x => SumMinutes(x)),
+            WeeklyDrivingMinutes = drivingActivities
+                .GroupBy(x => GetIsoWeekStart(x.StartUtc))
+                .OrderBy(x => x.Key)
+                .ToDictionary(
+                    x => x.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    x => SumMinutes(x)),
+            BiWeeklyDrivingMinutes = BuildBiWeeklyDrivingMinutes(drivingActivities),
+            RegisteredRuleCodes = _rules
+                .Select(x => x.Code)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList()
+        };
+    }
+
+    private static Dictionary<string, long> BuildBiWeeklyDrivingMinutes(
+        IReadOnlyList<TimelineActivity> drivingActivities)
+    {
+        var weekly = drivingActivities
+            .GroupBy(x => GetIsoWeekStart(x.StartUtc))
+            .Select(x => new
+            {
+                WeekStart = x.Key,
+                Minutes = SumMinutes(x)
+            })
+            .OrderBy(x => x.WeekStart)
+            .ToList();
+        var result = new Dictionary<string, long>();
+
+        for (var index = 1; index < weekly.Count; index++)
+        {
+            var previous = weekly[index - 1];
+            var current = weekly[index];
+
+            if (current.WeekStart != previous.WeekStart.AddDays(7))
+            {
+                continue;
+            }
+
+            var key = $"{previous.WeekStart:yyyy-MM-dd}_{current.WeekStart:yyyy-MM-dd}";
+            result[key] = previous.Minutes + current.Minutes;
+        }
+
+        return result;
+    }
+
+    private static DateTime GetIsoWeekStart(DateTime value)
+    {
+        var year = ISOWeek.GetYear(value);
+        var week = ISOWeek.GetWeekOfYear(value);
+
+        return DateTime.SpecifyKind(
+            ISOWeek.ToDateTime(year, week, DayOfWeek.Monday),
+            DateTimeKind.Utc);
+    }
+
+    private static long SumMinutes(IEnumerable<TimelineActivity> activities) =>
+        activities.Sum(x => (long)Math.Round(x.Duration.TotalMinutes));
 }

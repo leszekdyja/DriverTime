@@ -11,4 +11,6 @@ public class CompliancePreviewResponseDto
     public List<ComplianceTimelineEntryDto> Timeline { get; set; } = new();
 
     public List<ComplianceViolationPreviewDto> Violations { get; set; } = new();
+
+    public ComplianceDebugSummaryDto DebugSummary { get; set; } = new();
 }

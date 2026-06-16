@@ -11,6 +11,8 @@ public class DailyRestViolationRule : IComplianceRule
     private static readonly TimeSpan RegularDailyRest = TimeSpan.FromMinutes(RegularDailyRestMinutes);
     private static readonly TimeSpan ReducedDailyRest = TimeSpan.FromMinutes(ReducedDailyRestMinutes);
 
+    public string Code => RuleCode;
+
     public string Name => "Daily rest";
 
     public ComplianceRuleResult Evaluate(

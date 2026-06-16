@@ -4,6 +4,8 @@ namespace DriverTime.Application.Compliance;
 
 public interface IComplianceRule
 {
+    string Code { get; }
+
     string Name { get; }
 
     ComplianceRuleResult Evaluate(

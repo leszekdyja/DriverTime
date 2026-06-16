@@ -8,6 +8,8 @@ public class WeeklyDrivingLimitRule : IComplianceRule
 {
     private static readonly TimeSpan WeeklyLimit = TimeSpan.FromHours(56);
 
+    public string Code => "WEEKLY_DRIVING_LIMIT";
+
     public string Name => "Weekly driving limit";
 
     public ComplianceRuleResult Evaluate(
