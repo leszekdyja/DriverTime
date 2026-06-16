@@ -17,4 +17,6 @@ public class ComplianceViolationPreviewDto
     public long ActualMinutes { get; set; }
 
     public long LimitMinutes { get; set; }
+
+    public Dictionary<string, long> Metadata { get; set; } = new();
 }

@@ -57,6 +57,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITimelineBuilderService, TimelineBuilderService>();
         services.AddScoped<IComplianceEngineService, ComplianceEngineService>();
+        services.AddScoped<IComplianceRule, DailyDrivingLimitRule>();
         services.AddScoped<IComplianceRule, WeeklyDrivingLimitRule>();
         services.AddScoped<IComplianceRule, BiWeeklyDrivingLimitRule>();
 

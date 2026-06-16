@@ -44,7 +44,8 @@ public class ComplianceEngineService : IComplianceEngineService
                 PeriodStartUtc = x.PeriodStartUtc,
                 PeriodEndUtc = x.PeriodEndUtc,
                 ActualMinutes = x.ActualMinutes,
-                LimitMinutes = x.LimitMinutes
+                LimitMinutes = x.LimitMinutes,
+                Metadata = x.Metadata
             })
             .ToList();
 
