@@ -1,16 +1,26 @@
 using System.Globalization;
 using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance.Rules;
 
 public class WeeklyDrivingLimitRule : IComplianceRule
 {
-    private static readonly TimeSpan WeeklyLimit = TimeSpan.FromHours(56);
+    private const string RuleCode = "WEEKLY_DRIVING_LIMIT";
+    private const long WeeklyLimitMinutes = 56 * 60;
+    private static readonly TimeSpan WeeklyLimit = TimeSpan.FromMinutes(WeeklyLimitMinutes);
 
-    public string Code => "WEEKLY_DRIVING_LIMIT";
+    public string Code => RuleCode;
 
     public string Name => "Weekly driving limit";
+
+    private readonly ILogger<WeeklyDrivingLimitRule> _logger;
+
+    public WeeklyDrivingLimitRule(ILogger<WeeklyDrivingLimitRule> logger)
+    {
+        _logger = logger;
+    }
 
     public ComplianceRuleResult Evaluate(
         Guid driverId,
@@ -29,22 +39,45 @@ public class WeeklyDrivingLimitRule : IComplianceRule
                 WeekStart = group.Key,
                 Duration = group.Aggregate(TimeSpan.Zero, (sum, activity) => sum + activity.Duration)
             })
-            .OrderBy(x => x.WeekStart);
+            .OrderBy(x => x.WeekStart)
+            .ToList();
 
-        foreach (var week in weeklyDriving.Where(x => x.Duration > WeeklyLimit))
+        foreach (var week in weeklyDriving)
         {
+            if (week.Duration <= WeeklyLimit)
+            {
+                continue;
+            }
+
+            var actualMinutes = (long)Math.Round(week.Duration.TotalMinutes);
+
             result.Violations.Add(new ComplianceViolationCandidate
             {
-                Code = "EU561_WEEKLY_DRIVING_56H",
+                Code = RuleCode,
                 RuleName = Name,
-                Severity = "Critical",
+                Severity = "High",
                 Description = $"Tygodniowy czas jazdy wyniósł {FormatDuration(week.Duration)} i przekroczył limit 56 godzin.",
                 PeriodStartUtc = week.WeekStart,
                 PeriodEndUtc = week.WeekStart.AddDays(7),
-                ActualMinutes = (long)Math.Round(week.Duration.TotalMinutes),
-                LimitMinutes = (long)WeeklyLimit.TotalMinutes
+                ActualMinutes = actualMinutes,
+                LimitMinutes = WeeklyLimitMinutes,
+                Metadata = new Dictionary<string, long>
+                {
+                    ["totalDrivingMinutes"] = actualMinutes,
+                    ["limitMinutes"] = WeeklyLimitMinutes,
+                    ["exceededMinutes"] = actualMinutes - WeeklyLimitMinutes
+                }
             });
         }
+
+        _logger.LogInformation(
+            "Compliance rule {RuleCode} driver {DriverId}: weeks={WeekCount}, maxWeeklyDrivingMinutes={MaxWeeklyDrivingMinutes}, weeksOver56h={WeeksOverLimit}, violations={ViolationCount}.",
+            RuleCode,
+            driverId,
+            weeklyDriving.Count,
+            weeklyDriving.Count == 0 ? 0 : (long)Math.Round(weeklyDriving.Max(x => x.Duration.TotalMinutes)),
+            weeklyDriving.Count(x => x.Duration > WeeklyLimit),
+            result.Violations.Count);
 
         return result;
     }
