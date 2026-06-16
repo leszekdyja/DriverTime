@@ -110,12 +110,12 @@ public class DailyRestViolationRule : IComplianceRule
     }
 
     private static bool IsRest(TimelineActivity activity) =>
-        activity.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsWorkPeriodActivity(TimelineActivity activity) =>
-        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase) ||
-        activity.ActivityType.Equals("WORK", StringComparison.OrdinalIgnoreCase) ||
-        activity.ActivityType.Equals("AVAILABILITY", StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase) ||
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Work, StringComparison.OrdinalIgnoreCase) ||
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Availability, StringComparison.OrdinalIgnoreCase);
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours} godz. {duration.Minutes} min";

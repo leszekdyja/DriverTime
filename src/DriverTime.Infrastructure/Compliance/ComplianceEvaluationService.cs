@@ -40,6 +40,11 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         Guid driverId,
         CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation(
+            "EVALUATE START driver={DriverId} company={CompanyId}",
+            driverId,
+            companyId);
+
         var driverExists = await _dbContext.Drivers
             .AsNoTracking()
             .AnyAsync(
@@ -65,6 +70,15 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         {
             return 0;
         }
+
+        _logger.LogInformation(
+            "Activities count={Count}",
+            preview.Timeline.Count);
+
+        _logger.LogInformation(
+            "Compliance preview returned {Count} violations for driver {DriverId}.",
+            preview.Violations.Count,
+            driverId);
 
         var replaceableCodes = preview.DebugSummary.RegisteredRuleCodes
             .Concat(preview.Violations.Select(x => x.Code))

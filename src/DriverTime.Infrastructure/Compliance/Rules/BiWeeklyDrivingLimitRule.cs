@@ -66,7 +66,7 @@ public class BiWeeklyDrivingLimitRule : IComplianceRule
     }
 
     private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static DateTime GetIsoWeekStart(DateTime value)
     {

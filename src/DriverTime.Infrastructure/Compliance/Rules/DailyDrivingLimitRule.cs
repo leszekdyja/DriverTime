@@ -73,7 +73,7 @@ public class DailyDrivingLimitRule : IComplianceRule
     }
 
     private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static string BuildMessage(TimeSpan totalDriving, string severity)
     {

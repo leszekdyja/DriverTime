@@ -1,6 +1,7 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Domain.Compliance;
+using Microsoft.Extensions.Logging;
 using System.Globalization;
 
 namespace DriverTime.Infrastructure.Compliance;
@@ -9,13 +10,16 @@ public class ComplianceEngineService : IComplianceEngineService
 {
     private readonly ITimelineBuilderService _timelineBuilder;
     private readonly IEnumerable<IComplianceRule> _rules;
+    private readonly ILogger<ComplianceEngineService> _logger;
 
     public ComplianceEngineService(
         ITimelineBuilderService timelineBuilder,
-        IEnumerable<IComplianceRule> rules)
+        IEnumerable<IComplianceRule> rules,
+        ILogger<ComplianceEngineService> logger)
     {
         _timelineBuilder = timelineBuilder;
         _rules = rules;
+        _logger = logger;
     }
 
     public async Task<CompliancePreviewResponseDto?> PreviewForDriverAsync(
@@ -33,8 +37,28 @@ public class ComplianceEngineService : IComplianceEngineService
             return null;
         }
 
-        var violations = _rules
-            .SelectMany(rule => rule.Evaluate(driverId, timeline).Violations)
+        _logger.LogInformation(
+            "Compliance preview timeline built for driver {DriverId}. Activities count={Count}.",
+            driverId,
+            timeline.Count);
+
+        var violationCandidates = new List<ComplianceViolationCandidate>();
+
+        foreach (var rule in _rules)
+        {
+            var ruleResult = rule.Evaluate(driverId, timeline);
+            var ruleViolations = ruleResult.Violations;
+
+            _logger.LogInformation(
+                "Compliance rule {Rule} returned {Count} violations for driver {DriverId}.",
+                rule.Code,
+                ruleViolations.Count,
+                driverId);
+
+            violationCandidates.AddRange(ruleViolations);
+        }
+
+        var violations = violationCandidates
             .OrderBy(x => x.PeriodStartUtc)
             .ThenBy(x => x.Code)
             .Select(x => new ComplianceViolationPreviewDto
@@ -77,7 +101,7 @@ public class ComplianceEngineService : IComplianceEngineService
         IReadOnlyList<TimelineActivity> timeline)
     {
         var drivingActivities = timeline
-            .Where(x => x.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         return new ComplianceDebugSummaryDto
@@ -89,7 +113,7 @@ public class ComplianceEngineService : IComplianceEngineService
                     x => x.Key.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     x => SumMinutes(x)),
             RestMinutesByDay = timeline
-                .Where(x => x.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase))
+                .Where(x => x.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase))
                 .GroupBy(x => x.StartUtc.Date)
                 .OrderBy(x => x.Key)
                 .ToDictionary(

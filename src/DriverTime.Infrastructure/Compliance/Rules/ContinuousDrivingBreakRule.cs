@@ -72,11 +72,11 @@ public class ContinuousDrivingBreakRule : IComplianceRule
     }
 
     private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsResettingBreak(TimelineActivity activity) =>
-        (activity.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase) ||
-         activity.ActivityType.Equals("AVAILABILITY", StringComparison.OrdinalIgnoreCase)) &&
+        (activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase) ||
+         activity.ActivityType.Equals(ActivityTypeNormalizer.Availability, StringComparison.OrdinalIgnoreCase)) &&
         activity.Duration >= RequiredBreak;
 
     private static string FormatDuration(TimeSpan duration) =>

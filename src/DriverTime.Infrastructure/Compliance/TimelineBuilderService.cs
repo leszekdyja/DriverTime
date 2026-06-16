@@ -2,16 +2,21 @@ using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Compliance;
 
 public class TimelineBuilderService : ITimelineBuilderService
 {
     private readonly DriverTimeDbContext _dbContext;
+    private readonly ILogger<TimelineBuilderService> _logger;
 
-    public TimelineBuilderService(DriverTimeDbContext dbContext)
+    public TimelineBuilderService(
+        DriverTimeDbContext dbContext,
+        ILogger<TimelineBuilderService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<TimelineActivity>?> BuildForDriverAsync(
@@ -32,22 +37,69 @@ public class TimelineBuilderService : ITimelineBuilderService
 
         var rawActivities = await _dbContext.DriverActivities
             .AsNoTracking()
-            .Include(x => x.DddFile)
             .Where(x =>
                 x.DddFile.CompanyId == companyId &&
                 x.DddFile.DriverId == driverId)
             .OrderBy(x => x.StartUtc)
-            .Select(x => new TimelineActivity
+            .Select(x => new
             {
-                SourceActivityId = x.Id,
-                DriverId = driverId,
-                ActivityType = NormalizeActivityType(x.ActivityType),
-                StartUtc = EnsureUtc(x.StartUtc),
-                EndUtc = EnsureUtc(x.EndUtc)
+                x.Id,
+                x.ActivityType,
+                x.StartUtc,
+                x.EndUtc
             })
             .ToListAsync(cancellationToken);
 
-        return NormalizeTimeline(rawActivities);
+        var normalizedActivities = new List<TimelineActivity>();
+        var unknownActivities = new List<string>();
+
+        foreach (var activity in rawActivities)
+        {
+            var normalizedType = ActivityTypeNormalizer.Normalize(activity.ActivityType);
+
+            if (normalizedType == ActivityTypeNormalizer.Unknown)
+            {
+                unknownActivities.Add(activity.ActivityType);
+                continue;
+            }
+
+            normalizedActivities.Add(new TimelineActivity
+            {
+                SourceActivityId = activity.Id,
+                DriverId = driverId,
+                ActivityType = normalizedType,
+                StartUtc = EnsureUtc(activity.StartUtc),
+                EndUtc = EnsureUtc(activity.EndUtc)
+            });
+        }
+
+        if (unknownActivities.Count > 0)
+        {
+            _logger.LogWarning(
+                "Compliance timeline ignored {Count} activities with unknown activity type for driver {DriverId}. Examples: {Examples}",
+                unknownActivities.Count,
+                driverId,
+                string.Join(", ", unknownActivities.Distinct().Take(10)));
+        }
+
+        LogActivityTypeMetrics(driverId, normalizedActivities, unknownActivities.Count);
+
+        return NormalizeTimeline(normalizedActivities);
+    }
+
+    private void LogActivityTypeMetrics(
+        Guid driverId,
+        IReadOnlyCollection<TimelineActivity> activities,
+        int unknownCount)
+    {
+        _logger.LogInformation(
+            "Compliance timeline activity counts for driver {DriverId}: DRIVING={DrivingCount}, WORK={WorkCount}, REST={RestCount}, AVAILABILITY={AvailabilityCount}, UNKNOWN={UnknownCount}",
+            driverId,
+            activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Driving),
+            activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Work),
+            activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Rest),
+            activities.Count(x => x.ActivityType == ActivityTypeNormalizer.Availability),
+            unknownCount);
     }
 
     private static IReadOnlyList<TimelineActivity> NormalizeTimeline(
@@ -97,21 +149,6 @@ public class TimelineBuilderService : ITimelineBuilderService
         }
 
         return timeline;
-    }
-
-    private static string NormalizeActivityType(string value)
-    {
-        var normalized = value.Trim().ToUpperInvariant();
-
-        return normalized switch
-        {
-            "JAZDA" => "DRIVING",
-            "PRACA" => "WORK",
-            "ODPOCZYNEK" => "REST",
-            "BREAK" => "REST",
-            "DYSPOZYCJA" => "AVAILABILITY",
-            _ => normalized
-        };
     }
 
     private static DateTime EnsureUtc(DateTime value)
