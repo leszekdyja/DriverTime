@@ -88,7 +88,7 @@ export default function AppLayout() {
                             </span>
                             <span>{isDark ? "Ciemny" : "Jasny"}</span>
                         </button>
-                        <Link className="profile-placeholder" aria-label="Profil uzytkownika" to="/account">
+                        <Link className="profile-placeholder" aria-label="Profil użytkownika" to="/account">
                             <span className="profile-avatar">{initials}</span>
                             <div>
                                 <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>

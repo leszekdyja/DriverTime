@@ -62,11 +62,11 @@ export function uploadDddFile(
         });
 
         request.addEventListener("error", () => {
-            reject(new Error("Nie udalo sie polaczyc z serwerem."));
+            reject(new Error("Nie udało się połączyć z serwerem."));
         });
 
         request.addEventListener("abort", () => {
-            reject(new Error("Przesylanie pliku zostalo przerwane."));
+            reject(new Error("Przesyłanie pliku zostało przerwane."));
         });
 
         request.send(formData);
@@ -74,7 +74,7 @@ export function uploadDddFile(
 }
 
 function getUploadErrorMessage(responseText: string): string {
-    const fallbackMessage = "Nie udalo sie przeslac pliku DDD.";
+    const fallbackMessage = "Nie udało się przesłać pliku DDD.";
 
     if (!responseText.trim()) {
         return fallbackMessage;

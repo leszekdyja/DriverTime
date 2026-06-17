@@ -84,7 +84,7 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
 
     const loadCalendar = useCallback(async (from: string, to: string) => {
         if (from > to) {
-            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            setError("Data początkowa nie może być późniejsza niż data końcowa.");
             return;
         }
 
@@ -98,7 +98,7 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
             setError(
                 loadError instanceof Error
                     ? loadError.message
-                    : "Wystapil blad podczas pobierania kalendarza.",
+                    : "Wystąpił błąd podczas pobierania kalendarza.",
             );
         } finally {
             setIsLoading(false);
@@ -122,20 +122,20 @@ export default function DriverActivityCalendar({ driverId }: { driverId: string 
         <section className="driver-details-section activity-calendar-section">
             <div className="activity-calendar-heading">
                 <div>
-                    <h3>Kalendarz aktywnosci</h3>
+                    <h3>Kalendarz aktywności</h3>
                     <p>Dobowy przebieg pracy i odpoczynku kierowcy.</p>
                 </div>
                 <form className="activity-calendar-filters" onSubmit={handleSubmit}>
                     <label>Od<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
                     <label>Do<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
-                    <button type="submit" disabled={isLoading}>{isLoading ? "Ladowanie..." : "Pokaz"}</button>
+                    <button type="submit" disabled={isLoading}>{isLoading ? "Ładowanie..." : "Pokaż"}</button>
                 </form>
             </div>
 
             {error && <p className="activity-calendar-error" role="alert">{error}</p>}
             {isLoading && days.length === 0 && <CalendarSkeleton />}
             {!isLoading && !error && days.length === 0 && <EmptyState title="Brak dni" description="W wybranym zakresie nie ma danych kalendarza." />}
-            {!isLoading && !error && days.length > 0 && !hasData && <EmptyState title="Brak aktywnosci" description="W wybranym zakresie nie zapisano aktywnosci ani naruszen." />}
+            {!isLoading && !error && days.length > 0 && !hasData && <EmptyState title="Brak aktywności" description="W wybranym zakresie nie zapisano aktywności ani naruszeń." />}
 
             {!error && days.length > 0 && (
                 <div className={isLoading ? "activity-calendar-days is-refreshing" : "activity-calendar-days"} aria-busy={isLoading}>
@@ -151,7 +151,7 @@ const CalendarDayCard = memo(function CalendarDayCard({ day }: { day: ActivityCa
         <article className="activity-day-card">
             <div className="activity-day-heading">
                 <h4>{formatDay(day.date)}</h4>
-                {day.violations.length > 0 && <span>{day.violations.length} naruszen</span>}
+                {day.violations.length > 0 && <span>{day.violations.length} naruszeń</span>}
             </div>
 
             <div className="activity-day-summary">
@@ -193,7 +193,7 @@ const Summary = memo(function Summary({ label, value, className }: { label: stri
 
 function CalendarSkeleton() {
     return (
-        <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ladowanie kalendarza">
+        <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ładowanie kalendarza">
             {Array.from({ length: 3 }, (_, index) => <div className="ui-skeleton activity-day-skeleton" key={index} />)}
         </div>
     );

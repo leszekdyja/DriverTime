@@ -39,7 +39,7 @@ export default function CompanySettingsPage() {
             } catch (loadError) {
                 setError(loadError instanceof Error
                     ? loadError.message
-                    : "Wystapil blad podczas pobierania ustawien firmy.");
+                    : "Wystąpił błąd podczas pobierania ustawień firmy.");
             } finally {
                 setIsLoading(false);
             }
@@ -74,14 +74,14 @@ export default function CompanySettingsPage() {
         try {
             const saved = await updateCompanySettings(normalized);
             setSettings(saved);
-            setSuccess("Ustawienia firmy zostaly zapisane.");
+            setSuccess("Ustawienia firmy zostały zapisane.");
             window.dispatchEvent(new CustomEvent("drivertime:company-updated", {
                 detail: { name: saved.name },
             }));
         } catch (saveError) {
             setError(saveError instanceof Error
                 ? saveError.message
-                : "Wystapil blad podczas zapisywania ustawien firmy.");
+                : "Wystąpił błąd podczas zapisywania ustawień firmy.");
         } finally {
             setIsSaving(false);
         }

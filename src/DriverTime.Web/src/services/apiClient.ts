@@ -27,7 +27,7 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
             headers,
         });
     } catch {
-        throw new Error("Nie udalo sie polaczyc z API DriverTime.");
+        throw new Error("Nie udało się połączyć z API DriverTime.");
     }
 
     if (response.status === 401 && token) {

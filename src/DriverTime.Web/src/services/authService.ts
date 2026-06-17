@@ -27,11 +27,11 @@ export async function login(email: string, password: string): Promise<AuthRespon
             body: JSON.stringify({ email, password }),
         });
     } catch {
-        throw new Error("Nie udalo sie polaczyc z API DriverTime.");
+        throw new Error("Nie udało się połączyć z API DriverTime.");
     }
 
     if (!response.ok) {
-        throw new Error("Nieprawidlowy adres e-mail lub haslo.");
+        throw new Error("Nieprawidłowy adres e-mail lub hasło.");
     }
 
     return response.json() as Promise<AuthResponse>;

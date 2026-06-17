@@ -42,7 +42,7 @@ export async function getDriverActivityCalendar(
     }
 
     if (!response.ok) {
-        let message = "Nie udalo sie pobrac kalendarza aktywnosci.";
+        let message = "Nie udało się pobrać kalendarza aktywności.";
 
         try {
             const error = (await response.json()) as { message?: string };

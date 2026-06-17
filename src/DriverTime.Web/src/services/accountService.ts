@@ -29,7 +29,7 @@ export async function getAccountProfile(): Promise<AccountProfile> {
     const response = await apiFetch("/api/account/profile");
 
     if (!response.ok) {
-        throw new Error(await readError(response, "Nie udalo sie pobrac profilu."));
+        throw new Error(await readError(response, "Nie udało się pobrać profilu."));
     }
 
     return response.json() as Promise<AccountProfile>;
@@ -45,7 +45,7 @@ export async function updateAccountProfile(
     });
 
     if (!response.ok) {
-        throw new Error(await readError(response, "Nie udalo sie zapisac profilu."));
+        throw new Error(await readError(response, "Nie udało się zapisać profilu."));
     }
 
     return response.json() as Promise<AccountProfile>;
@@ -59,6 +59,6 @@ export async function changeAccountPassword(passwords: ChangePassword): Promise<
     });
 
     if (!response.ok) {
-        throw new Error(await readError(response, "Nie udalo sie zmienic hasla."));
+        throw new Error(await readError(response, "Nie udało się zmienić hasła."));
     }
 }

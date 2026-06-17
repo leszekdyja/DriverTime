@@ -34,11 +34,11 @@ function getStatusLabel(item: UploadItem) {
         case "ready":
             return "Gotowy do wyslania";
         case "uploading":
-            return `Przesylanie ${item.progress}%`;
+            return `Przesyłanie ${item.progress}%`;
         case "success":
             return "Import zakonczony pomyslnie";
         case "unsupported":
-            return "Nieobslugiwany plik. Wybierz plik .ddd";
+            return "Nieobsługiwany plik. Wybierz plik .ddd";
         case "error":
             return item.message || "Import nie powiodl sie";
     }
@@ -169,8 +169,8 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                     disabled={isUploading}
                     hidden
                 />
-                <strong>Przeciagnij pliki DDD tutaj</strong>
-                <span>lub wybierz jeden albo kilka plikow z dysku</span>
+                <strong>Przeciągnij pliki DDD tutaj</strong>
+                <span>lub wybierz jeden albo kilka plików z dysku</span>
                 <button
                     type="button"
                     className="select-files-button"
@@ -202,7 +202,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                                             )
                                         }
                                     >
-                                        Usun
+                                        Usuń
                                     </button>
                                 )}
                             </div>
@@ -223,7 +223,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                             {item.result && (
                                 <p>
                                     <strong>{item.result.importMessage}</strong>{" "}
-                                    Aktywnosci: {item.result.activities.length}, pojazdy:{" "}
+                                    Aktywności: {item.result.activities.length}, pojazdy:{" "}
                                     {item.result.vehicle_uses.length}, kraje:{" "}
                                     {item.result.country_code_entries.length}
                                 </p>
@@ -240,7 +240,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                 disabled={isUploading || uploadableItems.length === 0}
             >
                 {isUploading
-                    ? "Trwa importowanie..."
+                    ? "Trwa importówanie..."
                     : `Importuj pliki (${uploadableItems.length})`}
             </button>
         </section>

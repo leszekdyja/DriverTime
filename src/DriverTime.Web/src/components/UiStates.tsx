@@ -24,7 +24,7 @@ export const TableSkeleton = memo(function TableSkeleton({
     columns?: number;
 }) {
     return (
-        <div className="ui-table-skeleton" aria-busy="true" aria-label="Ladowanie danych">
+        <div className="ui-table-skeleton" aria-busy="true" aria-label="Ładowanie danych">
             {Array.from({ length: rows }, (_, row) => (
                 <div className="ui-skeleton-row" key={row}>
                     {Array.from({ length: columns }, (_, column) => (

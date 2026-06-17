@@ -1,4 +1,4 @@
-import {
+﻿import {
     useCallback,
     useDeferredValue,
     useEffect,
@@ -70,13 +70,13 @@ export default function DriversPage() {
             const response = await apiFetch(driversApiUrl);
 
             if (!response.ok) {
-                throw new Error("Nie udalo sie pobrac kierowcow.");
+                throw new Error("Nie udało się pobrać kierowców.");
             }
 
             setDrivers((await response.json()) as DriverDto[]);
         } catch {
             setIsError(true);
-            setMessage("Blad podczas pobierania kierowcow.");
+            setMessage("błąd podczas pobierania kierowców.");
         } finally {
             setIsLoading(false);
         }
@@ -103,15 +103,15 @@ export default function DriversPage() {
             });
 
             if (!response.ok) {
-                throw new Error("Nie udalo sie dodac kierowcy.");
+                throw new Error("Nie udało się dodać kierowcy.");
             }
 
             setForm({ firstName: "", lastName: "", cardNumber: "" });
             await loadDrivers();
-            setMessage("Kierowca zostal dodany.");
+            setMessage("Kierowca został dodany.");
         } catch {
             setIsError(true);
-            setMessage("Blad podczas dodawania kierowcy.");
+            setMessage("błąd podczas dodawania kierowcy.");
         } finally {
             setIsSaving(false);
         }
@@ -134,15 +134,15 @@ export default function DriversPage() {
             <div className="drivers-heading">
                 <div>
                     <h2>Kierowcy</h2>
-                    <p>Zarzadzaj kierowcami i numerami kart kierowcow.</p>
+                    <p>zarządzaj kierowcami i numerami kart kierowców.</p>
                 </div>
-                <span className="drivers-count">{drivers.length} kierowcow</span>
+                <span className="drivers-count">{drivers.length} kierowców</span>
             </div>
 
             <div className="drivers-grid">
                 <form className="driver-form" onSubmit={addDriver}>
                     <div className="section-heading">
-                        <h3>Dodaj kierowce</h3>
+                        <h3>Dodaj kierowcę</h3>
                         <p>Wprowadz podstawowe dane nowego kierowcy.</p>
                     </div>
 
@@ -180,14 +180,14 @@ export default function DriversPage() {
                     </label>
 
                     <button type="submit" disabled={isSaving}>
-                        {isSaving ? "Zapisywanie..." : "Dodaj kierowce"}
+                        {isSaving ? "Zapisywanie..." : "Dodaj kierowcę"}
                     </button>
                 </form>
 
                 <section className="drivers-panel">
                     <div className="section-heading">
-                        <h3>Lista kierowcow</h3>
-                        <p>Aktualna baza kierowcow DriverTime.</p>
+                        <h3>Lista kierowców</h3>
+                        <p>Aktualna baza kierowców DriverTime.</p>
                     </div>
 
                     <div className="drivers-toolbar">
@@ -218,13 +218,13 @@ export default function DriversPage() {
                         ) : null
                     ) : drivers.length === 0 ? (
                         <EmptyState
-                            title="Brak kierowcow"
-                            description="Dodaj kierowce recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
+                            title="Brak kierowców"
+                            description="Dodaj kierowcę recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
                         />
                     ) : filteredDrivers.length === 0 ? (
                         <EmptyState
                             title="Brak wynikow"
-                            description="Zmien nazwisko lub numer karty wpisany w wyszukiwarce."
+                            description="Zmień nazwisko lub numer karty wpisany w wyszukiwarce."
                         />
                     ) : null}
 
@@ -256,7 +256,7 @@ export default function DriversPage() {
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
                                             <td>
                                                 <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
-                                                    Szczegoly
+                                                    Szczegóły
                                                 </Link>
                                             </td>
                                         </tr>

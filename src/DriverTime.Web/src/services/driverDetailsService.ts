@@ -57,7 +57,7 @@ export async function getDriverDetails(id: string): Promise<DriverDetails> {
     }
 
     if (!response.ok) {
-        throw new Error("Nie udalo sie pobrac szczegolow kierowcy.");
+        throw new Error("Nie udało się pobrać szczegółów kierowcy.");
     }
 
     return (await response.json()) as DriverDetails;
