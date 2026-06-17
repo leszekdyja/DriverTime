@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import DriverActivityCalendar from "../components/DriverActivityCalendar";
@@ -11,6 +11,10 @@ import {
     getDriverDetails,
     type DriverDetails,
 } from "../services/driverDetailsService";
+import {
+    getDriverActivitiesByCard,
+    type DriverActivity as TimelineSourceActivity,
+} from "../services/driverActivitiesService";
 import type { DriverViolation } from "../services/violationsService";
 import "../styles/driver-details.css";
 
@@ -31,6 +35,43 @@ function formatDuration(seconds: number) {
     const minutes = Math.floor((seconds % 3600) / 60);
     return `${hours} godz. ${minutes} min`;
 }
+
+const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+});
+
+const timeFormatter = new Intl.DateTimeFormat("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+});
+
+const activityLabels: Record<string, string> = {
+    DRIVING: "Jazda",
+    WORK: "Praca",
+    AVAILABILITY: "Dyspozycyjność",
+    REST: "Odpoczynek",
+};
+
+type TimelineSegment = {
+    id: string;
+    activityType: string;
+    startUtc: Date;
+    endUtc: Date;
+    leftPercent: number;
+    widthPercent: number;
+    durationSeconds: number;
+};
+
+type TimelineDay = {
+    date: string;
+    label: string;
+    segments: TimelineSegment[];
+};
 
 function formatMinutes(minutes: number) {
     return formatDuration(minutes * 60);
@@ -61,6 +102,112 @@ function getSeverityClass(severity: string) {
     return "default";
 }
 
+function toUtcDayKey(date: Date) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+function getUtcDayStart(date: Date) {
+    return new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+    ));
+}
+
+function addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function secondsSinceDayStart(date: Date, dayStart: Date) {
+    return Math.max(0, (date.getTime() - dayStart.getTime()) / 1000);
+}
+
+function getActivityClass(activityType: string) {
+    const normalized = activityType.toUpperCase();
+
+    if (normalized === "DRIVING") return "driving";
+    if (normalized === "WORK") return "work";
+    if (normalized === "AVAILABILITY") return "availability";
+    if (normalized === "REST") return "rest";
+
+    return "other";
+}
+
+function getActivityLabel(activityType: string) {
+    return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
+}
+
+function buildDailyTimeline(activities: TimelineSourceActivity[]) {
+    const days = new Map<string, TimelineDay>();
+
+    for (const activity of activities) {
+        const activityStart = new Date(activity.startUtc);
+        const activityEnd = new Date(activity.endUtc);
+
+        if (
+            Number.isNaN(activityStart.getTime())
+            || Number.isNaN(activityEnd.getTime())
+            || activityEnd <= activityStart
+        ) {
+            continue;
+        }
+
+        let segmentStart = activityStart;
+
+        while (segmentStart < activityEnd) {
+            const dayStart = getUtcDayStart(segmentStart);
+            const dayEnd = addDays(dayStart, 1);
+            const segmentEnd = activityEnd < dayEnd ? activityEnd : dayEnd;
+            const dayKey = toUtcDayKey(dayStart);
+            const durationSeconds = Math.max(
+                0,
+                (segmentEnd.getTime() - segmentStart.getTime()) / 1000,
+            );
+
+            if (!days.has(dayKey)) {
+                days.set(dayKey, {
+                    date: dayKey,
+                    label: dayFormatter.format(dayStart),
+                    segments: [],
+                });
+            }
+
+            days.get(dayKey)!.segments.push({
+                id: activity.id,
+                activityType: activity.activityType,
+                startUtc: segmentStart,
+                endUtc: segmentEnd,
+                leftPercent: secondsSinceDayStart(segmentStart, dayStart) / 864,
+                widthPercent: Math.max(0.2, durationSeconds / 864),
+                durationSeconds,
+            });
+
+            segmentStart = segmentEnd;
+        }
+    }
+
+    return Array.from(days.values())
+        .map((day) => ({
+            ...day,
+            segments: day.segments.sort(
+                (left, right) => left.startUtc.getTime() - right.startUtc.getTime(),
+            ),
+        }))
+        .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function formatTimelineTooltip(segment: TimelineSegment) {
+    return [
+        getActivityLabel(segment.activityType),
+        `${timeFormatter.format(segment.startUtc)} - ${timeFormatter.format(segment.endUtc)}`,
+        formatDuration(segment.durationSeconds),
+    ].join("\n");
+}
+
 export default function DriverDetailsPage() {
     const { id } = useParams<{ id: string }>();
     const [details, setDetails] = useState<DriverDetails | null>(null);
@@ -69,6 +216,9 @@ export default function DriverDetailsPage() {
     const [violations, setViolations] = useState<DriverViolation[]>([]);
     const [areViolationsLoading, setAreViolationsLoading] = useState(true);
     const [violationsError, setViolationsError] = useState("");
+    const [timelineActivities, setTimelineActivities] = useState<TimelineSourceActivity[]>([]);
+    const [isTimelineLoading, setIsTimelineLoading] = useState(true);
+    const [timelineError, setTimelineError] = useState("");
 
     useEffect(() => {
         async function loadDetails() {
@@ -127,6 +277,38 @@ export default function DriverDetailsPage() {
         void loadViolations();
     }, [details, id]);
 
+    useEffect(() => {
+        async function loadTimelineActivities() {
+            if (!details?.cardNumber) {
+                setTimelineActivities([]);
+                setIsTimelineLoading(false);
+                return;
+            }
+
+            setIsTimelineLoading(true);
+            setTimelineError("");
+
+            try {
+                setTimelineActivities(await getDriverActivitiesByCard(details.cardNumber));
+            } catch (loadError) {
+                setTimelineError(
+                    loadError instanceof Error
+                        ? loadError.message
+                        : "Wystąpił błąd podczas pobierania osi aktywności.",
+                );
+            } finally {
+                setIsTimelineLoading(false);
+            }
+        }
+
+        void loadTimelineActivities();
+    }, [details?.cardNumber]);
+
+    const timelineDays = useMemo(
+        () => buildDailyTimeline(timelineActivities),
+        [timelineActivities],
+    );
+
     return (
         <div className="driver-details-page">
             <Link className="driver-back-link" to="/drivers">
@@ -161,6 +343,60 @@ export default function DriverDetailsPage() {
                     </section>
 
                     <DriverActivityCalendar driverId={details.id} />
+
+                    <section className="driver-details-section daily-activity-section">
+                        <div className="daily-activity-heading">
+                            <div>
+                                <h3>Dzienna oś aktywności</h3>
+                                <p>Pełny widok 24 godzin z rzeczywistych aktywności StartUtc i EndUtc.</p>
+                            </div>
+                        </div>
+
+                        {isTimelineLoading ? (
+                            <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ładowanie osi aktywności">
+                                {Array.from({ length: 4 }, (_, index) => (
+                                    <div className="ui-skeleton daily-activity-skeleton" key={index} />
+                                ))}
+                            </div>
+                        ) : timelineError ? (
+                            <p className="activity-calendar-error" role="alert">{timelineError}</p>
+                        ) : timelineDays.length === 0 ? (
+                            <EmptyState
+                                title="Brak aktywności"
+                                description="Dzienna oś pojawi się po imporcie aktywności kierowcy."
+                            />
+                        ) : (
+                            <div className="daily-activity-days">
+                                {timelineDays.map((day) => (
+                                    <article className="daily-activity-day" key={day.date}>
+                                        <h4>{day.label}</h4>
+                                        <div className="daily-activity-timeline" aria-label={`Dzienna oś aktywności ${day.date}`}>
+                                            <span className="daily-activity-baseline" />
+                                            {day.segments.map((segment, index) => (
+                                                <span
+                                                    className={`daily-activity-segment ${getActivityClass(segment.activityType)}`}
+                                                    key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
+                                                    style={{
+                                                        left: `${segment.leftPercent}%`,
+                                                        width: `${segment.widthPercent}%`,
+                                                    }}
+                                                    title={formatTimelineTooltip(segment)}
+                                                    aria-label={formatTimelineTooltip(segment)}
+                                                />
+                                            ))}
+                                        </div>
+                                        <div className="timeline-hours">
+                                            <span>00:00</span>
+                                            <span>06:00</span>
+                                            <span>12:00</span>
+                                            <span>18:00</span>
+                                            <span>24:00</span>
+                                        </div>
+                                    </article>
+                                ))}
+                            </div>
+                        )}
+                    </section>
 
                     <DetailsSection title="Historia importów" empty={details.recentImports.length === 0}>
                         <table><thead><tr><th>Plik</th><th>Data</th><th>Aktywności</th><th></th></tr></thead>

@@ -489,6 +489,12 @@ export default function DashboardPage() {
                         description="Pilne pobrania kart"
                     />
                     <MetricCard
+                        label="Odczyty do 7 dni"
+                        value={dashboard.alerts.downloadsDueIn7Days}
+                        tone={dashboard.alerts.downloadsDueIn7Days > 0 ? "amber" : "green"}
+                        description="Karty i pojazdy razem"
+                    />
+                    <MetricCard
                         label="Kierowcy do 14 dni"
                         value={dashboard.alerts.driverDownloadsDueIn14Days}
                         tone={dashboard.alerts.driverDownloadsDueIn14Days > 0 ? "amber" : "green"}

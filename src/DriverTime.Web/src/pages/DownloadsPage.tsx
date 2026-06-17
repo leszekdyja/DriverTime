@@ -4,12 +4,15 @@ import { Link } from "react-router-dom";
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    getDownloadDashboard,
     getDriverDownloads,
     getVehicleDownloads,
+    type DownloadDashboard,
     type DownloadStatus,
     type DriverDownload,
     type VehicleDownload,
 } from "../services/downloadsService";
+import "../styles/dashboard.css";
 import "../styles/drivers.css";
 
 type Tab = "drivers" | "vehicles";
@@ -19,7 +22,7 @@ const filters: Array<{ value: Filter; label: string }> = [
     { value: "All", label: "Wszystkie" },
     { value: "OK", label: "OK" },
     { value: "Warning", label: "Ostrzeżenie" },
-    { value: "Overdue", label: "Po terminie" },
+    { value: "Overdue", label: "Przeterminowane" },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -56,7 +59,7 @@ function formatDays(daysUntilDue: number | null) {
 function statusLabel(status: DownloadStatus) {
     if (status === "OK") return "OK";
     if (status === "Warning") return "Ostrzeżenie";
-    return "Po terminie";
+    return "Przeterminowany";
 }
 
 function statusTone(status: DownloadStatus) {
@@ -72,6 +75,7 @@ function filterByStatus<T extends { status: DownloadStatus }>(items: T[], filter
 export default function DownloadsPage() {
     const [activeTab, setActiveTab] = useState<Tab>("drivers");
     const [activeFilter, setActiveFilter] = useState<Filter>("All");
+    const [dashboard, setDashboard] = useState<DownloadDashboard | null>(null);
     const [drivers, setDrivers] = useState<DriverDownload[]>([]);
     const [vehicles, setVehicles] = useState<VehicleDownload[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -82,11 +86,13 @@ export default function DownloadsPage() {
         setError("");
 
         try {
-            const [driverData, vehicleData] = await Promise.all([
+            const [summaryData, driverData, vehicleData] = await Promise.all([
+                getDownloadDashboard(),
                 getDriverDownloads(),
                 getVehicleDownloads(),
             ]);
 
+            setDashboard(summaryData);
             setDrivers(driverData);
             setVehicles(vehicleData);
         } catch (loadError) {
@@ -118,6 +124,8 @@ export default function DownloadsPage() {
         ? filteredDrivers.length
         : filteredVehicles.length;
 
+    const dueIn7Days = (dashboard?.warningDrivers ?? 0) + (dashboard?.warningVehicles ?? 0);
+
     return (
         <div className="drivers-page">
             <div className="drivers-heading">
@@ -128,9 +136,37 @@ export default function DownloadsPage() {
                 <span className="drivers-count">{visibleItemsCount} rekordów</span>
             </div>
 
+            <section className="dashboard-kpi-grid" aria-label="Podsumowanie terminów odczytów" style={{ marginTop: 28 }}>
+                <article className={`metric-card ${(dashboard?.overdueDrivers ?? 0) > 0 ? "red" : "green"}`}>
+                    <div className="metric-card-heading"><span>Kierowcy po terminie</span></div>
+                    <strong>{dashboard?.overdueDrivers ?? 0}</strong>
+                    <small>Karta kierowcy powyżej 28 dni</small>
+                </article>
+                <article className={`metric-card ${(dashboard?.overdueVehicles ?? 0) > 0 ? "red" : "green"}`}>
+                    <div className="metric-card-heading"><span>Pojazdy po terminie</span></div>
+                    <strong>{dashboard?.overdueVehicles ?? 0}</strong>
+                    <small>Tachograf lub pojazd powyżej 90 dni</small>
+                </article>
+                <article className={`metric-card ${dueIn7Days > 0 ? "amber" : "green"}`}>
+                    <div className="metric-card-heading"><span>Odczyty do 7 dni</span></div>
+                    <strong>{dueIn7Days}</strong>
+                    <small>Kierowcy i pojazdy wymagające odczytu</small>
+                </article>
+                <article className={`metric-card ${(dashboard?.warningDrivers ?? 0) > 0 ? "amber" : "green"}`}>
+                    <div className="metric-card-heading"><span>Kierowcy do 7 dni</span></div>
+                    <strong>{dashboard?.warningDrivers ?? 0}</strong>
+                    <small>Zbliżający się termin karty</small>
+                </article>
+                <article className={`metric-card ${(dashboard?.warningVehicles ?? 0) > 0 ? "amber" : "green"}`}>
+                    <div className="metric-card-heading"><span>Pojazdy do 7 dni</span></div>
+                    <strong>{dashboard?.warningVehicles ?? 0}</strong>
+                    <small>Zbliżający się termin tachografu</small>
+                </article>
+            </section>
+
             <section className="drivers-panel" style={{ marginTop: 28 }}>
                 <div className="section-heading">
-                    <h3>Download Compliance</h3>
+                    <h3>Odczyty kierowców i pojazdów</h3>
                     <p>Karty kierowców: 28 dni. Tachografy i pojazdy: 90 dni.</p>
                 </div>
 
@@ -200,7 +236,7 @@ function DriversTable({ drivers }: { drivers: DriverDownload[] }) {
                         <th>Kierowca</th>
                         <th>Numer karty</th>
                         <th>Ostatni odczyt</th>
-                        <th>Następny odczyt</th>
+                        <th>Następny termin</th>
                         <th>Dni do terminu</th>
                         <th>Status</th>
                     </tr>
@@ -243,9 +279,9 @@ function VehiclesTable({ vehicles }: { vehicles: VehicleDownload[] }) {
             <table className="drivers-table">
                 <thead>
                     <tr>
-                        <th>Rejestracja</th>
+                        <th>Rejestracja pojazdu</th>
                         <th>Ostatni odczyt</th>
-                        <th>Następny odczyt</th>
+                        <th>Następny termin</th>
                         <th>Dni do terminu</th>
                         <th>Status</th>
                     </tr>

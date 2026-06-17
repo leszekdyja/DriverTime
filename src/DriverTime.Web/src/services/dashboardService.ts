@@ -9,6 +9,7 @@ type DashboardSummary = {
     vehicleUsesCount: number;
     overdueDriverDownloads: number;
     driverDownloadsDueIn7Days: number;
+    downloadsDueIn7Days: number;
     driverDownloadsDueIn14Days: number;
     overdueVehicleDownloads: number;
     vehicleDownloadsDueIn7Days: number;
@@ -49,6 +50,7 @@ export type DashboardData = {
 export type DashboardAlerts = {
     overdueDriverDownloads: number;
     driverDownloadsDueIn7Days: number;
+    downloadsDueIn7Days: number;
     driverDownloadsDueIn14Days: number;
     overdueVehicleDownloads: number;
     vehicleDownloadsDueIn7Days: number;
@@ -138,6 +140,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         alerts: {
             overdueDriverDownloads: summary.overdueDriverDownloads,
             driverDownloadsDueIn7Days: summary.driverDownloadsDueIn7Days,
+            downloadsDueIn7Days: summary.downloadsDueIn7Days,
             driverDownloadsDueIn14Days: summary.driverDownloadsDueIn14Days,
             overdueVehicleDownloads: summary.overdueVehicleDownloads,
             vehicleDownloadsDueIn7Days: summary.vehicleDownloadsDueIn7Days,
