@@ -8,10 +8,6 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DownloadScheduleService : IDownloadScheduleService
 {
-    private const int DriverDownloadIntervalDays = 28;
-    private const int VehicleDownloadIntervalDays = 90;
-    private const int WarningDays = 7;
-
     private readonly DriverTimeDbContext _dbContext;
 
     public DownloadScheduleService(DriverTimeDbContext dbContext)
@@ -30,10 +26,10 @@ public class DownloadScheduleService : IDownloadScheduleService
             .Select(x => new
             {
                 Driver = x,
-                LastDownloadUtc = x.DddFiles
-                    .OrderByDescending(file => file.UploadedAtUtc)
-                    .Select(file => (DateTime?)file.UploadedAtUtc)
-                    .FirstOrDefault()
+                LastActivityUtc = x.DddFiles
+                    .SelectMany(file => file.DriverActivities)
+                    .Select(activity => (DateTime?)activity.EndUtc)
+                    .Max()
             })
             .OrderBy(x => x.Driver.LastName)
             .ThenBy(x => x.Driver.FirstName)
@@ -46,10 +42,21 @@ public class DownloadScheduleService : IDownloadScheduleService
                 FirstName = x.Driver.FirstName,
                 LastName = x.Driver.LastName,
                 CardNumber = x.Driver.CardNumber,
-                LastDownloadUtc = x.LastDownloadUtc,
-                NextRequiredDownloadUtc = x.LastDownloadUtc?.AddDays(DriverDownloadIntervalDays),
-                DaysUntilDue = GetDaysUntilDue(x.LastDownloadUtc, DriverDownloadIntervalDays, nowUtc),
-                Status = GetStatus(x.LastDownloadUtc, DriverDownloadIntervalDays, nowUtc)
+                LastDownloadUtc = x.LastActivityUtc,
+                NextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                    x.LastActivityUtc,
+                    DownloadScheduleCalculator.DriverDownloadIntervalDays),
+                DaysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
+                    DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                        x.LastActivityUtc,
+                        DownloadScheduleCalculator.DriverDownloadIntervalDays),
+                    nowUtc),
+                Status = DownloadScheduleCalculator.GetStatus(
+                    DownloadScheduleCalculator.GetDaysUntilDue(
+                        DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                            x.LastActivityUtc,
+                            DownloadScheduleCalculator.DriverDownloadIntervalDays),
+                        nowUtc))
             })
             .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
             .ThenBy(x => x.LastName)
@@ -69,7 +76,7 @@ public class DownloadScheduleService : IDownloadScheduleService
             .Select(x => new
             {
                 Vehicle = x,
-                LastDownloadUtc = _dbContext.VehicleUses
+                LastActivityUtc = _dbContext.VehicleUses
                     .Where(vehicleUse =>
                         vehicleUse.DddFile.CompanyId == companyId
                         && vehicleUse.RegistrationNumber != null
@@ -77,9 +84,8 @@ public class DownloadScheduleService : IDownloadScheduleService
                         && EF.Functions.Like(
                             x.RegistrationNumber.Replace(" ", "").ToUpper(),
                             "%" + vehicleUse.RegistrationNumber.Replace(" ", "").ToUpper()))
-                    .OrderByDescending(vehicleUse => vehicleUse.DddFile.UploadedAtUtc)
-                    .Select(vehicleUse => (DateTime?)vehicleUse.DddFile.UploadedAtUtc)
-                    .FirstOrDefault()
+                    .Select(vehicleUse => (DateTime?)vehicleUse.EndUtc)
+                    .Max()
             })
             .ToListAsync(cancellationToken);
 
@@ -88,10 +94,21 @@ public class DownloadScheduleService : IDownloadScheduleService
             {
                 VehicleId = x.Vehicle.Id,
                 RegistrationNumber = x.Vehicle.RegistrationNumber,
-                LastDownloadUtc = x.LastDownloadUtc,
-                NextRequiredDownloadUtc = x.LastDownloadUtc?.AddDays(VehicleDownloadIntervalDays),
-                DaysUntilDue = GetDaysUntilDue(x.LastDownloadUtc, VehicleDownloadIntervalDays, nowUtc),
-                Status = GetStatus(x.LastDownloadUtc, VehicleDownloadIntervalDays, nowUtc)
+                LastDownloadUtc = x.LastActivityUtc,
+                NextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                    x.LastActivityUtc,
+                    DownloadScheduleCalculator.VehicleDownloadIntervalDays),
+                DaysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
+                    DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                        x.LastActivityUtc,
+                        DownloadScheduleCalculator.VehicleDownloadIntervalDays),
+                    nowUtc),
+                Status = DownloadScheduleCalculator.GetStatus(
+                    DownloadScheduleCalculator.GetDaysUntilDue(
+                        DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                            x.LastActivityUtc,
+                            DownloadScheduleCalculator.VehicleDownloadIntervalDays),
+                        nowUtc))
             })
             .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
             .ThenBy(x => x.RegistrationNumber)
@@ -122,35 +139,4 @@ public class DownloadScheduleService : IDownloadScheduleService
         };
     }
 
-    private static int? GetDaysUntilDue(
-        DateTime? lastDownloadUtc,
-        int intervalDays,
-        DateTime nowUtc)
-    {
-        if (!lastDownloadUtc.HasValue)
-        {
-            return null;
-        }
-
-        var nextRequiredDownloadUtc = lastDownloadUtc.Value.AddDays(intervalDays);
-
-        return (int)Math.Floor((nextRequiredDownloadUtc.Date - nowUtc.Date).TotalDays);
-    }
-
-    private static string GetStatus(
-        DateTime? lastDownloadUtc,
-        int intervalDays,
-        DateTime nowUtc)
-    {
-        var daysUntilDue = GetDaysUntilDue(lastDownloadUtc, intervalDays, nowUtc);
-
-        if (!daysUntilDue.HasValue || daysUntilDue.Value < 0)
-        {
-            return DownloadStatus.Overdue;
-        }
-
-        return daysUntilDue.Value <= WarningDays
-            ? DownloadStatus.Warning
-            : DownloadStatus.Ok;
-    }
 }
