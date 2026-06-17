@@ -140,7 +140,10 @@ public class DownloadsController : ControllerBase
                     .Where(vehicleUse =>
                         vehicleUse.DddFile.CompanyId == _currentUser.CompanyId
                         && vehicleUse.RegistrationNumber != null
-                        && vehicleUse.RegistrationNumber.Trim().ToUpper() == x.RegistrationNumber.Trim().ToUpper())
+                        && vehicleUse.RegistrationNumber.Replace(" ", "").Length >= 5
+                        && EF.Functions.Like(
+                            x.RegistrationNumber.Replace(" ", "").ToUpper(),
+                            "%" + vehicleUse.RegistrationNumber.Replace(" ", "").ToUpper()))
                     .OrderByDescending(vehicleUse => vehicleUse.DddFile.UploadedAtUtc)
                     .Select(vehicleUse => (DateTime?)vehicleUse.DddFile.UploadedAtUtc)
                     .FirstOrDefault()

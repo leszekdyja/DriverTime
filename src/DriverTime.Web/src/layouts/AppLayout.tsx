@@ -7,6 +7,7 @@ import "../styles/layout.css";
 
 const navigationItems = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
+    { to: "/alerts", label: "Alerty", icon: "alerts" },
     { to: "/drivers", label: "Kierowcy", icon: "drivers" },
     { to: "/vehicles", label: "Pojazdy", icon: "vehicles" },
     { to: "/downloads", label: "Odczyty", icon: "downloads" },

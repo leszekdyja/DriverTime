@@ -7,6 +7,7 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 
 import DashboardPage from "./pages/DashboardPage";
 import AccountPage from "./pages/AccountPage";
+import AlertsPage from "./pages/AlertsPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
@@ -32,6 +33,7 @@ export default function App() {
                         <Route element={<ProtectedRoute />}>
                             <Route path="/" element={<AppLayout />}>
                                 <Route index element={<DashboardPage />} />
+                                <Route path="alerts" element={<AlertsPage />} />
                                 <Route path="imports" element={<ImportsPage />} />
                                 <Route path="import-monitoring" element={<ImportMonitoringPage />} />
                                 <Route path="imports/:id" element={<ImportDetailsPage />} />

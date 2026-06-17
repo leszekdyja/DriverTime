@@ -572,7 +572,7 @@ public class DddFileService : IDddFileService
     {
         var registrationNumbers = vehicleUses
             .Select(x => NormalizeVehicleRegistration(x.VehicleRegistration))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Where(IsUsableVehicleRegistration)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -597,13 +597,20 @@ public class DddFileService : IDddFileService
 
         var existing = existingRegistrationNumbers
             .Select(NormalizeVehicleRegistration)
+            .Where(IsUsableVehicleRegistration)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        registrationNumbers = registrationNumbers
+            .Where(x => !HasFullerVehicleRegistrationVariant(
+                x,
+                registrationNumbers.Concat(existing)))
+            .ToList();
         var existingCount = registrationNumbers.Count(existing.Contains);
         var createdCount = 0;
 
         foreach (var registrationNumber in registrationNumbers)
         {
-            if (existing.Contains(registrationNumber))
+            if (existing.Contains(registrationNumber)
+                || HasFullerVehicleRegistrationVariant(registrationNumber, existing))
             {
                 continue;
             }
@@ -629,10 +636,44 @@ public class DddFileService : IDddFileService
             createdCount);
     }
 
-    private static string NormalizeVehicleRegistration(string? value) =>
-        string.IsNullOrWhiteSpace(value)
+    private static string NormalizeVehicleRegistration(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
             ? string.Empty
-            : value.Trim().ToUpperInvariant();
+            : string.Join(
+                " ",
+                value.Trim()
+                    .ToUpperInvariant()
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static bool IsUsableVehicleRegistration(string value)
+    {
+        return GetVehicleRegistrationCompactValue(value).Length >= 5;
+    }
+
+    private static bool HasFullerVehicleRegistrationVariant(
+        string registrationNumber,
+        IEnumerable<string> candidates)
+    {
+        var compact = GetVehicleRegistrationCompactValue(registrationNumber);
+
+        return candidates
+            .Select(GetVehicleRegistrationCompactValue)
+            .Any(candidate =>
+                candidate.Length > compact.Length
+                && candidate.EndsWith(compact, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string GetVehicleRegistrationCompactValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : new string(value
+                .Where(x => !char.IsWhiteSpace(x))
+                .ToArray())
+                .ToUpperInvariant();
+    }
 
     private static void AddCountryEntries(
         DddFile dddFile,

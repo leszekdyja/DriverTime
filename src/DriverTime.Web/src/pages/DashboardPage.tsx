@@ -468,6 +468,68 @@ export default function DashboardPage() {
             <section className="dashboard-widget latest-imports-widget">
                 <div className="dashboard-widget-heading">
                     <div>
+                        <span>Alerty</span>
+                        <h3>Najważniejsze sygnały operacyjne</h3>
+                        <p>Alerty są liczone z terminów pobrań oraz zapisanych naruszeń compliance.</p>
+                    </div>
+                    <Link to="/alerts">Otwórz Alert Center</Link>
+                </div>
+
+                <div className="violation-widget-summary">
+                    <MetricCard
+                        label="Kierowcy po terminie"
+                        value={dashboard.alerts.overdueDriverDownloads}
+                        tone={dashboard.alerts.overdueDriverDownloads > 0 ? "red" : "green"}
+                        description="Odczyt karty powyżej 28 dni"
+                    />
+                    <MetricCard
+                        label="Kierowcy do 7 dni"
+                        value={dashboard.alerts.driverDownloadsDueIn7Days}
+                        tone={dashboard.alerts.driverDownloadsDueIn7Days > 0 ? "amber" : "green"}
+                        description="Pilne pobrania kart"
+                    />
+                    <MetricCard
+                        label="Kierowcy do 14 dni"
+                        value={dashboard.alerts.driverDownloadsDueIn14Days}
+                        tone={dashboard.alerts.driverDownloadsDueIn14Days > 0 ? "amber" : "green"}
+                        description="Nadchodzące pobrania kart"
+                    />
+                    <MetricCard
+                        label="Pojazdy po terminie"
+                        value={dashboard.alerts.overdueVehicleDownloads}
+                        tone={dashboard.alerts.overdueVehicleDownloads > 0 ? "red" : "green"}
+                        description="Tachograf lub pojazd powyżej 90 dni"
+                    />
+                    <MetricCard
+                        label="Pojazdy do 7 dni"
+                        value={dashboard.alerts.vehicleDownloadsDueIn7Days}
+                        tone={dashboard.alerts.vehicleDownloadsDueIn7Days > 0 ? "amber" : "green"}
+                        description="Pilne pobrania tachografów"
+                    />
+                    <MetricCard
+                        label="Pojazdy do 14 dni"
+                        value={dashboard.alerts.vehicleDownloadsDueIn14Days}
+                        tone={dashboard.alerts.vehicleDownloadsDueIn14Days > 0 ? "amber" : "green"}
+                        description="Nadchodzące pobrania tachografów"
+                    />
+                    <MetricCard
+                        label="High compliance"
+                        value={dashboard.alerts.driversWithHighViolations}
+                        tone={dashboard.alerts.driversWithHighViolations > 0 ? "red" : "green"}
+                        description="Kierowcy z wysokimi naruszeniami"
+                    />
+                    <MetricCard
+                        label="Medium compliance"
+                        value={dashboard.alerts.driversWithMediumViolations}
+                        tone={dashboard.alerts.driversWithMediumViolations > 0 ? "amber" : "green"}
+                        description="Kierowcy ze średnimi naruszeniami"
+                    />
+                </div>
+            </section>
+
+            <section className="dashboard-widget latest-imports-widget">
+                <div className="dashboard-widget-heading">
+                    <div>
                         <span>Download Compliance</span>
                         <h3>Terminy pobrań z kart i tachografów</h3>
                         <p>Karty kierowców: 28 dni. Tachografy i pojazdy: 90 dni.</p>

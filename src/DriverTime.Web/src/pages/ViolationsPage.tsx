@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
@@ -232,10 +233,13 @@ function getRecommendedAction(violation: DriverViolation) {
 }
 
 export default function ViolationsPage() {
+    const [searchParams] = useSearchParams();
+    const driverIdFromQuery = searchParams.get("driverId") ?? "";
+    const violationIdFromQuery = searchParams.get("violationId") ?? "";
     const [violations, setViolations] = useState<DriverViolation[]>([]);
     const [drivers, setDrivers] = useState<ComplianceDriver[]>([]);
     const [readAlertIds, setReadAlertIds] = useState<string[]>(() => loadReadAlertIds());
-    const [selectedDriver, setSelectedDriver] = useState("");
+    const [selectedDriver, setSelectedDriver] = useState(driverIdFromQuery);
     const [selectedSeverity, setSelectedSeverity] = useState("");
     const [selectedStatus, setSelectedStatus] = useState("");
     const [dateFrom, setDateFrom] = useState("");
@@ -269,6 +273,26 @@ export default function ViolationsPage() {
 
         void loadViolations();
     }, []);
+
+    useEffect(() => {
+        if (driverIdFromQuery) {
+            setSelectedDriver(driverIdFromQuery);
+        }
+    }, [driverIdFromQuery]);
+
+    useEffect(() => {
+        if (!violationIdFromQuery || selectedViolation) {
+            return;
+        }
+
+        const matchingViolation = violations.find(
+            (violation) => violation.id === violationIdFromQuery,
+        );
+
+        if (matchingViolation) {
+            setSelectedViolation(matchingViolation);
+        }
+    }, [selectedViolation, violationIdFromQuery, violations]);
 
     const driverOptions = useMemo(() => {
         return drivers

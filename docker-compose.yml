@@ -23,6 +23,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      Swagger__Enabled: ${SWAGGER_ENABLED:-true}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-drivertime};Username=${POSTGRES_USER:-drivertime};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       DddParser__PythonExecutable: python3
       DddParser__ParserScriptPath: /app/parser/parser_cli.py

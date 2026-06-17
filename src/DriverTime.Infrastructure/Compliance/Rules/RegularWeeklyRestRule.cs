@@ -9,6 +9,8 @@ public class RegularWeeklyRestRule : IComplianceRule
 {
     private const string RuleCode = "REGULAR_WEEKLY_REST";
     private const long RegularWeeklyRestMinutes = 45 * 60;
+    private const int PastActivityYearsLimit = 10;
+    private const int FutureActivityDaysLimit = 1;
     private static readonly TimeSpan RegularWeeklyRest = TimeSpan.FromMinutes(RegularWeeklyRestMinutes);
 
     public string Code => RuleCode;
@@ -31,14 +33,16 @@ public class RegularWeeklyRestRule : IComplianceRule
             RuleName = Name
         };
 
-        var weeks = GetWeekRanges(timeline);
+        var validTimeline = GetValidTimeline(timeline);
+        var ignoredActivities = timeline.Count - validTimeline.Count;
+        var weeks = GetActiveWeekRanges(validTimeline);
         var regularWeeklyRests = 0;
         var missingRegularWeeklyRests = 0;
         var maxWeeklyRest = TimeSpan.Zero;
 
         foreach (var week in weeks)
         {
-            var longestRest = GetRestActivitiesForWeek(timeline, week)
+            var longestRest = GetRestActivitiesForWeek(validTimeline, week)
                 .Select(x => x.Duration)
                 .DefaultIfEmpty(TimeSpan.Zero)
                 .Max();
@@ -74,10 +78,11 @@ public class RegularWeeklyRestRule : IComplianceRule
         }
 
         _logger.LogInformation(
-            "Compliance rule {RuleCode} driver {DriverId}: weeks={WeekCount}, regularWeeklyRests={RegularWeeklyRests}, missingRegularWeeklyRests={MissingRegularWeeklyRests}, maxWeeklyRestMinutes={MaxWeeklyRestMinutes}, violations={ViolationCount}.",
+            "Compliance rule {RuleCode} driver {DriverId}: weeks={WeekCount}, ignoredSuspiciousActivities={IgnoredSuspiciousActivities}, regularWeeklyRests={RegularWeeklyRests}, missingRegularWeeklyRests={MissingRegularWeeklyRests}, maxWeeklyRestMinutes={MaxWeeklyRestMinutes}, violations={ViolationCount}.",
             RuleCode,
             driverId,
             weeks.Count,
+            ignoredActivities,
             regularWeeklyRests,
             missingRegularWeeklyRests,
             (long)Math.Round(maxWeeklyRest.TotalMinutes),
@@ -86,23 +91,42 @@ public class RegularWeeklyRestRule : IComplianceRule
         return result;
     }
 
-    private static List<DateTime> GetWeekRanges(IReadOnlyList<TimelineActivity> timeline)
+    private static IReadOnlyList<TimelineActivity> GetValidTimeline(IReadOnlyList<TimelineActivity> timeline)
+    {
+        var nowUtc = DateTime.UtcNow;
+        var earliestAllowedUtc = nowUtc.AddYears(-PastActivityYearsLimit);
+        var latestAllowedUtc = nowUtc.AddDays(FutureActivityDaysLimit);
+
+        return timeline
+            .Where(x => x.StartUtc < x.EndUtc)
+            .Where(x => x.StartUtc >= earliestAllowedUtc && x.EndUtc <= latestAllowedUtc)
+            .ToList();
+    }
+
+    private static List<DateTime> GetActiveWeekRanges(IReadOnlyList<TimelineActivity> timeline)
     {
         if (timeline.Count == 0)
         {
             return [];
         }
 
-        var firstWeek = GetIsoWeekStart(timeline.Min(x => x.StartUtc));
-        var lastWeek = GetIsoWeekStart(timeline.Max(x => x.EndUtc));
-        var weeks = new List<DateTime>();
+        var weeks = new HashSet<DateTime>();
 
-        for (var week = firstWeek; week <= lastWeek; week = week.AddDays(7))
+        foreach (var activity in timeline)
         {
-            weeks.Add(week);
+            var firstWeek = GetIsoWeekStart(activity.StartUtc);
+            var lastMoment = activity.EndUtc.AddTicks(-1);
+            var lastWeek = GetIsoWeekStart(lastMoment > activity.StartUtc ? lastMoment : activity.StartUtc);
+
+            for (var week = firstWeek; week <= lastWeek; week = week.AddDays(7))
+            {
+                weeks.Add(week);
+            }
         }
 
-        return weeks;
+        return weeks
+            .OrderBy(x => x)
+            .ToList();
     }
 
     private static IEnumerable<TimelineActivity> GetRestActivitiesForWeek(
@@ -113,7 +137,7 @@ public class RegularWeeklyRestRule : IComplianceRule
 
         return timeline
             .Where(IsRest)
-            .Where(x => x.StartUtc >= weekStart && x.StartUtc < weekEnd);
+            .Where(x => x.StartUtc < weekEnd && x.EndUtc > weekStart);
     }
 
     private static bool IsRest(TimelineActivity activity) =>

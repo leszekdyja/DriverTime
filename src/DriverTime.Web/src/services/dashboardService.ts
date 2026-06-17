@@ -7,6 +7,14 @@ type DashboardSummary = {
     driverActivitiesCount: number;
     countryEntriesCount: number;
     vehicleUsesCount: number;
+    overdueDriverDownloads: number;
+    driverDownloadsDueIn7Days: number;
+    driverDownloadsDueIn14Days: number;
+    overdueVehicleDownloads: number;
+    vehicleDownloadsDueIn7Days: number;
+    vehicleDownloadsDueIn14Days: number;
+    driversWithHighViolations: number;
+    driversWithMediumViolations: number;
     generatedAtUtc: string;
 };
 
@@ -35,6 +43,18 @@ export type DashboardData = {
     imports: DddImport[];
     latestImports: DddImport[];
     activities: DriverActivity[];
+    alerts: DashboardAlerts;
+};
+
+export type DashboardAlerts = {
+    overdueDriverDownloads: number;
+    driverDownloadsDueIn7Days: number;
+    driverDownloadsDueIn14Days: number;
+    overdueVehicleDownloads: number;
+    vehicleDownloadsDueIn7Days: number;
+    vehicleDownloadsDueIn14Days: number;
+    driversWithHighViolations: number;
+    driversWithMediumViolations: number;
 };
 
 export type DriverRisk = {
@@ -115,6 +135,16 @@ export async function getDashboardData(): Promise<DashboardData> {
         imports,
         latestImports,
         activities,
+        alerts: {
+            overdueDriverDownloads: summary.overdueDriverDownloads,
+            driverDownloadsDueIn7Days: summary.driverDownloadsDueIn7Days,
+            driverDownloadsDueIn14Days: summary.driverDownloadsDueIn14Days,
+            overdueVehicleDownloads: summary.overdueVehicleDownloads,
+            vehicleDownloadsDueIn7Days: summary.vehicleDownloadsDueIn7Days,
+            vehicleDownloadsDueIn14Days: summary.vehicleDownloadsDueIn14Days,
+            driversWithHighViolations: summary.driversWithHighViolations,
+            driversWithMediumViolations: summary.driversWithMediumViolations,
+        },
     };
 }
 

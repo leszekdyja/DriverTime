@@ -233,7 +233,10 @@ public class VehiclesController : ControllerBase
     {
         return _dbContext.Set<Vehicle>()
             .AsNoTracking()
-            .Where(x => x.CompanyId == _currentUser.CompanyId && x.Active);
+            .Where(x =>
+                x.CompanyId == _currentUser.CompanyId
+                && x.Active
+                && x.RegistrationNumber.Replace(" ", "").Length >= 5);
     }
 
     private IQueryable<VehicleUse> BuildVehicleUsesQuery(string normalizedRegistration)
@@ -243,7 +246,10 @@ public class VehiclesController : ControllerBase
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
                 && x.RegistrationNumber != null
-                && x.RegistrationNumber.Trim().ToUpper() == normalizedRegistration);
+                && x.RegistrationNumber.Replace(" ", "").Length >= 5
+                && EF.Functions.Like(
+                    normalizedRegistration,
+                    "%" + x.RegistrationNumber.Replace(" ", "").ToUpper()));
     }
 
     private static VehicleDto MapVehicle(Vehicle vehicle)
@@ -261,7 +267,10 @@ public class VehiclesController : ControllerBase
     {
         return string.IsNullOrWhiteSpace(registrationNumber)
             ? string.Empty
-            : registrationNumber.Trim().ToUpperInvariant();
+            : new string(registrationNumber
+                .Where(x => !char.IsWhiteSpace(x))
+                .ToArray())
+                .ToUpperInvariant();
     }
 
     private static int GetUsageMinutes(DateTime startUtc, DateTime endUtc)
