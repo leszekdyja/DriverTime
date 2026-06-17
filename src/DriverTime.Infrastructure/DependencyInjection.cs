@@ -1,5 +1,6 @@
 using DriverTime.Application.Companies.Services;
 using DriverTime.Application.Compliance;
+using DriverTime.Application.Downloads;
 using DriverTime.Application.Interfaces;
 using DriverTime.Infrastructure.BackgroundJobs;
 using DriverTime.Infrastructure.Compliance;
@@ -48,6 +49,8 @@ public static class DependencyInjection
         services.AddScoped<IDriverService, DriverService>();
 
         services.AddScoped<IDashboardService, DashboardService>();
+
+        services.AddScoped<IDownloadScheduleService, DownloadScheduleService>();
 
         services.AddScoped<IDriverActivityService, DriverActivityService>();
 

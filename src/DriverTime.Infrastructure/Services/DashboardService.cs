@@ -1,4 +1,6 @@
 using DriverTime.Application.Dashboard.DTOs;
+using DriverTime.Application.Downloads;
+using DriverTime.Application.Downloads.DTOs;
 using DriverTime.Application.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
@@ -11,22 +13,20 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DashboardService : IDashboardService
 {
-    private const int DriverDownloadIntervalDays = 28;
-    private const int VehicleDownloadIntervalDays = 90;
-    private const int Warning7Days = 7;
-    private const int Warning14Days = 14;
-
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
+    private readonly IDownloadScheduleService _downloadScheduleService;
     private readonly ComplianceSchedulerOptions _schedulerOptions;
 
     public DashboardService(
         DriverTimeDbContext dbContext,
         ICurrentUserService currentUser,
+        IDownloadScheduleService downloadScheduleService,
         IOptions<ComplianceSchedulerOptions> schedulerOptions)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
+        _downloadScheduleService = downloadScheduleService;
         _schedulerOptions = schedulerOptions.Value;
     }
 
@@ -35,31 +35,8 @@ public class DashboardService : IDashboardService
     {
         var now = DateTime.UtcNow;
         var companyId = _currentUser.CompanyId;
-
-        var driverLastDownloads = await _dbContext.Drivers
-            .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
-            .Select(x => x.DddFiles
-                .OrderByDescending(file => file.UploadedAtUtc)
-                .Select(file => (DateTime?)file.UploadedAtUtc)
-                .FirstOrDefault())
-            .ToListAsync(cancellationToken);
-
-        var vehicleLastDownloads = await _dbContext.Set<Vehicle>()
-            .AsNoTracking()
-            .Where(x => x.CompanyId == companyId && x.Active)
-            .Select(x => _dbContext.VehicleUses
-                .Where(vehicleUse =>
-                    vehicleUse.DddFile.CompanyId == companyId
-                    && vehicleUse.RegistrationNumber != null
-                    && vehicleUse.RegistrationNumber.Replace(" ", "").Length >= 5
-                    && EF.Functions.Like(
-                        x.RegistrationNumber.Replace(" ", "").ToUpper(),
-                        "%" + vehicleUse.RegistrationNumber.Replace(" ", "").ToUpper()))
-                .OrderByDescending(vehicleUse => vehicleUse.DddFile.UploadedAtUtc)
-                .Select(vehicleUse => (DateTime?)vehicleUse.DddFile.UploadedAtUtc)
-                .FirstOrDefault())
-            .ToListAsync(cancellationToken);
+        var driverDownloads = await _downloadScheduleService.GetDriverDownloadsAsync(companyId, cancellationToken);
+        var vehicleDownloads = await _downloadScheduleService.GetVehicleDownloadsAsync(companyId, cancellationToken);
 
         var highSeverityDrivers = await _dbContext.Violations
             .AsNoTracking()
@@ -97,18 +74,13 @@ public class DashboardService : IDashboardService
                 .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
             CountryEntriesCount = await _dbContext.CountryEntries
                 .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
-            OverdueDriverDownloads = driverLastDownloads.Count(x =>
-                IsOverdue(x, DriverDownloadIntervalDays, now)),
-            DriverDownloadsDueIn7Days = driverLastDownloads.Count(x =>
-                IsDueWithinDays(x, DriverDownloadIntervalDays, Warning7Days, now)),
-            DriverDownloadsDueIn14Days = driverLastDownloads.Count(x =>
-                IsDueWithinDays(x, DriverDownloadIntervalDays, Warning14Days, now)),
-            OverdueVehicleDownloads = vehicleLastDownloads.Count(x =>
-                IsOverdue(x, VehicleDownloadIntervalDays, now)),
-            VehicleDownloadsDueIn7Days = vehicleLastDownloads.Count(x =>
-                IsDueWithinDays(x, VehicleDownloadIntervalDays, Warning7Days, now)),
-            VehicleDownloadsDueIn14Days = vehicleLastDownloads.Count(x =>
-                IsDueWithinDays(x, VehicleDownloadIntervalDays, Warning14Days, now)),
+            OverdueDriverDownloads = driverDownloads.Count(x => x.Status == DownloadStatus.Overdue),
+            DriverDownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7),
+            DownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7) + CountDownloadsDueInDays(vehicleDownloads, 7),
+            DriverDownloadsDueIn14Days = CountDownloadsDueInDays(driverDownloads, 14),
+            OverdueVehicleDownloads = vehicleDownloads.Count(x => x.Status == DownloadStatus.Overdue),
+            VehicleDownloadsDueIn7Days = CountDownloadsDueInDays(vehicleDownloads, 7),
+            VehicleDownloadsDueIn14Days = CountDownloadsDueInDays(vehicleDownloads, 14),
             DriversWithHighViolations = highSeverityDrivers,
             DriversWithMediumViolations = mediumSeverityDrivers,
             GeneratedAtUtc = now
@@ -190,42 +162,35 @@ public class DashboardService : IDashboardService
     private static int? GetDaysSince(DateTime? value, DateTime now) =>
         value.HasValue ? Math.Max((now.Date - value.Value.Date).Days, 0) : null;
 
-    private static bool IsOverdue(
-        DateTime? lastDownloadUtc,
-        int intervalDays,
-        DateTime now)
+    private static int CountDownloadsDueInDays<TDownload>(
+        IReadOnlyList<TDownload> downloads,
+        int days)
+        where TDownload : class
     {
-        var daysUntilDue = GetDaysUntilDue(lastDownloadUtc, intervalDays, now);
-
-        return !daysUntilDue.HasValue || daysUntilDue.Value < 0;
+        return downloads.Count(x =>
+            GetDownloadStatus(x) != DownloadStatus.Overdue
+            && GetDownloadDaysUntilDue(x).HasValue
+            && GetDownloadDaysUntilDue(x)!.Value <= days);
     }
 
-    private static bool IsDueWithinDays(
-        DateTime? lastDownloadUtc,
-        int intervalDays,
-        int days,
-        DateTime now)
+    private static string GetDownloadStatus<TDownload>(TDownload download)
     {
-        var daysUntilDue = GetDaysUntilDue(lastDownloadUtc, intervalDays, now);
-
-        return daysUntilDue.HasValue
-            && daysUntilDue.Value >= 0
-            && daysUntilDue.Value <= days;
-    }
-
-    private static int? GetDaysUntilDue(
-        DateTime? lastDownloadUtc,
-        int intervalDays,
-        DateTime now)
-    {
-        if (!lastDownloadUtc.HasValue)
+        return download switch
         {
-            return null;
-        }
+            DriverDownloadDto driver => driver.Status,
+            VehicleDownloadDto vehicle => vehicle.Status,
+            _ => DownloadStatus.Ok
+        };
+    }
 
-        var nextRequiredDownloadUtc = lastDownloadUtc.Value.AddDays(intervalDays);
-
-        return (int)Math.Floor((nextRequiredDownloadUtc.Date - now.Date).TotalDays);
+    private static int? GetDownloadDaysUntilDue<TDownload>(TDownload download)
+    {
+        return download switch
+        {
+            DriverDownloadDto driver => driver.DaysUntilDue,
+            VehicleDownloadDto vehicle => vehicle.DaysUntilDue,
+            _ => null
+        };
     }
 
     private static int CalculateRiskScore(DriverRiskDto driver)

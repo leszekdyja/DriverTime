@@ -14,6 +14,8 @@ public class DashboardDto
 
     public int DriverDownloadsDueIn7Days { get; set; }
 
+    public int DownloadsDueIn7Days { get; set; }
+
     public int DriverDownloadsDueIn14Days { get; set; }
 
     public int OverdueVehicleDownloads { get; set; }

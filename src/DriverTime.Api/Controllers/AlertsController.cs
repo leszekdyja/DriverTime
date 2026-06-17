@@ -1,4 +1,6 @@
 using DriverTime.Application.Alerts.DTOs;
+using DriverTime.Application.Downloads;
+using DriverTime.Application.Downloads.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
@@ -13,20 +15,19 @@ namespace DriverTime.Api.Controllers;
 [Route("api/alerts")]
 public class AlertsController : ControllerBase
 {
-    private const int DriverDownloadIntervalDays = 28;
-    private const int VehicleDownloadIntervalDays = 90;
-    private const int WarningDays = 7;
-
     private readonly DriverTimeDbContext _dbContext;
+    private readonly IDownloadScheduleService _downloadScheduleService;
     private readonly ICurrentUserService _currentUser;
     private readonly ImportRetryOptions _importRetryOptions;
 
     public AlertsController(
         DriverTimeDbContext dbContext,
+        IDownloadScheduleService downloadScheduleService,
         ICurrentUserService currentUser,
         IOptions<ImportRetryOptions> importRetryOptions)
     {
         _dbContext = dbContext;
+        _downloadScheduleService = downloadScheduleService;
         _currentUser = currentUser;
         _importRetryOptions = importRetryOptions.Value;
     }
@@ -40,12 +41,11 @@ public class AlertsController : ControllerBase
             return Unauthorized();
         }
 
-        var nowUtc = DateTime.UtcNow;
         var alerts = new List<AlertDto>();
 
         alerts.AddRange(await BuildComplianceAlertsAsync(cancellationToken));
-        alerts.AddRange(await BuildDriverDownloadAlertsAsync(nowUtc, cancellationToken));
-        alerts.AddRange(await BuildVehicleDownloadAlertsAsync(nowUtc, cancellationToken));
+        alerts.AddRange(await BuildDriverDownloadAlertsAsync(cancellationToken));
+        alerts.AddRange(await BuildVehicleDownloadAlertsAsync(cancellationToken));
         alerts.AddRange(await BuildImportAlertsAsync(cancellationToken));
 
         return Ok(alerts
@@ -110,43 +110,25 @@ public class AlertsController : ControllerBase
     }
 
     private async Task<List<AlertDto>> BuildDriverDownloadAlertsAsync(
-        DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        var drivers = await _dbContext.Drivers
-            .AsNoTracking()
-            .Where(x => x.CompanyId == _currentUser.CompanyId)
-            .Select(x => new
-            {
-                x.Id,
-                x.FirstName,
-                x.LastName,
-                x.CardNumber,
-                CreatedAtUtc = x.CreatedAtUtc,
-                LastDownloadUtc = x.DddFiles
-                    .OrderByDescending(file => file.UploadedAtUtc)
-                    .Select(file => (DateTime?)file.UploadedAtUtc)
-                    .FirstOrDefault()
-            })
-            .ToListAsync(cancellationToken);
+        var drivers = await _downloadScheduleService.GetDriverDownloadsAsync(
+            _currentUser.CompanyId,
+            cancellationToken);
 
         return drivers
+            .Where(x => x.Status is DownloadStatus.Overdue or DownloadStatus.Warning)
             .Select(x =>
             {
-                var nextRequiredDownloadUtc = x.LastDownloadUtc?.AddDays(DriverDownloadIntervalDays);
-                var daysUntilDue = GetDaysUntilDue(nextRequiredDownloadUtc, nowUtc);
-
-                if (!IsOverdueOrDue(daysUntilDue))
-                {
-                    return null;
-                }
-
-                var isOverdue = !daysUntilDue.HasValue || daysUntilDue.Value < 0;
+                var isOverdue = x.Status == DownloadStatus.Overdue;
                 var driverName = $"{x.FirstName} {x.LastName}".Trim();
 
                 return new AlertDto
                 {
-                    Id = $"driver-download-{x.Id}",
+                    Id = BuildDownloadAlertId(
+                        isOverdue ? "driver-download-overdue" : "driver-download-due",
+                        x.DriverId,
+                        x.NextRequiredDownloadUtc),
                     Type = isOverdue ? "DriverDownloadOverdue" : "DriverDownloadDue",
                     Category = "Downloads",
                     Severity = isOverdue ? "Critical" : "Warning",
@@ -155,61 +137,36 @@ public class AlertsController : ControllerBase
                         ? "Karta kierowcy wymaga odczytu co 28 dni."
                         : "Brak zapisanego odczytu karty kierowcy.",
                     RelatedEntityType = "Driver",
-                    RelatedEntityId = x.Id,
+                    RelatedEntityId = x.DriverId,
                     RelatedEntityName = string.IsNullOrWhiteSpace(driverName) ? x.CardNumber : driverName,
-                    DueDateUtc = nextRequiredDownloadUtc,
-                    CreatedAtUtc = x.LastDownloadUtc ?? x.CreatedAtUtc,
+                    DueDateUtc = x.NextRequiredDownloadUtc,
+                    CreatedAtUtc = x.LastDownloadUtc ?? DateTime.UtcNow,
                     Status = "Open",
                     ActionUrl = "/downloads"
                 };
             })
-            .Where(x => x is not null)
-            .Cast<AlertDto>()
             .ToList();
     }
 
     private async Task<List<AlertDto>> BuildVehicleDownloadAlertsAsync(
-        DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        var vehicles = await _dbContext.Set<Vehicle>()
-            .AsNoTracking()
-            .Where(x => x.CompanyId == _currentUser.CompanyId && x.Active)
-            .Select(x => new
-            {
-                x.Id,
-                x.RegistrationNumber,
-                x.CreatedAt,
-                LastDownloadUtc = _dbContext.VehicleUses
-                    .Where(vehicleUse =>
-                        vehicleUse.DddFile.CompanyId == _currentUser.CompanyId
-                        && vehicleUse.RegistrationNumber != null
-                        && vehicleUse.RegistrationNumber.Replace(" ", "").Length >= 5
-                        && EF.Functions.Like(
-                            x.RegistrationNumber.Replace(" ", "").ToUpper(),
-                            "%" + vehicleUse.RegistrationNumber.Replace(" ", "").ToUpper()))
-                    .OrderByDescending(vehicleUse => vehicleUse.DddFile.UploadedAtUtc)
-                    .Select(vehicleUse => (DateTime?)vehicleUse.DddFile.UploadedAtUtc)
-                    .FirstOrDefault()
-            })
-            .ToListAsync(cancellationToken);
+        var vehicles = await _downloadScheduleService.GetVehicleDownloadsAsync(
+            _currentUser.CompanyId,
+            cancellationToken);
 
         return vehicles
+            .Where(x => x.Status is DownloadStatus.Overdue or DownloadStatus.Warning)
             .Select(x =>
             {
-                var nextRequiredDownloadUtc = x.LastDownloadUtc?.AddDays(VehicleDownloadIntervalDays);
-                var daysUntilDue = GetDaysUntilDue(nextRequiredDownloadUtc, nowUtc);
-
-                if (!IsOverdueOrDue(daysUntilDue))
-                {
-                    return null;
-                }
-
-                var isOverdue = !daysUntilDue.HasValue || daysUntilDue.Value < 0;
+                var isOverdue = x.Status == DownloadStatus.Overdue;
 
                 return new AlertDto
                 {
-                    Id = $"vehicle-download-{x.Id}",
+                    Id = BuildDownloadAlertId(
+                        isOverdue ? "vehicle-download-overdue" : "vehicle-download-due",
+                        x.VehicleId,
+                        x.NextRequiredDownloadUtc),
                     Type = isOverdue ? "VehicleDownloadOverdue" : "VehicleDownloadDue",
                     Category = "Downloads",
                     Severity = isOverdue ? "Critical" : "Warning",
@@ -218,16 +175,14 @@ public class AlertsController : ControllerBase
                         ? "Tachograf lub pojazd wymaga odczytu co 90 dni."
                         : "Brak zapisanego odczytu tachografu dla pojazdu.",
                     RelatedEntityType = "Vehicle",
-                    RelatedEntityId = x.Id,
+                    RelatedEntityId = x.VehicleId,
                     RelatedEntityName = x.RegistrationNumber,
-                    DueDateUtc = nextRequiredDownloadUtc,
-                    CreatedAtUtc = x.LastDownloadUtc ?? x.CreatedAt,
+                    DueDateUtc = x.NextRequiredDownloadUtc,
+                    CreatedAtUtc = x.LastDownloadUtc ?? DateTime.UtcNow,
                     Status = "Open",
                     ActionUrl = "/downloads"
                 };
             })
-            .Where(x => x is not null)
-            .Cast<AlertDto>()
             .ToList();
     }
 
@@ -296,27 +251,16 @@ public class AlertsController : ControllerBase
             "critical" or "high" or "severe" or "very serious" or "very-serious";
     }
 
-    private static bool IsMediumSeverity(string severity)
+    private static string BuildDownloadAlertId(
+        string type,
+        Guid entityId,
+        DateTime? dueDateUtc)
     {
-        return severity.Trim().ToLowerInvariant() is
-            "warning" or "medium" or "serious";
-    }
+        var dueKey = dueDateUtc.HasValue
+            ? dueDateUtc.Value.Date.ToString("yyyyMMdd")
+            : "no-download";
 
-    private static int? GetDaysUntilDue(
-        DateTime? dueDateUtc,
-        DateTime nowUtc)
-    {
-        if (!dueDateUtc.HasValue)
-        {
-            return null;
-        }
-
-        return (int)Math.Floor((dueDateUtc.Value.Date - nowUtc.Date).TotalDays);
-    }
-
-    private static bool IsOverdueOrDue(int? daysUntilDue)
-    {
-        return !daysUntilDue.HasValue || daysUntilDue.Value <= WarningDays;
+        return $"{type}-{entityId}-{dueKey}";
     }
 
     private static int GetSeverityRank(string severity)
