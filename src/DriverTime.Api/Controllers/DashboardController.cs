@@ -31,4 +31,12 @@ public class DashboardController : ControllerBase
         var overview = await _dashboardService.GetRiskOverviewAsync(cancellationToken);
         return Ok(overview);
     }
+
+    [HttpGet("compliance-runs")]
+    public async Task<ActionResult<ComplianceRunDashboardStatsDto>> GetComplianceRunStats(
+        CancellationToken cancellationToken)
+    {
+        var stats = await _dashboardService.GetComplianceRunStatsAsync(cancellationToken);
+        return Ok(stats);
+    }
 }

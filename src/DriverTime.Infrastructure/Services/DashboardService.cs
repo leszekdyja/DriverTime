@@ -1,8 +1,11 @@
 using DriverTime.Application.Dashboard.DTOs;
 using DriverTime.Application.DTOs;
 using DriverTime.Application.Interfaces;
+using DriverTime.Domain.Entities;
+using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -10,13 +13,16 @@ public class DashboardService : IDashboardService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
+    private readonly ComplianceSchedulerOptions _schedulerOptions;
 
     public DashboardService(
         DriverTimeDbContext dbContext,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IOptions<ComplianceSchedulerOptions> schedulerOptions)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
+        _schedulerOptions = schedulerOptions.Value;
     }
 
     public async Task<DashboardDto> GetDashboardAsync(
@@ -140,4 +146,82 @@ public class DashboardService : IDashboardService
         >= 4 => "Medium",
         _ => "Low"
     };
+
+    public async Task<ComplianceRunDashboardStatsDto> GetComplianceRunStatsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var recentRuns = await _dbContext.ComplianceRuns
+            .AsNoTracking()
+            .Include(x => x.Violations)
+            .Where(x => x.CompanyId == _currentUser.CompanyId)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var lastRun = recentRuns.FirstOrDefault();
+        var lastSchedulerRun = recentRuns.FirstOrDefault(x =>
+            x.Trigger.Equals("Scheduler", StringComparison.OrdinalIgnoreCase));
+
+        var lastRunGroup = lastRun is null
+            ? new List<ComplianceRun>()
+            : recentRuns
+                .Where(x =>
+                    x.Trigger.Equals(lastRun.Trigger, StringComparison.OrdinalIgnoreCase) &&
+                    x.CreatedAtUtc >= lastRun.CreatedAtUtc.AddMinutes(-1) &&
+                    x.CreatedAtUtc <= lastRun.CreatedAtUtc.AddMinutes(1))
+                .ToList();
+
+        return new ComplianceRunDashboardStatsDto
+        {
+            GeneratedAtUtc = now,
+            RecentRunsCount = recentRuns.Count,
+            LastStatus = GetRunStatus(lastRun),
+            LastRunAtUtc = lastRun?.CreatedAtUtc,
+            LastRunViolationsCount = lastRun?.ViolationsCount ?? 0,
+            HighViolationsCount = CountSeverity(lastRun, "high"),
+            MediumViolationsCount = CountSeverity(lastRun, "medium"),
+            LowViolationsCount = CountSeverity(lastRun, "low"),
+            DriversInLastRunCount = lastRunGroup
+                .Select(x => x.DriverId)
+                .Distinct()
+                .Count(),
+            SchedulerEnabled = _schedulerOptions.Enabled,
+            LastSchedulerRunAtUtc = lastSchedulerRun?.CreatedAtUtc,
+            LastSchedulerStatus = GetRunStatus(lastSchedulerRun),
+            LastSchedulerViolationsCount = lastSchedulerRun?.ViolationsCount ?? 0
+        };
+    }
+
+    private static string GetRunStatus(ComplianceRun? run)
+    {
+        if (run is null)
+        {
+            return "NoData";
+        }
+
+        return run.FinishedAtUtc.HasValue ? "Completed" : "Running";
+    }
+
+    private static int CountSeverity(
+        ComplianceRun? run,
+        string severityGroup)
+    {
+        if (run is null)
+        {
+            return 0;
+        }
+
+        return run.Violations.Count(x => GetSeverityGroup(x.Severity) == severityGroup);
+    }
+
+    private static string GetSeverityGroup(string severity)
+    {
+        return severity.Trim().ToLowerInvariant() switch
+        {
+            "critical" or "high" or "severe" or "very serious" or "very-serious" => "high",
+            "warning" or "medium" or "serious" => "medium",
+            _ => "low"
+        };
+    }
 }

@@ -11,15 +11,18 @@ public class ComplianceController : ControllerBase
 {
     private readonly IComplianceEngineService _complianceEngine;
     private readonly IComplianceEvaluationService _complianceEvaluationService;
+    private readonly IComplianceRunHistoryService _complianceRunHistoryService;
     private readonly ICurrentUserService _currentUser;
 
     public ComplianceController(
         IComplianceEngineService complianceEngine,
         IComplianceEvaluationService complianceEvaluationService,
+        IComplianceRunHistoryService complianceRunHistoryService,
         ICurrentUserService currentUser)
     {
         _complianceEngine = complianceEngine;
         _complianceEvaluationService = complianceEvaluationService;
+        _complianceRunHistoryService = complianceRunHistoryService;
         _currentUser = currentUser;
     }
 
@@ -88,5 +91,83 @@ public class ComplianceController : ControllerBase
             DriverId = driverId,
             SavedViolationsCount = savedViolationsCount
         });
+    }
+
+    [HttpPost("drivers/{driverId:guid}/runs")]
+    public async Task<ActionResult<ComplianceRunDto>> CreateRunForDriver(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                message = "Wymagane jest zalogowanie użytkownika."
+            });
+        }
+
+        var preview = await _complianceEngine.PreviewForDriverAsync(
+            _currentUser.CompanyId,
+            driverId,
+            cancellationToken);
+
+        if (preview is null)
+        {
+            return NotFound(new
+            {
+                message = "Nie znaleziono kierowcy w bieżącej firmie."
+            });
+        }
+
+        var run = await _complianceRunHistoryService.SaveRunAsync(
+            _currentUser.CompanyId,
+            driverId,
+            preview,
+            "manual",
+            cancellationToken);
+
+        return Ok(run);
+    }
+
+    [HttpGet("drivers/{driverId:guid}/runs")]
+    public async Task<ActionResult<IReadOnlyList<ComplianceRunDto>>> GetDriverRuns(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                message = "Wymagane jest zalogowanie użytkownika."
+            });
+        }
+
+        var runs = await _complianceRunHistoryService.GetDriverRunsAsync(
+            _currentUser.CompanyId,
+            driverId,
+            cancellationToken);
+
+        return Ok(runs);
+    }
+
+    [HttpGet("runs/{runId:guid}")]
+    public async Task<ActionResult<ComplianceRunDto>> GetRun(
+        Guid runId,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                message = "Wymagane jest zalogowanie użytkownika."
+            });
+        }
+
+        var run = await _complianceRunHistoryService.GetRunAsync(
+            _currentUser.CompanyId,
+            runId,
+            cancellationToken);
+
+        return run is null ? NotFound() : Ok(run);
     }
 }

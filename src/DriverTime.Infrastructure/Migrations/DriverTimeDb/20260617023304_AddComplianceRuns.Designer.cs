@@ -3,6 +3,7 @@ using System;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 {
     [DbContext(typeof(DriverTimeDbContext))]
-    partial class DriverTimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617023304_AddComplianceRuns")]
+    partial class AddComplianceRuns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -532,20 +535,17 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Vin")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId", "RegistrationNumber")
-                        .IsUnique();
+                    b.HasIndex("CompanyId");
 
-                    b.ToTable("Vehicles", (string)null);
+                    b.ToTable("Vehicle");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.VehicleUse", b =>

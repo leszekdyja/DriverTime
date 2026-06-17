@@ -25,11 +25,18 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<VehicleUse> VehicleUses => Set<VehicleUse>();
 
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+
     public DbSet<CountryEntry> CountryEntries => Set<CountryEntry>();
 
     public DbSet<Driver> Drivers => Set<Driver>();
 
     public DbSet<Violation> Violations => Set<Violation>();
+
+    public DbSet<ComplianceRun> ComplianceRuns => Set<ComplianceRun>();
+
+    public DbSet<ComplianceRunViolation> ComplianceRunViolations =>
+        Set<ComplianceRunViolation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -148,6 +155,26 @@ public class DriverTimeDbContext : DbContext
             entity.HasKey(x => x.Id);
         });
 
+        modelBuilder.Entity<Vehicle>(entity =>
+        {
+            entity.ToTable("Vehicles");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.RegistrationNumber })
+                .IsUnique();
+
+            entity.Property(x => x.RegistrationNumber)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Vin)
+                .HasMaxLength(100);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.Vehicles)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<CountryEntry>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -189,6 +216,55 @@ public class DriverTimeDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.DriverId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComplianceRun>(entity =>
+        {
+            entity.ToTable("compliance_runs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.CreatedAtUtc });
+
+            entity.Property(x => x.Trigger)
+                .HasMaxLength(100);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Violations)
+                .WithOne(x => x.ComplianceRun)
+                .HasForeignKey(x => x.ComplianceRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComplianceRunViolation>(entity =>
+        {
+            entity.ToTable("compliance_run_violations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ComplianceRunId);
+
+            entity.Property(x => x.Code)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.RuleName)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Severity)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.MetadataJson)
+                .HasMaxLength(8000);
         });
     }
 }

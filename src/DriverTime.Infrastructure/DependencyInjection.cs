@@ -1,6 +1,7 @@
 using DriverTime.Application.Companies.Services;
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Interfaces;
+using DriverTime.Infrastructure.BackgroundJobs;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
 using DriverTime.Infrastructure.Parsing;
@@ -28,6 +29,9 @@ public static class DependencyInjection
 
         services.Configure<ImportRetryOptions>(
             configuration.GetSection("ImportRetry"));
+
+        services.Configure<ComplianceSchedulerOptions>(
+            configuration.GetSection("ComplianceScheduler"));
 
         services.AddScoped<ICompanyService, DriverTime.Application.Companies.Services.CompanyService>();
 
@@ -58,6 +62,7 @@ public static class DependencyInjection
         services.AddScoped<ITimelineBuilderService, TimelineBuilderService>();
         services.AddScoped<IComplianceEngineService, ComplianceEngineService>();
         services.AddScoped<IComplianceEvaluationService, ComplianceEvaluationService>();
+        services.AddScoped<IComplianceRunHistoryService, ComplianceRunHistoryService>();
         services.AddScoped<IComplianceRule, DailyDrivingLimitRule>();
         services.AddScoped<IComplianceRule, ContinuousDrivingBreakRule>();
         services.AddScoped<IComplianceRule, DailyRestViolationRule>();
@@ -73,6 +78,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<DatabaseSeeder>();
+        services.AddHostedService<ComplianceSchedulerWorker>();
 
         return services;
     }

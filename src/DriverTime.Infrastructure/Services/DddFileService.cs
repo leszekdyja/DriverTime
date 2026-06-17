@@ -311,6 +311,7 @@ public class DddFileService : IDddFileService
         AddActivities(dddFile, parseResult.Activities);
         AddVehicleUses(dddFile, parseResult.VehicleUses);
         AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
+        await AddMissingVehiclesAsync(companyId, parseResult.VehicleUses);
         _dbContext.DddFiles.Add(dddFile);
 
         await _dbContext.SaveChangesAsync();
@@ -564,6 +565,74 @@ public class DddFileService : IDddFileService
             });
         }
     }
+
+    private async Task AddMissingVehiclesAsync(
+        Guid companyId,
+        IEnumerable<ParsedVehicleUseDto> vehicleUses)
+    {
+        var registrationNumbers = vehicleUses
+            .Select(x => NormalizeVehicleRegistration(x.VehicleRegistration))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (registrationNumbers.Count == 0)
+        {
+            _logger.LogInformation(
+                "DDD import vehicle sync completed for company {CompanyId}. UniqueRegistrations={UniqueRegistrations}, ExistingVehicles={ExistingVehicles}, CreatedVehicles={CreatedVehicles}.",
+                companyId,
+                0,
+                0,
+                0);
+
+            return;
+        }
+
+        var vehicles = _dbContext.Set<Vehicle>();
+        var existingRegistrationNumbers = await vehicles
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId)
+            .Select(x => x.RegistrationNumber)
+            .ToListAsync();
+
+        var existing = existingRegistrationNumbers
+            .Select(NormalizeVehicleRegistration)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingCount = registrationNumbers.Count(existing.Contains);
+        var createdCount = 0;
+
+        foreach (var registrationNumber in registrationNumbers)
+        {
+            if (existing.Contains(registrationNumber))
+            {
+                continue;
+            }
+
+            vehicles.Add(new Vehicle
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = companyId,
+                RegistrationNumber = registrationNumber,
+                Vin = string.Empty,
+                Active = true
+            });
+
+            existing.Add(registrationNumber);
+            createdCount++;
+        }
+
+        _logger.LogInformation(
+            "DDD import vehicle sync completed for company {CompanyId}. UniqueRegistrations={UniqueRegistrations}, ExistingVehicles={ExistingVehicles}, CreatedVehicles={CreatedVehicles}.",
+            companyId,
+            registrationNumbers.Count,
+            existingCount,
+            createdCount);
+    }
+
+    private static string NormalizeVehicleRegistration(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToUpperInvariant();
 
     private static void AddCountryEntries(
         DddFile dddFile,

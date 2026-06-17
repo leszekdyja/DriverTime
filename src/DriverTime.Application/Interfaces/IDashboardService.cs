@@ -10,4 +10,7 @@ public interface IDashboardService
 
     Task<DriverRiskOverviewDto> GetRiskOverviewAsync(
         CancellationToken cancellationToken = default);
+
+    Task<ComplianceRunDashboardStatsDto> GetComplianceRunStatsAsync(
+        CancellationToken cancellationToken = default);
 }

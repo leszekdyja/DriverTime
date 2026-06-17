@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiClient";
 import { getDddImports, type DddImport } from "./dddImportsService";
+import type { DownloadDashboard } from "./downloadsService";
 
 type DashboardSummary = {
     dddFilesCount: number;
@@ -60,6 +61,22 @@ export type DriverRiskOverview = {
     drivers: DriverRisk[];
 };
 
+export type ComplianceRunDashboardStats = {
+    generatedAtUtc: string;
+    recentRunsCount: number;
+    lastStatus: "NoData" | "Running" | "Completed" | string;
+    lastRunAtUtc: string | null;
+    lastRunViolationsCount: number;
+    highViolationsCount: number;
+    mediumViolationsCount: number;
+    lowViolationsCount: number;
+    driversInLastRunCount: number;
+    schedulerEnabled: boolean;
+    lastSchedulerRunAtUtc: string | null;
+    lastSchedulerStatus: "NoData" | "Running" | "Completed" | string;
+    lastSchedulerViolationsCount: number;
+};
+
 async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     const response = await apiFetch(path);
 
@@ -105,6 +122,20 @@ export function getDriverRiskOverview(): Promise<DriverRiskOverview> {
     return getJson<DriverRiskOverview>(
         "/api/dashboard/risk-overview",
         "Nie udało się pobrać danych ryzyka kierowców.",
+    );
+}
+
+export function getComplianceRunDashboardStats(): Promise<ComplianceRunDashboardStats> {
+    return getJson<ComplianceRunDashboardStats>(
+        "/api/dashboard/compliance-runs",
+        "Nie udało się pobrać statystyk compliance.",
+    );
+}
+
+export function getDownloadDashboard(): Promise<DownloadDashboard> {
+    return getJson<DownloadDashboard>(
+        "/api/downloads/dashboard",
+        "Nie udało się pobrać podsumowania terminów odczytów.",
     );
 }
 

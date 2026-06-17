@@ -12,10 +12,14 @@ import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     checkApiHealth,
+    getComplianceRunDashboardStats,
     getDashboardData,
+    getDownloadDashboard,
+    type ComplianceRunDashboardStats,
     type DashboardData,
     type DriverActivity,
 } from "../services/dashboardService";
+import type { DownloadDashboard } from "../services/downloadsService";
 import {
     getDriverViolations,
     type DriverViolation,
@@ -56,6 +60,18 @@ const violationSeverityDefinitions = [
 function formatDate(value: string | null) {
     if (!value) {
         return "Brak importów";
+    }
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? "Brak danych"
+        : dateFormatter.format(date);
+}
+
+function formatOptionalDate(value: string | null) {
+    if (!value) {
+        return "Brak danych";
     }
 
     const date = new Date(value);
@@ -111,6 +127,20 @@ function normalizeViolationGroup(severity: string) {
     }
 
     return "info";
+}
+
+function formatRunStatus(status: string) {
+    const normalized = status.trim().toLowerCase();
+
+    if (normalized === "completed") {
+        return "Zakończony";
+    }
+
+    if (normalized === "running") {
+        return "W trakcie";
+    }
+
+    return "Brak danych";
 }
 
 function toDayKey(date: Date) {
@@ -190,9 +220,15 @@ function sumActivitiesDuration(activities: DriverActivity[]) {
 export default function DashboardPage() {
     const [dashboard, setDashboard] = useState<DashboardData | null>(null);
     const [violations, setViolations] = useState<DriverViolation[]>([]);
+    const [complianceStats, setComplianceStats] = useState<ComplianceRunDashboardStats | null>(null);
+    const [downloadStats, setDownloadStats] = useState<DownloadDashboard | null>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isComplianceStatsLoading, setIsComplianceStatsLoading] = useState(true);
+    const [isDownloadStatsLoading, setIsDownloadStatsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [complianceStatsError, setComplianceStatsError] = useState("");
+    const [downloadStatsError, setDownloadStatsError] = useState("");
     const [apiOnline, setApiOnline] = useState<boolean | null>(null);
     const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
@@ -203,16 +239,39 @@ export default function DashboardPage() {
             setIsRefreshing(true);
         }
 
+        setIsComplianceStatsLoading(true);
+        setIsDownloadStatsLoading(true);
+
         try {
-            const [dashboardData, violationData, healthStatus] = await Promise.all([
+            const [dashboardData, violationData, healthStatus, complianceResult, downloadResult] = await Promise.all([
                 getDashboardData(),
                 getDriverViolations(),
                 checkApiHealth().catch(() => false),
+                getComplianceRunDashboardStats()
+                    .then((data) => ({ data, error: "" }))
+                    .catch((statsError) => ({
+                        data: null,
+                        error: statsError instanceof Error
+                            ? statsError.message
+                            : "Wystąpił błąd podczas pobierania statystyk compliance.",
+                    })),
+                getDownloadDashboard()
+                    .then((data) => ({ data, error: "" }))
+                    .catch((statsError) => ({
+                        data: null,
+                        error: statsError instanceof Error
+                            ? statsError.message
+                            : "Wystąpił błąd podczas pobierania terminów odczytów.",
+                    })),
             ]);
 
             setDashboard(dashboardData);
             setViolations(violationData);
             setApiOnline(healthStatus);
+            setComplianceStats(complianceResult.data);
+            setComplianceStatsError(complianceResult.error);
+            setDownloadStats(downloadResult.data);
+            setDownloadStatsError(downloadResult.error);
             setLastRefreshedAt(new Date());
             setError("");
         } catch (loadError) {
@@ -225,6 +284,8 @@ export default function DashboardPage() {
         } finally {
             setIsInitialLoading(false);
             setIsRefreshing(false);
+            setIsComplianceStatsLoading(false);
+            setIsDownloadStatsLoading(false);
         }
     }, []);
 
@@ -238,7 +299,7 @@ export default function DashboardPage() {
         return () => window.clearInterval(intervalId);
     }, [loadDashboard]);
 
-    const activityStatistics = useMemo<ActivityChartData[]>(() => {
+    const activityStatistics = useMemo<ActivityChartData[]>((() => {
         return activityDefinitions.map((definition) => {
             const matchingActivities =
                 dashboard?.activities.filter(
@@ -254,7 +315,7 @@ export default function DashboardPage() {
                 hours: Number((duration / 3600).toFixed(2)),
             };
         });
-    }, [dashboard]);
+    }), [dashboard]);
 
     const importChartData = useMemo<ImportChartData[]>(() => {
         return dashboard ? buildImportChartData(dashboard) : [];
@@ -402,6 +463,91 @@ export default function DashboardPage() {
                 <MetricCard label="Pojazdy" value={dashboard.totalVehicles} description="Użycia pojazdów z DDD" tone="green" icon="TRK" />
                 <MetricCard label="Naruszenia" value={violationSummary.total} description={`${violationSummary.severe} bardzo poważnych`} tone={violationSummary.severe > 0 ? "red" : "amber"} icon="!" />
                 <MetricCard label="Naruszenia dziś" value={violationSummary.today} description="Wykryte dla bieżącej daty" tone={violationSummary.today > 0 ? "red" : "green"} icon="24H" />
+            </section>
+
+            <section className="dashboard-widget latest-imports-widget">
+                <div className="dashboard-widget-heading">
+                    <div>
+                        <span>Download Compliance</span>
+                        <h3>Terminy pobrań z kart i tachografów</h3>
+                        <p>Karty kierowców: 28 dni. Tachografy i pojazdy: 90 dni.</p>
+                    </div>
+                    <Link to="/downloads">Zobacz terminy</Link>
+                </div>
+
+                {isDownloadStatsLoading ? (
+                    <TableSkeleton rows={2} columns={4} />
+                ) : downloadStatsError ? (
+                    <p className="driver-risk-error" role="alert">{downloadStatsError}</p>
+                ) : !downloadStats ? (
+                    <EmptyState
+                        title="Brak danych odczytów"
+                        description="Dane pojawią się po dodaniu kierowców, pojazdów i importów DDD."
+                    />
+                ) : (
+                    <div className="violation-widget-summary">
+                        <MetricCard label="Kierowcy po terminie" value={downloadStats.overdueDrivers} tone={downloadStats.overdueDrivers > 0 ? "red" : "green"} description="Karta kierowcy powyżej 28 dni" />
+                        <MetricCard label="Kierowcy do 7 dni" value={downloadStats.warningDrivers} tone={downloadStats.warningDrivers > 0 ? "amber" : "green"} description="Zbliżający się termin" />
+                        <MetricCard label="Pojazdy po terminie" value={downloadStats.overdueVehicles} tone={downloadStats.overdueVehicles > 0 ? "red" : "green"} description="Tachograf lub pojazd powyżej 90 dni" />
+                        <MetricCard label="Pojazdy do 7 dni" value={downloadStats.warningVehicles} tone={downloadStats.warningVehicles > 0 ? "amber" : "green"} description="Zbliżający się termin" />
+                    </div>
+                )}
+            </section>
+
+            <section className="dashboard-widget latest-imports-widget">
+                <div className="dashboard-widget-heading">
+                    <div>
+                        <span>ComplianceRun</span>
+                        <h3>Historia automatycznej oceny zgodności</h3>
+                        <p>Dane pochodzą z zapisanych runów compliance, bez ponownego liczenia preview na dashboardzie.</p>
+                    </div>
+                </div>
+
+                {isComplianceStatsLoading ? (
+                    <TableSkeleton rows={3} columns={4} />
+                ) : complianceStatsError ? (
+                    <p className="driver-risk-error" role="alert">{complianceStatsError}</p>
+                ) : !complianceStats || complianceStats.recentRunsCount === 0 ? (
+                    <EmptyState
+                        title="Brak historii ComplianceRun"
+                        description="Uruchom ocenę compliance ręcznie albo włącz scheduler, aby pojawiły się zapisane wyniki."
+                    />
+                ) : (
+                    <>
+                        <div className="violation-widget-summary">
+                            <MetricCard label="Ostatnie runy" value={complianceStats.recentRunsCount} tone="slate" description="Ostatnie zapisane wyniki" />
+                            <MetricCard label="Status" value={formatRunStatus(complianceStats.lastStatus)} tone={complianceStats.lastStatus === "Completed" ? "green" : "amber"} description={formatOptionalDate(complianceStats.lastRunAtUtc)} />
+                            <MetricCard label="Naruszenia" value={complianceStats.lastRunViolationsCount} tone={complianceStats.lastRunViolationsCount > 0 ? "red" : "green"} description="Z ostatniego runu" />
+                        </div>
+                        <div className="activity-metrics">
+                            <article className="activity-metric driving">
+                                <span>High</span>
+                                <strong>{complianceStats.highViolationsCount}</strong>
+                                <small>Naruszenia wysokiego priorytetu</small>
+                            </article>
+                            <article className="activity-metric work">
+                                <span>Medium</span>
+                                <strong>{complianceStats.mediumViolationsCount}</strong>
+                                <small>Naruszenia średniego priorytetu</small>
+                            </article>
+                            <article className="activity-metric rest">
+                                <span>Low</span>
+                                <strong>{complianceStats.lowViolationsCount}</strong>
+                                <small>Informacyjne wyniki compliance</small>
+                            </article>
+                            <article className="activity-metric availability">
+                                <span>Scheduler</span>
+                                <strong>{complianceStats.schedulerEnabled ? "Włączony" : "Wyłączony"}</strong>
+                                <small>Ostatni auto run: {formatOptionalDate(complianceStats.lastSchedulerRunAtUtc)}</small>
+                            </article>
+                        </div>
+                        <div className="risk-quick-stats">
+                            <span><strong>{complianceStats.driversInLastRunCount}</strong> kierowców w ostatnim cyklu</span>
+                            <span>Status schedulera: <strong>{formatRunStatus(complianceStats.lastSchedulerStatus)}</strong></span>
+                            <span>Auto naruszenia: <strong>{complianceStats.lastSchedulerViolationsCount}</strong></span>
+                        </div>
+                    </>
+                )}
             </section>
 
             <DashboardCharts

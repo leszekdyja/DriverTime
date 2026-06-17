@@ -8,6 +8,8 @@ import "../styles/layout.css";
 const navigationItems = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
     { to: "/drivers", label: "Kierowcy", icon: "drivers" },
+    { to: "/vehicles", label: "Pojazdy", icon: "vehicles" },
+    { to: "/downloads", label: "Odczyty", icon: "downloads" },
     { to: "/reports", label: "Raporty", icon: "reports" },
     { to: "/violations", label: "Naruszenia", icon: "alerts" },
     { to: "/imports", label: "Importy DDD", icon: "imports" },
@@ -113,6 +115,8 @@ function NavigationIcon({ name }: { name: string }) {
     const paths: Record<string, ReactNode> = {
         dashboard: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></>,
         drivers: <><circle cx="9" cy="8" r="4" /><path d="M3 21v-2a6 6 0 0 1 12 0v2" /><path d="M16 4.5a4 4 0 0 1 0 7" /><path d="M18 15a6 6 0 0 1 3 5" /></>,
+        vehicles: <><path d="M5 17h14" /><path d="M7 17v2" /><path d="M17 17v2" /><path d="M6 13l2-5h8l2 5" /><path d="M4 13h16v4H4z" /><circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /></>,
+        downloads: <><path d="M12 3v10" /><path d="m8 9 4 4 4-4" /><path d="M5 21h14" /><path d="M7 17h10" /></>,
         reports: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /><path d="M2 21h22" /></>,
         alerts: <><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v5" /><path d="M12 17.5h.01" /></>,
         imports: <><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M4 19h16" /></>,
