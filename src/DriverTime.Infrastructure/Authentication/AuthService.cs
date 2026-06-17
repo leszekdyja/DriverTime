@@ -31,10 +31,32 @@ public class AuthService : IAuthService
         CancellationToken cancellationToken = default)
     {
         var email = NormalizeEmail(request.Email);
-        var user = await UserQuery()
+        var userRecord = await _dbContext.Users
             .FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
 
-        if (user is null || !user.Active || !_passwordHasher.Verify(request.Password, user.PasswordHash))
+        if (userRecord is null)
+        {
+            return null;
+        }
+
+        var companyExists = await _dbContext.Companies
+            .AnyAsync(x => x.Id == userRecord.CompanyId, cancellationToken);
+        var roleExists = await _dbContext.Roles
+            .AnyAsync(x => x.Id == userRecord.RoleId, cancellationToken);
+        if (!companyExists || !roleExists)
+        {
+            return null;
+        }
+
+        var user = await UserQuery()
+            .FirstOrDefaultAsync(x => x.Id == userRecord.Id, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var passwordVerified = _passwordHasher.Verify(request.Password, user.PasswordHash);
+        if (!user.Active || !passwordVerified)
         {
             return null;
         }

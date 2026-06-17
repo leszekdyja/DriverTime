@@ -1,7 +1,6 @@
 using DriverTime.Application.Dashboard.DTOs;
 using DriverTime.Application.DTOs;
 using DriverTime.Application.Interfaces;
-using DriverTime.Application.Violations.DTOs;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,16 +10,13 @@ public class DashboardService : IDashboardService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
-    private readonly IDriverViolationService _driverViolationService;
 
     public DashboardService(
         DriverTimeDbContext dbContext,
-        ICurrentUserService currentUser,
-        IDriverViolationService driverViolationService)
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
-        _driverViolationService = driverViolationService;
     }
 
     public async Task<DashboardDto> GetDashboardAsync(
@@ -62,21 +58,32 @@ public class DashboardService : IDashboardService
                     .Max()
             })
             .ToListAsync(cancellationToken);
-        var violations = await _driverViolationService.GetViolationsAsync(
-            cancellationToken);
-        var violationsByCard = violations
-            .Where(x => !string.IsNullOrWhiteSpace(x.DriverCardNumber))
-            .GroupBy(x => x.DriverCardNumber, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(x => x.Key, x => x.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var violationSummaries = await _dbContext.Violations
+            .AsNoTracking()
+            .Where(x => x.Driver != null && x.Driver.CompanyId == _currentUser.CompanyId)
+            .GroupBy(x => x.DriverId)
+            .Select(x => new
+            {
+                DriverId = x.Key,
+                ViolationsCount = x.Count(),
+                SevereViolationsCount = x.Count(violation =>
+                    violation.Severity.ToLower() == "critical" ||
+                    violation.Severity.ToLower() == "high" ||
+                    violation.Severity.ToLower() == "severe" ||
+                    violation.Severity.ToLower() == "very serious" ||
+                    violation.Severity.ToLower() == "very-serious")
+            })
+            .ToDictionaryAsync(x => x.DriverId, cancellationToken);
 
         foreach (var driver in drivers)
         {
-            var driverViolations = violationsByCard.GetValueOrDefault(driver.CardNumber)
-                ?? new List<DriverViolationDto>();
-            driver.ViolationsCount = driverViolations.Count;
-            driver.SevereViolationsCount = driverViolations.Count(x =>
-                x.Severity.Equals("high", StringComparison.OrdinalIgnoreCase)
-                || x.Severity.Equals("severe", StringComparison.OrdinalIgnoreCase));
+            if (violationSummaries.TryGetValue(driver.DriverId, out var violationSummary))
+            {
+                driver.ViolationsCount = violationSummary.ViolationsCount;
+                driver.SevereViolationsCount = violationSummary.SevereViolationsCount;
+            }
+
             driver.DaysSinceLastImport = GetDaysSince(driver.LastImportAtUtc, now);
             driver.DaysSinceLastActivity = GetDaysSince(driver.LastActivityAtUtc, now);
             driver.RiskScore = CalculateRiskScore(driver);

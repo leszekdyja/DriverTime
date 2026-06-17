@@ -73,16 +73,23 @@ public class DatabaseSeeder
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        if (await _dbContext.Users.AnyAsync(x => x.Email == adminEmail, cancellationToken))
-        {
-            return company;
-        }
-
         var adminRole = await GetAdminRoleAsync(cancellationToken);
         var configuredPassword = _configuration["SeedAdmin:Password"];
         var adminPassword = string.IsNullOrWhiteSpace(configuredPassword)
             ? Convert.ToBase64String(RandomNumberGenerator.GetBytes(18))
             : configuredPassword;
+        var existingAdmin = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.Email == adminEmail, cancellationToken);
+        if (existingAdmin is not null)
+        {
+            await EnsureSeededUserIsConsistentAsync(
+                existingAdmin,
+                company.Id,
+                adminRole.Id,
+                configuredPassword,
+                cancellationToken);
+            return company;
+        }
 
         _dbContext.Users.Add(new User
         {
@@ -111,7 +118,7 @@ public class DatabaseSeeder
     {
         var demoEmail = NormalizeEmail(
             _configuration["DemoData:Email"] ?? DefaultDemoEmail);
-        var demoPassword = _configuration["DemoData:Password"] ?? DefaultDemoPassword;
+        var demoPassword = ResolveDemoPassword(demoEmail);
         var companyName = _configuration["DemoData:CompanyName"] ?? "Northline Logistics";
         var company = await _dbContext.Companies
             .FirstOrDefaultAsync(x => x.Name == companyName, cancellationToken);
@@ -131,9 +138,11 @@ public class DatabaseSeeder
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        if (!await _dbContext.Users.AnyAsync(x => x.Email == demoEmail, cancellationToken))
+        var adminRole = await GetAdminRoleAsync(cancellationToken);
+        var existingDemoUser = await _dbContext.Users
+            .FirstOrDefaultAsync(x => x.Email == demoEmail, cancellationToken);
+        if (existingDemoUser is null)
         {
-            var adminRole = await GetAdminRoleAsync(cancellationToken);
             _dbContext.Users.Add(new User
             {
                 Id = Guid.NewGuid(),
@@ -145,6 +154,15 @@ public class DatabaseSeeder
                 PasswordHash = _passwordHasher.Hash(demoPassword)
             });
             await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            await EnsureSeededUserIsConsistentAsync(
+                existingDemoUser,
+                company.Id,
+                adminRole.Id,
+                demoPassword,
+                cancellationToken);
         }
 
         var driverSeeds = new[]
@@ -300,8 +318,79 @@ public class DatabaseSeeder
                 cancellationToken);
     }
 
+    private async Task EnsureSeededUserIsConsistentAsync(
+        User user,
+        Guid companyId,
+        Guid roleId,
+        string? configuredPassword,
+        CancellationToken cancellationToken)
+    {
+        var canRefresh = CanRefreshConfiguredPasswords();
+        var hasConfiguredPassword = !string.IsNullOrWhiteSpace(configuredPassword);
+        var configuredPasswordMatches = hasConfiguredPassword
+            && _passwordHasher.Verify(configuredPassword!, user.PasswordHash);
+        var companyMatches = user.CompanyId == companyId;
+        var roleMatches = user.RoleId == roleId;
+
+        var companyChanged = false;
+        if (!companyMatches)
+        {
+            user.CompanyId = companyId;
+            companyChanged = true;
+        }
+
+        var roleChanged = false;
+        if (!roleMatches)
+        {
+            user.RoleId = roleId;
+            roleChanged = true;
+        }
+
+        var passwordRefreshed = false;
+        if (canRefresh && hasConfiguredPassword && !configuredPasswordMatches)
+        {
+            user.PasswordHash = _passwordHasher.Hash(configuredPassword!);
+            passwordRefreshed = true;
+        }
+
+        var activeChanged = false;
+        if (canRefresh && !user.Active)
+        {
+            user.Active = true;
+            activeChanged = true;
+        }
+
+        if (!companyChanged && !roleChanged && !passwordRefreshed && !activeChanged)
+        {
+            return;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private bool CanRefreshConfiguredPasswords() =>
+        string.Equals(
+            _configuration["ASPNETCORE_ENVIRONMENT"],
+            "Development",
+            StringComparison.OrdinalIgnoreCase)
+        || _configuration.GetValue<bool>("DemoData:Enabled");
+
     private static string NormalizeEmail(string email) =>
         email.Trim().ToLowerInvariant();
+
+    private string ResolveDemoPassword(string demoEmail)
+    {
+        var seedAdminEmail = _configuration["SeedAdmin:Email"];
+        var seedAdminPassword = _configuration["SeedAdmin:Password"];
+        if (!string.IsNullOrWhiteSpace(seedAdminEmail)
+            && !string.IsNullOrWhiteSpace(seedAdminPassword)
+            && NormalizeEmail(seedAdminEmail) == demoEmail)
+        {
+            return seedAdminPassword;
+        }
+
+        return _configuration["DemoData:Password"] ?? DefaultDemoPassword;
+    }
 
     private static string CreateHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

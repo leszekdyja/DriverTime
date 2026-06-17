@@ -321,7 +321,6 @@ public class DddFileService : IDddFileService
             ? "Utworzono nowego kierowce."
             : "Import przypisano do istniejacego kierowcy.";
 
-        await DetectViolationsAfterImportAsync(dddFile.Id);
         await EvaluateComplianceAfterImportAsync(companyId, driver.Id);
 
         await _importMonitoringService.MarkCompletedAsync(monitoringId);

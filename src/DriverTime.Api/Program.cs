@@ -3,8 +3,10 @@ using DriverTime.Application.Interfaces;
 using DriverTime.Api.Authentication;
 using DriverTime.Api.Services;
 using DriverTime.Infrastructure;
+using DriverTime.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +59,17 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<DddImportRetryWorker>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<DriverTimeDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+    var seedDemoData = app.Environment.IsDevelopment()
+        || app.Configuration.GetValue<bool>("DemoData:Enabled");
+    await seeder.SeedAsync(seedDemoData);
+}
 
 app.UseCors("Frontend");
 
