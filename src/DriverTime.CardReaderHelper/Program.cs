@@ -54,6 +54,11 @@ app.MapGet("/api/readers", (PcscReaderService readerService) =>
     });
 });
 
+app.MapGet("/api/diagnostics", (PcscReaderService readerService) =>
+{
+    return Results.Ok(readerService.GetDiagnostics());
+});
+
 app.MapGet("/api/readers/{readerName}/atr", (string readerName, PcscReaderService readerService) =>
 {
     var result = readerService.ReadAtr(Uri.UnescapeDataString(readerName));
@@ -148,6 +153,47 @@ internal sealed class PcscReaderService
         }
     }
 
+    public PcscDiagnostics GetDiagnostics()
+    {
+        var snapshot = GetReaders();
+        var readerDiagnostics = new List<ReaderDiagnostic>();
+
+        foreach (var reader in snapshot.Readers)
+        {
+            AtrReadResult? atr = null;
+
+            if (reader.CardPresent == true)
+            {
+                atr = ReadAtr(reader.Name);
+            }
+
+            readerDiagnostics.Add(new ReaderDiagnostic(
+                Name: reader.Name,
+                CardPresent: reader.CardPresent,
+                Status: reader.Status,
+                Message: reader.Message,
+                AtrHex: atr?.AtrHex ?? string.Empty,
+                AtrLength: atr?.AtrLength ?? 0,
+                Connected: atr?.Connected ?? false,
+                Protocol: atr?.Protocol ?? string.Empty,
+                ErrorMessage: atr?.ErrorMessage ?? reader.Message,
+                ErrorCodeHex: atr?.ErrorCodeHex ?? reader.ErrorCodeHex));
+        }
+
+        var lastError = !snapshot.PcscAvailable
+            ? snapshot.Message
+            : readerDiagnostics.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.ErrorCodeHex))?.ErrorMessage ?? string.Empty;
+
+        return new PcscDiagnostics(
+            Status: snapshot.PcscAvailable ? "ok" : "unavailable",
+            PcscAvailable: snapshot.PcscAvailable,
+            Message: snapshot.Message,
+            CheckedAtUtc: DateTime.UtcNow,
+            ReadersCount: snapshot.Readers.Count,
+            Readers: readerDiagnostics,
+            LastError: lastError);
+    }
+
     public AtrReadResult ReadAtr(string readerName)
     {
         if (string.IsNullOrWhiteSpace(readerName))
@@ -155,6 +201,7 @@ internal sealed class PcscReaderService
             return AtrReadResult.Failure(
                 readerName,
                 cardPresent: false,
+                connected: false,
                 status: "reader-name-required",
                 errorMessage: "Nie podano nazwy czytnika.");
         }
@@ -164,6 +211,7 @@ internal sealed class PcscReaderService
             return AtrReadResult.Failure(
                 readerName,
                 cardPresent: false,
+                connected: false,
                 status: "pcsc-unavailable",
                 errorMessage: "PC/SC jest dostępne tylko na Windows w tym helperze MVP.");
         }
@@ -179,8 +227,10 @@ internal sealed class PcscReaderService
             return AtrReadResult.Failure(
                 readerName,
                 cardPresent: false,
+                connected: false,
                 status: "pcsc-unavailable",
-                errorMessage: GetFriendlyError(establishResult));
+                errorMessage: GetFriendlyError(establishResult),
+                errorCode: establishResult);
         }
 
         try
@@ -192,8 +242,10 @@ internal sealed class PcscReaderService
                 return AtrReadResult.Failure(
                     readerName,
                     cardPresent: false,
+                    connected: false,
                     status: "readers-unavailable",
-                    errorMessage: GetFriendlyError(listResult));
+                    errorMessage: GetFriendlyError(listResult),
+                    errorCode: listResult);
             }
 
             if (!readerNames.Contains(readerName, StringComparer.OrdinalIgnoreCase))
@@ -201,8 +253,10 @@ internal sealed class PcscReaderService
                 return AtrReadResult.Failure(
                     readerName,
                     cardPresent: false,
+                    connected: false,
                     status: "reader-not-found",
-                    errorMessage: "Nie znaleziono czytnika o podanej nazwie.");
+                    errorMessage: "Nie znaleziono czytnika o podanej nazwie.",
+                    errorCode: NativeMethods.ScardUnknownReader);
             }
 
             var connectResult = NativeMethods.SCardConnect(
@@ -211,15 +265,17 @@ internal sealed class PcscReaderService
                 NativeMethods.ScardShareShared,
                 NativeMethods.ScardProtocolT0 | NativeMethods.ScardProtocolT1,
                 out var card,
-                out _);
+                out var activeProtocol);
 
             if (connectResult != NativeMethods.ScardSuccess)
             {
                 return AtrReadResult.Failure(
                     readerName,
                     cardPresent: connectResult != NativeMethods.ScardNoSmartcard,
+                    connected: false,
                     status: connectResult == NativeMethods.ScardNoSmartcard ? "card-not-present" : "connect-failed",
-                    errorMessage: GetFriendlyError(connectResult));
+                    errorMessage: GetFriendlyError(connectResult),
+                    errorCode: connectResult);
             }
 
             try
@@ -232,8 +288,8 @@ internal sealed class PcscReaderService
                     card,
                     null,
                     ref readerNameLength,
-                    out _,
-                    out _,
+                    out var state,
+                    out var protocol,
                     atr,
                     ref atrLength);
 
@@ -242,8 +298,11 @@ internal sealed class PcscReaderService
                     return AtrReadResult.Failure(
                         readerName,
                         cardPresent: true,
+                        connected: true,
                         status: "atr-unavailable",
-                        errorMessage: GetFriendlyError(statusResult));
+                        errorMessage: GetFriendlyError(statusResult),
+                        errorCode: statusResult,
+                        activeProtocol: activeProtocol);
                 }
 
                 if (atrLength <= 0)
@@ -251,20 +310,29 @@ internal sealed class PcscReaderService
                     return AtrReadResult.Failure(
                         readerName,
                         cardPresent: true,
+                        connected: true,
                         status: "atr-empty",
-                        errorMessage: "Karta jest obecna, ale ATR jest pusty lub niedostępny.");
+                        errorMessage: "Karta jest obecna, ale ATR jest pusty lub niedostępny.",
+                        activeProtocol: activeProtocol);
                 }
 
                 var atrBytes = atr.Take(atrLength).ToArray();
                 var atrHex = string.Join(" ", atrBytes.Select(value => value.ToString("X2")));
+                var resolvedProtocol = protocol == 0 ? activeProtocol : protocol;
 
                 return new AtrReadResult(
                     ReaderName: readerName,
                     CardPresent: true,
+                    Connected: true,
                     AtrHex: atrHex,
                     AtrLength: atrLength,
                     Status: "ok",
-                    ErrorMessage: string.Empty);
+                    ErrorMessage: string.Empty,
+                    ErrorCode: null,
+                    ErrorCodeHex: string.Empty,
+                    ActiveProtocol: resolvedProtocol,
+                    Protocol: GetProtocolName(resolvedProtocol),
+                    PcscState: state);
             }
             finally
             {
@@ -335,7 +403,9 @@ internal sealed class PcscReaderService
                 Name: readerName,
                 CardPresent: null,
                 Status: "unknown",
-                Message: GetFriendlyError(result));
+                Message: GetFriendlyError(result),
+                ErrorCode: result,
+                ErrorCodeHex: ToHex(result));
         }
 
         var eventState = states[0].EventState;
@@ -349,7 +419,9 @@ internal sealed class PcscReaderService
                 Name: readerName,
                 CardPresent: null,
                 Status: "unavailable",
-                Message: "Czytnik jest niedostępny.");
+                Message: "Czytnik jest niedostępny.",
+                ErrorCode: NativeMethods.ScardReaderUnavailable,
+                ErrorCodeHex: ToHex(NativeMethods.ScardReaderUnavailable));
         }
 
         if (present)
@@ -358,7 +430,9 @@ internal sealed class PcscReaderService
                 Name: readerName,
                 CardPresent: true,
                 Status: "card-present",
-                Message: "Karta jest włożona do czytnika.");
+                Message: "Karta jest włożona do czytnika.",
+                ErrorCode: null,
+                ErrorCodeHex: string.Empty);
         }
 
         if (empty)
@@ -367,14 +441,18 @@ internal sealed class PcscReaderService
                 Name: readerName,
                 CardPresent: false,
                 Status: "empty",
-                Message: "Czytnik działa, ale karta nie jest włożona.");
+                Message: "Czytnik działa, ale karta nie jest włożona.",
+                ErrorCode: null,
+                ErrorCodeHex: string.Empty);
         }
 
         return new ReaderInfo(
             Name: readerName,
             CardPresent: null,
             Status: "unknown",
-            Message: "Nie udało się jednoznacznie ustalić obecności karty.");
+            Message: "Nie udało się jednoznacznie ustalić obecności karty.",
+            ErrorCode: null,
+            ErrorCodeHex: string.Empty);
     }
 
     private static string GetFriendlyError(uint errorCode)
@@ -388,8 +466,23 @@ internal sealed class PcscReaderService
             NativeMethods.ScardUnknownReader => "Nie znaleziono wskazanego czytnika.",
             NativeMethods.ScardNoSmartcard => "W wybranym czytniku nie ma karty.",
             NativeMethods.ScardSharingViolation => "Nie można połączyć się z kartą, bo jest używana przez inny proces.",
-            _ => $"Podsystem PC/SC zwrócił błąd 0x{errorCode:X8}."
+            _ => $"Podsystem PC/SC zwrócił błąd {ToHex(errorCode)}."
         };
+    }
+
+    private static string GetProtocolName(uint protocol)
+    {
+        return protocol switch
+        {
+            NativeMethods.ScardProtocolT0 => "T=0",
+            NativeMethods.ScardProtocolT1 => "T=1",
+            _ => protocol == 0 ? "Brak" : $"Nieznany ({protocol})"
+        };
+    }
+
+    private static string ToHex(uint value)
+    {
+        return $"0x{value:X8}";
     }
 }
 
@@ -402,29 +495,71 @@ internal sealed record ReaderInfo(
     string Name,
     bool? CardPresent,
     string Status,
-    string Message);
+    string Message,
+    uint? ErrorCode,
+    string ErrorCodeHex);
+
+internal sealed record PcscDiagnostics(
+    string Status,
+    bool PcscAvailable,
+    string Message,
+    DateTime CheckedAtUtc,
+    int ReadersCount,
+    IReadOnlyList<ReaderDiagnostic> Readers,
+    string LastError);
+
+internal sealed record ReaderDiagnostic(
+    string Name,
+    bool? CardPresent,
+    string Status,
+    string Message,
+    string AtrHex,
+    int AtrLength,
+    bool Connected,
+    string Protocol,
+    string ErrorMessage,
+    string ErrorCodeHex);
 
 internal sealed record AtrReadResult(
     string ReaderName,
     bool CardPresent,
+    bool Connected,
     string AtrHex,
     int AtrLength,
     string Status,
-    string ErrorMessage)
+    string ErrorMessage,
+    uint? ErrorCode,
+    string ErrorCodeHex,
+    uint ActiveProtocol,
+    string Protocol,
+    uint PcscState)
 {
     public static AtrReadResult Failure(
         string readerName,
         bool cardPresent,
+        bool connected,
         string status,
-        string errorMessage)
+        string errorMessage,
+        uint? errorCode = null,
+        uint activeProtocol = 0)
     {
         return new AtrReadResult(
             ReaderName: readerName,
             CardPresent: cardPresent,
+            Connected: connected,
             AtrHex: string.Empty,
             AtrLength: 0,
             Status: status,
-            ErrorMessage: errorMessage);
+            ErrorMessage: errorMessage,
+            ErrorCode: errorCode,
+            ErrorCodeHex: errorCode.HasValue ? $"0x{errorCode.Value:X8}" : string.Empty,
+            ActiveProtocol: activeProtocol,
+            Protocol: activeProtocol == NativeMethods.ScardProtocolT0
+                ? "T=0"
+                : activeProtocol == NativeMethods.ScardProtocolT1
+                    ? "T=1"
+                    : string.Empty,
+            PcscState: 0);
     }
 }
 

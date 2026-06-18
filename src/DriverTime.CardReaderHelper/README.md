@@ -13,13 +13,14 @@ Ten projekt to lokalny helper MVP dla przyszłego fizycznego odczytu kart kierow
 
 - System Windows.
 - Włączona usługa Windows Smart Card / Karta inteligentna.
-- Podłączony fizyczny czytnik kart inteligentnych zgodny z PC/SC.
+- Podłączony fizyczny czytnik kart inteligentnych zgodny z PC/SC, np. ACS ACR39U.
 - Sterowniki czytnika zainstalowane w systemie, jeśli Windows ich nie wykrywa automatycznie.
 
 ## Endpointy MVP
 
 - `GET /health` - sprawdza, czy helper działa, czy PC/SC jest dostępne i ile czytników wykryto.
-- `GET /api/readers` - zwraca realnie wykryte czytniki PC/SC oraz informację, czy karta jest obecna, jeśli system pozwala to ustalić.
+- `GET /api/readers` - zwraca wykryte czytniki PC/SC oraz informację, czy karta jest obecna, jeśli system pozwala to ustalić.
+- `GET /api/diagnostics` - zwraca szczegółową diagnostykę PC/SC: listę czytników, status połączenia, ATR, protokół i komunikaty błędów.
 - `GET /api/readers/{readerName}/atr` - łączy się z kartą w wybranym czytniku i odczytuje ATR, czyli podstawową odpowiedź identyfikującą kartę.
 - `POST /api/card/read/start` - działa nadal w trybie testowym i nie wykonuje realnego odczytu danych DDD/C1B.
 

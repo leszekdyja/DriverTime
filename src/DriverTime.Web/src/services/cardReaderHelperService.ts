@@ -5,6 +5,8 @@ export type CardReaderReader = {
     cardPresent: boolean | null;
     status: string;
     message: string;
+    errorCode: number | null;
+    errorCodeHex: string;
 };
 
 export type CardReaderHelperHealth = {
@@ -27,10 +29,39 @@ export type CardReaderReaderList = {
 export type CardReaderAtrResult = {
     readerName: string;
     cardPresent: boolean;
+    connected: boolean;
     atrHex: string;
     atrLength: number;
     status: string;
     errorMessage: string;
+    errorCode: number | null;
+    errorCodeHex: string;
+    activeProtocol: number;
+    protocol: string;
+    pcscState: number;
+};
+
+export type CardReaderDiagnosticReader = {
+    name: string;
+    cardPresent: boolean | null;
+    status: string;
+    message: string;
+    atrHex: string;
+    atrLength: number;
+    connected: boolean;
+    protocol: string;
+    errorMessage: string;
+    errorCodeHex: string;
+};
+
+export type CardReaderDiagnostics = {
+    status: string;
+    pcscAvailable: boolean;
+    message: string;
+    checkedAtUtc: string;
+    readersCount: number;
+    readers: CardReaderDiagnosticReader[];
+    lastError: string;
 };
 
 export type CardReaderMockReadResult = {
@@ -68,6 +99,13 @@ export function getCardReaderReaders(): Promise<CardReaderReaderList> {
     return getJson<CardReaderReaderList>(
         "/api/readers",
         "Nie udało się pobrać listy czytników z helpera.",
+    );
+}
+
+export function getCardReaderDiagnostics(): Promise<CardReaderDiagnostics> {
+    return getJson<CardReaderDiagnostics>(
+        "/api/diagnostics",
+        "Nie udało się pobrać diagnostyki helpera.",
     );
 }
 

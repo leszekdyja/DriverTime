@@ -11,10 +11,12 @@ import {
 } from "../services/cardReaderService";
 import {
     checkCardReaderHelperHealth,
+    getCardReaderDiagnostics,
     getCardReaderReaders,
     readCardAtr,
     startMockCardRead,
     type CardReaderAtrResult,
+    type CardReaderDiagnostics,
     type CardReaderHelperHealth,
     type CardReaderMockReadResult,
     type CardReaderReader,
@@ -30,15 +32,10 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 function formatDate(value: string | null) {
-    if (!value) {
-        return "Brak danych";
-    }
+    if (!value) return "Brak danych";
 
     const date = new Date(value);
-
-    return Number.isNaN(date.getTime())
-        ? "Brak danych"
-        : dateFormatter.format(date);
+    return Number.isNaN(date.getTime()) ? "Brak danych" : dateFormatter.format(date);
 }
 
 function getStatusLabel(status: string) {
@@ -55,29 +52,27 @@ function getStatusTone(status: string): BadgeTone {
     return "neutral";
 }
 
-function getReaderPresenceLabel(reader: CardReaderReader) {
+function getReaderPresenceLabel(reader: Pick<CardReaderReader, "cardPresent">) {
     if (reader.cardPresent === true) return "Karta obecna";
     if (reader.cardPresent === false) return "Brak karty";
     return "Nieznany";
 }
 
-function getReaderPresenceTone(reader: CardReaderReader): BadgeTone {
+function getReaderPresenceTone(reader: Pick<CardReaderReader, "cardPresent">): BadgeTone {
     if (reader.cardPresent === true) return "success";
     if (reader.cardPresent === false) return "warning";
     return "neutral";
 }
 
 function upsertSession(sessions: CardReadSession[], session: CardReadSession) {
-    return [
-        session,
-        ...sessions.filter((item) => item.id !== session.id),
-    ];
+    return [session, ...sessions.filter((item) => item.id !== session.id)];
 }
 
 export default function CardReaderPage() {
     const [sessions, setSessions] = useState<CardReadSession[]>([]);
     const [helperHealth, setHelperHealth] = useState<CardReaderHelperHealth | null>(null);
     const [readers, setReaders] = useState<CardReaderReaderList | null>(null);
+    const [diagnostics, setDiagnostics] = useState<CardReaderDiagnostics | null>(null);
     const [selectedReaderName, setSelectedReaderName] = useState("");
     const [atrResult, setAtrResult] = useState<CardReaderAtrResult | null>(null);
     const [mockReadResult, setMockReadResult] = useState<CardReaderMockReadResult | null>(null);
@@ -86,6 +81,7 @@ export default function CardReaderPage() {
     const [isFailing, setIsFailing] = useState(false);
     const [isCheckingHelper, setIsCheckingHelper] = useState(false);
     const [isCheckingReaders, setIsCheckingReaders] = useState(false);
+    const [isCheckingDiagnostics, setIsCheckingDiagnostics] = useState(false);
     const [isReadingAtr, setIsReadingAtr] = useState(false);
     const [isMockReading, setIsMockReading] = useState(false);
     const [error, setError] = useState("");
@@ -110,11 +106,9 @@ export default function CardReaderPage() {
         try {
             setSessions(await getCardReadSessions());
         } catch (loadError) {
-            setError(
-                loadError instanceof Error
-                    ? loadError.message
-                    : "Wystąpił błąd podczas pobierania sesji odczytu kart.",
-            );
+            setError(loadError instanceof Error
+                ? loadError.message
+                : "Wystąpił błąd podczas pobierania sesji odczytu kart.");
         } finally {
             setIsLoading(false);
         }
@@ -138,20 +132,16 @@ export default function CardReaderPage() {
 
             setSessions((current) => upsertSession(current, session));
         } catch (startError) {
-            setError(
-                startError instanceof Error
-                    ? startError.message
-                    : "Nie udało się rozpocząć sesji odczytu karty.",
-            );
+            setError(startError instanceof Error
+                ? startError.message
+                : "Nie udało się rozpocząć sesji odczytu karty.");
         } finally {
             setIsStarting(false);
         }
     }
 
     async function failActiveSession() {
-        if (!activeSession) {
-            return;
-        }
+        if (!activeSession) return;
 
         setIsFailing(true);
         setError("");
@@ -164,11 +154,9 @@ export default function CardReaderPage() {
 
             setSessions((current) => upsertSession(current, session));
         } catch (failError) {
-            setError(
-                failError instanceof Error
-                    ? failError.message
-                    : "Nie udało się przerwać sesji odczytu karty.",
-            );
+            setError(failError instanceof Error
+                ? failError.message
+                : "Nie udało się przerwać sesji odczytu karty.");
         } finally {
             setIsFailing(false);
         }
@@ -182,11 +170,9 @@ export default function CardReaderPage() {
             setHelperHealth(await checkCardReaderHelperHealth());
         } catch (checkError) {
             setHelperHealth(null);
-            setHelperError(
-                checkError instanceof Error
-                    ? checkError.message
-                    : "Helper odczytu karty jest niedostępny.",
-            );
+            setHelperError(checkError instanceof Error
+                ? checkError.message
+                : "Helper odczytu karty jest niedostępny.");
         } finally {
             setIsCheckingHelper(false);
         }
@@ -214,13 +200,48 @@ export default function CardReaderPage() {
         } catch (checkError) {
             setReaders(null);
             setSelectedReaderName("");
-            setHelperError(
-                checkError instanceof Error
-                    ? checkError.message
-                    : "Nie udało się sprawdzić czytników.",
-            );
+            setHelperError(checkError instanceof Error
+                ? checkError.message
+                : "Nie udało się sprawdzić czytników.");
         } finally {
             setIsCheckingReaders(false);
+        }
+    }
+
+    async function checkDiagnostics() {
+        setIsCheckingDiagnostics(true);
+        setHelperError("");
+
+        try {
+            const result = await getCardReaderDiagnostics();
+            setDiagnostics(result);
+
+            if (result.readers.length > 0) {
+                setReaders({
+                    status: result.status,
+                    pcscAvailable: result.pcscAvailable,
+                    message: result.message,
+                    readers: result.readers.map((reader) => ({
+                        name: reader.name,
+                        cardPresent: reader.cardPresent,
+                        status: reader.status,
+                        message: reader.message,
+                        errorCode: null,
+                        errorCodeHex: reader.errorCodeHex,
+                    })),
+                });
+
+                if (!selectedReaderName) {
+                    setSelectedReaderName(result.readers[0].name);
+                }
+            }
+        } catch (diagnosticError) {
+            setDiagnostics(null);
+            setHelperError(diagnosticError instanceof Error
+                ? diagnosticError.message
+                : "Nie udało się pobrać diagnostyki helpera.");
+        } finally {
+            setIsCheckingDiagnostics(false);
         }
     }
 
@@ -237,11 +258,9 @@ export default function CardReaderPage() {
         try {
             setAtrResult(await readCardAtr(selectedReaderName));
         } catch (readError) {
-            setHelperError(
-                readError instanceof Error
-                    ? readError.message
-                    : "Nie udało się odczytać ATR karty.",
-            );
+            setHelperError(readError instanceof Error
+                ? readError.message
+                : "Nie udało się odczytać ATR karty.");
         } finally {
             setIsReadingAtr(false);
         }
@@ -306,21 +325,15 @@ export default function CardReaderPage() {
                     <span>Moduł MVP</span>
                     <h2>Odczyt karty</h2>
                     <p>
-                        Helper lokalny wykrywa czytniki PC/SC i potrafi wykonać pierwszy
-                        bezpieczny test komunikacji z kartą: odczyt ATR. Historia sesji jest
-                        zapisywana przez backend DriverTime.
+                        Helper lokalny wykrywa czytniki PC/SC i potrafi sprawdzić ATR karty.
+                        Historia sesji jest zapisywana przez backend DriverTime.
                     </p>
                 </div>
                 <div className="card-reader-actions">
                     <button type="button" onClick={startSession} disabled={isStarting || Boolean(activeSession)}>
                         {isStarting ? "Uruchamianie..." : "Rozpocznij sesję"}
                     </button>
-                    <button
-                        className="secondary"
-                        type="button"
-                        onClick={failActiveSession}
-                        disabled={!activeSession || isFailing}
-                    >
+                    <button className="secondary" type="button" onClick={failActiveSession} disabled={!activeSession || isFailing}>
                         {isFailing ? "Przerywanie..." : "Przerwij aktywną sesję"}
                     </button>
                 </div>
@@ -334,16 +347,8 @@ export default function CardReaderPage() {
                 </article>
                 <article>
                     <span>PC/SC</span>
-                    <strong>
-                        {helperHealth
-                            ? helperHealth.pcscAvailable ? "Dostępne" : "Niedostępne"
-                            : "Nie sprawdzono"}
-                    </strong>
-                    <p>
-                        {helperHealth
-                            ? `Wykryte czytniki: ${helperHealth.readersCount}.`
-                            : "Status podsystemu pojawi się po sprawdzeniu helpera."}
-                    </p>
+                    <strong>{helperHealth ? helperHealth.pcscAvailable ? "Dostępne" : "Niedostępne" : "Nie sprawdzono"}</strong>
+                    <p>{helperHealth ? `Wykryte czytniki: ${helperHealth.readersCount}.` : "Status podsystemu pojawi się po sprawdzeniu helpera."}</p>
                 </article>
                 <article>
                     <span>Aktywna sesja</span>
@@ -368,11 +373,10 @@ export default function CardReaderPage() {
                     <button type="button" onClick={checkReaders} disabled={isCheckingReaders}>
                         {isCheckingReaders ? "Sprawdzanie..." : "Sprawdź czytniki"}
                     </button>
-                    <button
-                        type="button"
-                        onClick={checkSelectedCardAtr}
-                        disabled={!selectedReaderName || isReadingAtr}
-                    >
+                    <button type="button" onClick={checkDiagnostics} disabled={isCheckingDiagnostics}>
+                        {isCheckingDiagnostics ? "Diagnozowanie..." : "Diagnostyka PC/SC"}
+                    </button>
+                    <button type="button" onClick={checkSelectedCardAtr} disabled={!selectedReaderName || isReadingAtr}>
                         {isReadingAtr ? "Odczyt ATR..." : "Sprawdź kartę / odczytaj ATR"}
                     </button>
                     <button type="button" onClick={runMockRead} disabled={isMockReading}>
@@ -380,19 +384,12 @@ export default function CardReaderPage() {
                     </button>
                 </div>
 
-                {helperError ? (
-                    <p className="card-reader-error" role="alert">
-                        {helperError}
-                    </p>
-                ) : null}
+                {helperError ? <p className="card-reader-error" role="alert">{helperError}</p> : null}
 
                 <div className="card-reader-helper-results">
                     <article>
                         <span>Status helpera</span>
-                        <StatusBadge
-                            label={helperHealth ? "Helper działa" : "Helper niedostępny"}
-                            tone={helperHealth ? "success" : "neutral"}
-                        />
+                        <StatusBadge label={helperHealth ? "Helper działa" : "Helper niedostępny"} tone={helperHealth ? "success" : "neutral"} />
                         <p>{helperHealth ? formatDate(helperHealth.checkedAtUtc) : "Brak ostatniego sprawdzenia."}</p>
                     </article>
                     <article>
@@ -415,17 +412,11 @@ export default function CardReaderPage() {
                         </div>
 
                         {readerList.length === 0 ? (
-                            <EmptyState
-                                title="Brak wykrytych czytników"
-                                description={readers.message}
-                            />
+                            <EmptyState title="Brak wykrytych czytników" description={readers.message} />
                         ) : (
                             <div className="card-reader-reader-list">
                                 {readerList.map((reader) => (
-                                    <label
-                                        className={`card-reader-reader-option ${reader.name === selectedReaderName ? "selected" : ""}`}
-                                        key={reader.name}
-                                    >
+                                    <label className={`card-reader-reader-option ${reader.name === selectedReaderName ? "selected" : ""}`} key={reader.name}>
                                         <input
                                             checked={reader.name === selectedReaderName}
                                             name="selectedReader"
@@ -441,10 +432,7 @@ export default function CardReaderPage() {
                                             <span>{reader.message}</span>
                                         </span>
                                         <span className="card-reader-reader-meta">
-                                            <StatusBadge
-                                                label={getReaderPresenceLabel(reader)}
-                                                tone={getReaderPresenceTone(reader)}
-                                            />
+                                            <StatusBadge label={getReaderPresenceLabel(reader)} tone={getReaderPresenceTone(reader)} />
                                             <small>{reader.status}</small>
                                         </span>
                                     </label>
@@ -456,25 +444,47 @@ export default function CardReaderPage() {
 
                 {atrResult ? (
                     <div className="card-reader-atr-result">
-                        <div>
-                            <span>Czytnik</span>
-                            <strong>{atrResult.readerName}</strong>
-                        </div>
-                        <div>
-                            <span>Karta</span>
-                            <StatusBadge
-                                label={atrResult.cardPresent ? "Karta obecna" : "Brak karty"}
-                                tone={atrResult.cardPresent ? "success" : "warning"}
-                            />
-                        </div>
-                        <div>
-                            <span>ATR HEX</span>
-                            <code>{atrResult.atrHex || "Brak danych ATR"}</code>
-                        </div>
-                        {atrResult.errorMessage ? (
-                            <p>{atrResult.errorMessage}</p>
-                        ) : null}
+                        <div><span>Czytnik</span><strong>{atrResult.readerName}</strong></div>
+                        <div><span>Połączenie</span><strong>{atrResult.connected ? `Połączono (${atrResult.protocol || "protokół nieznany"})` : "Brak połączenia"}</strong></div>
+                        <div><span>Karta</span><StatusBadge label={atrResult.cardPresent ? "Karta obecna" : "Brak karty"} tone={atrResult.cardPresent ? "success" : "warning"} /></div>
+                        <div><span>ATR HEX</span><code>{atrResult.atrHex || "Brak danych ATR"}</code></div>
+                        {atrResult.errorMessage ? <p>{atrResult.errorMessage} {atrResult.errorCodeHex ? `(${atrResult.errorCodeHex})` : ""}</p> : null}
                     </div>
+                ) : null}
+
+                {diagnostics ? (
+                    <section className="card-reader-diagnostics">
+                        <div className="card-reader-subheading">
+                            <h4>Diagnostyka PC/SC</h4>
+                            <p>{diagnostics.message}</p>
+                        </div>
+                        <div className="card-reader-diagnostic-grid">
+                            <article><span>Status</span><strong>{diagnostics.status}</strong></article>
+                            <article><span>PC/SC</span><strong>{diagnostics.pcscAvailable ? "Dostępne" : "Niedostępne"}</strong></article>
+                            <article><span>Ostatnie sprawdzenie</span><strong>{formatDate(diagnostics.checkedAtUtc)}</strong></article>
+                            <article><span>Ostatni błąd</span><strong>{diagnostics.lastError || "Brak"}</strong></article>
+                        </div>
+                        {diagnostics.readers.length === 0 ? (
+                            <EmptyState title="Brak danych diagnostycznych czytników" description="Podłącz ACS ACR39U i ponów diagnostykę." />
+                        ) : (
+                            <div className="card-reader-diagnostic-list">
+                                {diagnostics.readers.map((reader) => (
+                                    <article key={reader.name}>
+                                        <header>
+                                            <strong>{reader.name}</strong>
+                                            <StatusBadge label={getReaderPresenceLabel(reader)} tone={getReaderPresenceTone(reader)} />
+                                        </header>
+                                        <dl>
+                                            <div><dt>Status</dt><dd>{reader.status}</dd></div>
+                                            <div><dt>Połączenie</dt><dd>{reader.connected ? `Połączono (${reader.protocol || "protokół nieznany"})` : "Nie połączono"}</dd></div>
+                                            <div><dt>ATR</dt><dd><code>{reader.atrHex || "Brak ATR"}</code></dd></div>
+                                            <div><dt>Błąd PC/SC</dt><dd>{reader.errorMessage || "Brak"} {reader.errorCodeHex ? `(${reader.errorCodeHex})` : ""}</dd></div>
+                                        </dl>
+                                    </article>
+                                ))}
+                            </div>
+                        )}
+                    </section>
                 ) : null}
 
                 {mockReadResult ? (
@@ -495,45 +505,25 @@ export default function CardReaderPage() {
                         <h3>Ostatnie sesje odczytu kart</h3>
                         <p>Historia pochodzi z backendu DriverTime i tabeli CardReadSessions.</p>
                     </div>
-                    <button type="button" onClick={() => void loadSessions()} disabled={isLoading}>
-                        Odśwież
-                    </button>
+                    <button type="button" onClick={() => void loadSessions()} disabled={isLoading}>Odśwież</button>
                 </div>
 
-                {error ? (
-                    <p className="card-reader-error" role="alert">
-                        {error}
-                    </p>
-                ) : null}
+                {error ? <p className="card-reader-error" role="alert">{error}</p> : null}
 
                 {isLoading ? (
                     <TableSkeleton rows={5} columns={5} />
                 ) : sessions.length === 0 ? (
-                    <EmptyState
-                        title="Brak sesji odczytu"
-                        description="Rozpocznij testowy odczyt, aby zapisać pierwszą sesję w historii."
-                    />
+                    <EmptyState title="Brak sesji odczytu" description="Rozpocznij testowy odczyt, aby zapisać pierwszą sesję w historii." />
                 ) : (
                     <div className="card-reader-table-wrapper">
                         <table className="card-reader-table">
                             <thead>
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Czytnik</th>
-                                    <th>Start</th>
-                                    <th>Zakończenie</th>
-                                    <th>Uwagi</th>
-                                </tr>
+                                <tr><th>Status</th><th>Czytnik</th><th>Start</th><th>Zakończenie</th><th>Uwagi</th></tr>
                             </thead>
                             <tbody>
                                 {sessions.map((session) => (
                                     <tr key={session.id}>
-                                        <td>
-                                            <StatusBadge
-                                                label={getStatusLabel(session.status)}
-                                                tone={getStatusTone(session.status)}
-                                            />
-                                        </td>
+                                        <td><StatusBadge label={getStatusLabel(session.status)} tone={getStatusTone(session.status)} /></td>
                                         <td>{session.readerName || "Brak"}</td>
                                         <td>{formatDate(session.startedAtUtc)}</td>
                                         <td>{formatDate(session.completedAtUtc ?? session.failedAtUtc)}</td>
