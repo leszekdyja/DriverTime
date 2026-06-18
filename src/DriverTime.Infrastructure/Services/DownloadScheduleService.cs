@@ -75,40 +75,65 @@ public class DownloadScheduleService : IDownloadScheduleService
             .OrderBy(x => x.RegistrationNumber)
             .Select(x => new
             {
-                Vehicle = x,
-                LastActivityUtc = _dbContext.VehicleUses
-                    .Where(vehicleUse =>
-                        vehicleUse.DddFile.CompanyId == companyId
-                        && vehicleUse.RegistrationNumber != null
-                        && vehicleUse.RegistrationNumber.Replace(" ", "").Length >= 5
-                        && EF.Functions.Like(
-                            x.RegistrationNumber.Replace(" ", "").ToUpper(),
-                            "%" + vehicleUse.RegistrationNumber.Replace(" ", "").ToUpper()))
-                    .Select(vehicleUse => (DateTime?)vehicleUse.EndUtc)
-                    .Max()
+                x.Id,
+                x.RegistrationNumber
             })
             .ToListAsync(cancellationToken);
 
-        return vehicles
-            .Select(x => new VehicleDownloadDto
+        var vehicleUses = await _dbContext.VehicleUses
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == companyId
+                && x.RegistrationNumber != null
+                && x.RegistrationNumber.Replace(" ", "").Length >= 5)
+            .Select(x => new VehicleUseDownloadSource
             {
-                VehicleId = x.Vehicle.Id,
-                RegistrationNumber = x.Vehicle.RegistrationNumber,
-                LastDownloadUtc = x.LastActivityUtc,
-                NextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                    x.LastActivityUtc,
-                    DownloadScheduleCalculator.VehicleDownloadIntervalDays),
-                DaysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
-                    DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                        x.LastActivityUtc,
-                        DownloadScheduleCalculator.VehicleDownloadIntervalDays),
-                    nowUtc),
-                Status = DownloadScheduleCalculator.GetStatus(
-                    DownloadScheduleCalculator.GetDaysUntilDue(
-                        DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                            x.LastActivityUtc,
-                            DownloadScheduleCalculator.VehicleDownloadIntervalDays),
-                        nowUtc))
+                RegistrationNumber = x.RegistrationNumber,
+                EndUtc = x.EndUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var normalizedVehicleUses = vehicleUses
+            .Select(x => new NormalizedVehicleUseDownloadSource
+            {
+                RegistrationNumber = NormalizeVehicleRegistration(x.RegistrationNumber),
+                CompactRegistrationNumber = GetVehicleRegistrationCompactValue(x.RegistrationNumber),
+                EndUtc = x.EndUtc
+            })
+            .Where(x => x.CompactRegistrationNumber.Length >= 5)
+            .ToList();
+
+        return vehicles
+            .Select(x =>
+            {
+                var compactRegistrationNumber = GetVehicleRegistrationCompactValue(x.RegistrationNumber);
+                var matchingUses = normalizedVehicleUses
+                    .Where(vehicleUse => IsSameVehicleRegistration(
+                        compactRegistrationNumber,
+                        vehicleUse.CompactRegistrationNumber))
+                    .ToList();
+                var lastActivityUtc = matchingUses
+                    .Select(vehicleUse => (DateTime?)vehicleUse.EndUtc)
+                    .Max();
+                var registrationNumber = GetBestVehicleRegistration(
+                    x.RegistrationNumber,
+                    matchingUses.Select(vehicleUse => vehicleUse.RegistrationNumber));
+                var nextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
+                    lastActivityUtc,
+                    DownloadScheduleCalculator.VehicleDownloadIntervalDays);
+                var daysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
+                    nextRequiredDownloadUtc,
+                    nowUtc);
+
+                return new VehicleDownloadDto
+                {
+                    VehicleId = x.Id,
+                    RegistrationNumber = registrationNumber,
+                    LastDownloadUtc = lastActivityUtc,
+                    NextRequiredDownloadUtc = nextRequiredDownloadUtc,
+                    DaysUntilDue = daysUntilDue,
+                    Status = DownloadScheduleCalculator.GetStatus(daysUntilDue)
+                };
             })
             .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
             .ThenBy(x => x.RegistrationNumber)
@@ -137,6 +162,70 @@ public class DownloadScheduleService : IDownloadScheduleService
                 .Take(5)
                 .ToList()
         };
+    }
+
+    private static string NormalizeVehicleRegistration(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : string.Join(
+                " ",
+                value.Trim()
+                    .ToUpperInvariant()
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    private static string GetVehicleRegistrationCompactValue(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : new string(value
+                .Where(x => !char.IsWhiteSpace(x))
+                .ToArray())
+                .ToUpperInvariant();
+    }
+
+    private static bool IsSameVehicleRegistration(
+        string registrationNumber,
+        string candidate)
+    {
+        if (registrationNumber.Length < 5 || candidate.Length < 5)
+        {
+            return false;
+        }
+
+        return string.Equals(registrationNumber, candidate, StringComparison.OrdinalIgnoreCase)
+            || registrationNumber.Contains(candidate, StringComparison.OrdinalIgnoreCase)
+            || candidate.Contains(registrationNumber, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetBestVehicleRegistration(
+        string vehicleRegistrationNumber,
+        IEnumerable<string> vehicleUseRegistrationNumbers)
+    {
+        return vehicleUseRegistrationNumbers
+            .Append(vehicleRegistrationNumber)
+            .Select(NormalizeVehicleRegistration)
+            .Where(x => GetVehicleRegistrationCompactValue(x).Length >= 5)
+            .OrderByDescending(x => GetVehicleRegistrationCompactValue(x).Length)
+            .ThenBy(x => x)
+            .FirstOrDefault() ?? NormalizeVehicleRegistration(vehicleRegistrationNumber);
+    }
+
+    private sealed class VehicleUseDownloadSource
+    {
+        public string RegistrationNumber { get; set; } = string.Empty;
+
+        public DateTime EndUtc { get; set; }
+    }
+
+    private sealed class NormalizedVehicleUseDownloadSource
+    {
+        public string RegistrationNumber { get; set; } = string.Empty;
+
+        public string CompactRegistrationNumber { get; set; } = string.Empty;
+
+        public DateTime EndUtc { get; set; }
     }
 
 }
