@@ -75,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<IComplianceRule, RegularWeeklyRestRule>();
         services.AddScoped<IComplianceRule, ReducedWeeklyRestRule>();
         services.AddScoped<IComplianceRule, ReducedWeeklyRestCompensationRule>();
+        services.AddScoped<IComplianceRule, SixTwentyFourHourPeriodsRule>();
 
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
 
