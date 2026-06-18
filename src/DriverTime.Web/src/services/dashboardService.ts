@@ -19,11 +19,13 @@ type DashboardSummary = {
     generatedAtUtc: string;
 };
 
-type Driver = {
+export type DashboardDriver = {
     id: string;
     firstName: string;
     lastName: string;
     cardNumber: string;
+    cardExpiryDate: string | null;
+    cardIssuingCountry: string;
 };
 
 export type DriverActivity = {
@@ -115,10 +117,7 @@ export async function getDashboardData(): Promise<DashboardData> {
             "/api/dashboard",
             "Nie udało się pobrać podsumowania dashboardu.",
         ),
-        getJson<Driver[]>(
-            "/api/drivers",
-            "Nie udało się pobrać listy kierowców.",
-        ),
+        getDashboardDrivers(),
         getDddImports(),
         getJson<DriverActivity[]>(
             "/api/driver-activities",
@@ -149,6 +148,13 @@ export async function getDashboardData(): Promise<DashboardData> {
             driversWithMediumViolations: summary.driversWithMediumViolations,
         },
     };
+}
+
+export function getDashboardDrivers(): Promise<DashboardDriver[]> {
+    return getJson<DashboardDriver[]>(
+        "/api/drivers",
+        "Nie udało się pobrać listy kierowców.",
+    );
 }
 
 export function getDriverRiskOverview(): Promise<DriverRiskOverview> {

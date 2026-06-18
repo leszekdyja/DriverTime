@@ -15,6 +15,7 @@ import {
     getDriverActivitiesByCard,
     type DriverActivity as TimelineSourceActivity,
 } from "../services/driverActivitiesService";
+import { exportComplianceReportPdf } from "../services/pdfExportService";
 import type { DriverViolation } from "../services/violationsService";
 import "../styles/driver-details.css";
 
@@ -295,6 +296,7 @@ export default function DriverDetailsPage() {
     const [timelineActivities, setTimelineActivities] = useState<TimelineSourceActivity[]>([]);
     const [isTimelineLoading, setIsTimelineLoading] = useState(true);
     const [timelineError, setTimelineError] = useState("");
+    const [isGeneratingComplianceReport, setIsGeneratingComplianceReport] = useState(false);
 
     useEffect(() => {
         async function loadDetails() {
@@ -385,6 +387,24 @@ export default function DriverDetailsPage() {
         [timelineActivities],
     );
 
+    async function generateComplianceReport() {
+        if (!details) {
+            return;
+        }
+
+        setIsGeneratingComplianceReport(true);
+
+        try {
+            await exportComplianceReportPdf({
+                driver: details,
+                activities: timelineActivities,
+                violations,
+            });
+        } finally {
+            setIsGeneratingComplianceReport(false);
+        }
+    }
+
     return (
         <div className="driver-details-page">
             <Link className="driver-back-link" to="/drivers">
@@ -401,6 +421,14 @@ export default function DriverDetailsPage() {
                             <span className="driver-profile-label">Kierowca</span>
                             <h2>{details.firstName} {details.lastName}</h2>
                             <p>{details.cardNumber || "Brak numeru karty"}</p>
+                            <button
+                                className="driver-report-button"
+                                type="button"
+                                onClick={() => void generateComplianceReport()}
+                                disabled={isGeneratingComplianceReport || isTimelineLoading || areViolationsLoading}
+                            >
+                                {isGeneratingComplianceReport ? "Generowanie raportu..." : "Raport zgodności"}
+                            </button>
                         </div>
                         <dl className="driver-profile-data">
                             <Info label="Ważność karty" value={formatDate(details.cardExpiryDate)} />

@@ -242,3 +242,178 @@ export async function exportViolationsPdf(violations: DriverViolation[]) {
 
     document.save("drivertime-raport-naruszen.pdf");
 }
+
+type ComplianceReportDriver = {
+    id: string;
+    firstName: string;
+    lastName: string;
+    cardNumber: string;
+};
+
+type ComplianceReportActivity = {
+    activityType: string;
+    startUtc: string;
+    endUtc: string;
+    durationSeconds: number;
+};
+
+type ComplianceReportPdfOptions = {
+    driver: ComplianceReportDriver;
+    activities: ComplianceReportActivity[];
+    violations: DriverViolation[];
+};
+
+export async function exportComplianceReportPdf(options: ComplianceReportPdfOptions) {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+    ]);
+
+    const document = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    await registerPdfFonts(document);
+
+    const driverName = getDriverName(options.driver.firstName, options.driver.lastName);
+    const activityRange = getComplianceActivityRange(options.activities);
+    const severitySummary = getComplianceSeveritySummary(options.violations);
+    const activitySummary = getComplianceActivitySummary(options.activities);
+
+    addHeader(document, "Raport zgodności kierowcy", `Kierowca: ${driverName}`);
+
+    document.setFontSize(10);
+    document.setFont(PDF_FONT_NAME, "bold");
+    document.text("Kierowca", 14, 41);
+    document.text("Numer karty", 95, 41);
+    document.text("Zakres analizowanych danych", 176, 41);
+
+    document.setFont(PDF_FONT_NAME, "normal");
+    document.text(driverName, 14, 47);
+    document.text(options.driver.cardNumber || "Brak danych", 95, 47);
+    document.text(activityRange, 176, 47);
+
+    autoTable(document, {
+        startY: 55,
+        theme: "grid",
+        head: [["Naruszenia", "High", "Medium", "Low", "Jazda", "Praca", "Dyspozycja", "Odpoczynek", "Suma"]],
+        body: [[
+            String(options.violations.length),
+            String(severitySummary.high),
+            String(severitySummary.medium),
+            String(severitySummary.low),
+            formatDuration(activitySummary.driving),
+            formatDuration(activitySummary.work),
+            formatDuration(activitySummary.availability),
+            formatDuration(activitySummary.rest),
+            formatDuration(activitySummary.total),
+        ]],
+        styles: {
+            font: PDF_FONT_NAME,
+            fontSize: 8,
+            cellPadding: 2.5,
+        },
+        headStyles: {
+            font: PDF_FONT_NAME,
+            fontStyle: "bold",
+            fillColor: [37, 99, 235],
+            textColor: 255,
+        },
+        margin: { left: 14, right: 14 },
+    });
+
+    autoTable(document, {
+        startY: 78,
+        theme: "striped",
+        head: [["Kod", "Reguła", "Severity", "Opis", "Okres"]],
+        body: options.violations.map((violation) => [
+            violation.code || "Brak kodu",
+            violation.violationType || "Brak nazwy",
+            severityLabels[violation.severity.toLowerCase()] ?? violation.severity,
+            violation.description || "Brak opisu",
+            `${formatDate(violation.occurredAtUtc)} - ${formatDate(violation.periodEndUtc)}`,
+        ]),
+        columnStyles: {
+            0: { cellWidth: 34 },
+            1: { cellWidth: 52 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: "auto" },
+            4: { cellWidth: 56 },
+        },
+        styles: {
+            font: PDF_FONT_NAME,
+            fontSize: 7.5,
+            cellPadding: 2.4,
+            overflow: "linebreak",
+        },
+        headStyles: {
+            font: PDF_FONT_NAME,
+            fontStyle: "bold",
+            fillColor: [15, 23, 42],
+            textColor: 255,
+        },
+        alternateRowStyles: { fillColor: [241, 245, 249] },
+        margin: { left: 14, right: 14 },
+    });
+
+    document.save(`drivertime-raport-zgodnosci-${options.driver.cardNumber || options.driver.id}.pdf`);
+}
+
+function getComplianceActivityRange(activities: ComplianceReportActivity[]) {
+    if (activities.length === 0) {
+        return "Brak aktywności";
+    }
+
+    const starts = activities
+        .map((activity) => new Date(activity.startUtc).getTime())
+        .filter((value) => !Number.isNaN(value));
+    const ends = activities
+        .map((activity) => new Date(activity.endUtc).getTime())
+        .filter((value) => !Number.isNaN(value));
+
+    if (starts.length === 0 || ends.length === 0) {
+        return "Brak danych";
+    }
+
+    return `${formatDate(new Date(Math.min(...starts)).toISOString())} - ${formatDate(new Date(Math.max(...ends)).toISOString())}`;
+}
+
+function getComplianceSeveritySummary(violations: DriverViolation[]) {
+    return violations.reduce(
+        (summary, violation) => {
+            const severity = violation.severity.trim().toLowerCase();
+
+            if (severity === "critical" || severity === "high" || severity === "severe" || severity === "very serious") {
+                summary.high += 1;
+            } else if (severity === "warning" || severity === "medium" || severity === "serious") {
+                summary.medium += 1;
+            } else {
+                summary.low += 1;
+            }
+
+            return summary;
+        },
+        { high: 0, medium: 0, low: 0 },
+    );
+}
+
+function getComplianceActivitySummary(activities: ComplianceReportActivity[]) {
+    return activities.reduce(
+        (summary, activity) => {
+            const duration = Math.max(activity.durationSeconds, 0);
+            const type = activity.activityType.toUpperCase();
+
+            if (type === "DRIVING") {
+                summary.driving += duration;
+            } else if (type === "WORK") {
+                summary.work += duration;
+            } else if (type === "AVAILABILITY") {
+                summary.availability += duration;
+            } else if (type === "REST") {
+                summary.rest += duration;
+            }
+
+            summary.total += duration;
+
+            return summary;
+        },
+        { driving: 0, work: 0, availability: 0, rest: 0, total: 0 },
+    );
+}

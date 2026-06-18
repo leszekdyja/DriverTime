@@ -14,12 +14,20 @@ import {
     checkApiHealth,
     getComplianceRunDashboardStats,
     getDashboardData,
+    getDashboardDrivers,
     getDownloadDashboard,
     type ComplianceRunDashboardStats,
     type DashboardData,
+    type DashboardDriver,
     type DriverActivity,
 } from "../services/dashboardService";
-import type { DownloadDashboard } from "../services/downloadsService";
+import {
+    getDriverDownloads,
+    getVehicleDownloads,
+    type DownloadDashboard,
+    type DriverDownload,
+    type VehicleDownload,
+} from "../services/downloadsService";
 import {
     getDriverViolations,
     type DriverViolation,
@@ -27,6 +35,7 @@ import {
 import "../styles/dashboard.css";
 
 const refreshIntervalMs = 30_000;
+const maxOperationalAlerts = 8;
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
@@ -50,6 +59,18 @@ const activityDefinitions = [
     { type: "REST", label: "Odpoczynek", tone: "rest", color: "var(--chart-rest)" },
     { type: "AVAILABILITY", label: "Dyspozycja", tone: "availability", color: "var(--chart-availability)" },
 ] as const;
+
+type OperationalAlertPriority = "High" | "Medium" | "Low";
+
+type OperationalAlert = {
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    priority: OperationalAlertPriority;
+    dueDateUtc: string | null;
+    actionUrl: string;
+};
 
 const violationSeverityDefinitions = [
     { severity: "info", label: "Info", color: "var(--chart-warning)" },
@@ -129,6 +150,10 @@ function normalizeViolationGroup(severity: string) {
     return "info";
 }
 
+function isHighSeverity(severity: string) {
+    return normalizeViolationGroup(severity) === "critical";
+}
+
 function formatRunStatus(status: string) {
     const normalized = status.trim().toLowerCase();
 
@@ -169,6 +194,46 @@ function isWithinLastDay(value: string) {
     }
 
     return Date.now() - date.getTime() <= 24 * 60 * 60 * 1000;
+}
+
+function getDaysUntil(value: string) {
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    const now = new Date();
+    const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const targetUtc = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
+    return Math.ceil((targetUtc - todayUtc) / (24 * 60 * 60 * 1000));
+}
+
+function formatAlertDueDate(value: string | null) {
+    return value ? formatOptionalDate(value) : "Brak terminu";
+}
+
+function getPriorityTone(priority: OperationalAlertPriority) {
+    if (priority === "High") return "danger";
+    if (priority === "Medium") return "warning";
+    return "neutral";
+}
+
+function getPriorityLabel(priority: OperationalAlertPriority) {
+    if (priority === "High") return "High";
+    if (priority === "Medium") return "Medium";
+    return "Low";
+}
+
+function priorityRank(priority: OperationalAlertPriority) {
+    if (priority === "High") return 0;
+    if (priority === "Medium") return 1;
+    return 2;
+}
+
+function getDriverDisplayName(driver: Pick<DashboardDriver, "firstName" | "lastName" | "cardNumber">) {
+    return getDriverName(driver.firstName, driver.lastName) || driver.cardNumber || "Kierowca";
 }
 
 function buildImportChartData(dashboard: DashboardData): ImportChartData[] {
@@ -222,6 +287,9 @@ export default function DashboardPage() {
     const [violations, setViolations] = useState<DriverViolation[]>([]);
     const [complianceStats, setComplianceStats] = useState<ComplianceRunDashboardStats | null>(null);
     const [downloadStats, setDownloadStats] = useState<DownloadDashboard | null>(null);
+    const [drivers, setDrivers] = useState<DashboardDriver[]>([]);
+    const [driverDownloads, setDriverDownloads] = useState<DriverDownload[]>([]);
+    const [vehicleDownloads, setVehicleDownloads] = useState<VehicleDownload[]>([]);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isComplianceStatsLoading, setIsComplianceStatsLoading] = useState(true);
@@ -243,7 +311,16 @@ export default function DashboardPage() {
         setIsDownloadStatsLoading(true);
 
         try {
-            const [dashboardData, violationData, healthStatus, complianceResult, downloadResult] = await Promise.all([
+            const [
+                dashboardData,
+                violationData,
+                healthStatus,
+                complianceResult,
+                downloadResult,
+                driversResult,
+                driverDownloadsResult,
+                vehicleDownloadsResult,
+            ] = await Promise.all([
                 getDashboardData(),
                 getDriverViolations(),
                 checkApiHealth().catch(() => false),
@@ -263,6 +340,9 @@ export default function DashboardPage() {
                             ? statsError.message
                             : "Wystąpił błąd podczas pobierania terminów odczytów.",
                     })),
+                getDashboardDrivers().catch(() => []),
+                getDriverDownloads().catch(() => []),
+                getVehicleDownloads().catch(() => []),
             ]);
 
             setDashboard(dashboardData);
@@ -272,6 +352,9 @@ export default function DashboardPage() {
             setComplianceStatsError(complianceResult.error);
             setDownloadStats(downloadResult.data);
             setDownloadStatsError(downloadResult.error);
+            setDrivers(driversResult);
+            setDriverDownloads(driverDownloadsResult);
+            setVehicleDownloads(vehicleDownloadsResult);
             setLastRefreshedAt(new Date());
             setError("");
         } catch (loadError) {
@@ -349,6 +432,116 @@ export default function DashboardPage() {
             latest: violations.slice(0, 4),
         };
     }, [violations]);
+
+    const operationalAlerts = useMemo<OperationalAlert[]>(() => {
+        const alerts: OperationalAlert[] = [];
+
+        driverDownloads.forEach((download) => {
+            if (download.status !== "Overdue" && download.status !== "Warning") {
+                return;
+            }
+
+            const driverName = getDriverDisplayName(download);
+            const isOverdue = download.status === "Overdue";
+
+            alerts.push({
+                id: `driver-download-${download.driverId}-${download.nextRequiredDownloadUtc ?? "missing"}`,
+                type: "Odczyt kierowcy",
+                title: isOverdue
+                    ? `Odczyt karty po terminie: ${driverName}`
+                    : `Zbliża się termin odczytu karty: ${driverName}`,
+                description: isOverdue
+                    ? "Karta kierowcy przekroczyła wymagany cykl odczytu 28 dni."
+                    : "Termin odczytu karty kierowcy przypada w ciągu 7 dni.",
+                priority: isOverdue ? "High" : "Medium",
+                dueDateUtc: download.nextRequiredDownloadUtc,
+                actionUrl: "/downloads",
+            });
+        });
+
+        vehicleDownloads.forEach((download) => {
+            if (download.status !== "Overdue" && download.status !== "Warning") {
+                return;
+            }
+
+            const isOverdue = download.status === "Overdue";
+
+            alerts.push({
+                id: `vehicle-download-${download.vehicleId}-${download.nextRequiredDownloadUtc ?? "missing"}`,
+                type: "Odczyt pojazdu",
+                title: isOverdue
+                    ? `Odczyt tachografu po terminie: ${download.registrationNumber}`
+                    : `Zbliża się termin odczytu tachografu: ${download.registrationNumber}`,
+                description: isOverdue
+                    ? "Pojazd przekroczył wymagany cykl odczytu tachografu 90 dni."
+                    : "Termin odczytu pojazdu lub tachografu przypada w ciągu 7 dni.",
+                priority: isOverdue ? "High" : "Medium",
+                dueDateUtc: download.nextRequiredDownloadUtc,
+                actionUrl: "/downloads",
+            });
+        });
+
+        drivers.forEach((driver) => {
+            if (!driver.cardExpiryDate) {
+                return;
+            }
+
+            const daysUntilExpiry = getDaysUntil(driver.cardExpiryDate);
+            if (daysUntilExpiry === null || daysUntilExpiry > 30) {
+                return;
+            }
+
+            const driverName = getDriverDisplayName(driver);
+            const isExpired = daysUntilExpiry < 0;
+
+            alerts.push({
+                id: `driver-card-${driver.id}-${driver.cardExpiryDate}`,
+                type: "Karta kierowcy",
+                title: isExpired
+                    ? `Karta kierowcy wygasła: ${driverName}`
+                    : `Karta kierowcy wygasa: ${driverName}`,
+                description: isExpired
+                    ? "Karta kierowcy jest po terminie ważności."
+                    : `Karta kierowcy wygaśnie za ${daysUntilExpiry} dni.`,
+                priority: isExpired ? "High" : "Medium",
+                dueDateUtc: driver.cardExpiryDate,
+                actionUrl: `/drivers/${driver.id}`,
+            });
+        });
+
+        violations
+            .filter((violation) => isHighSeverity(violation.severity))
+            .slice(0, 12)
+            .forEach((violation) => {
+                const driverName = getDriverName(violation.driverFirstName, violation.driverLastName);
+
+                alerts.push({
+                    id: `high-violation-${violation.id}`,
+                    type: "Naruszenie",
+                    title: `Naruszenie High: ${driverName}`,
+                    description: violation.violationType || violation.description || "Wysokie naruszenie compliance wymaga sprawdzenia.",
+                    priority: "High",
+                    dueDateUtc: violation.occurredAtUtc,
+                    actionUrl: violation.driverId
+                        ? `/violations?driverId=${violation.driverId}&violationId=${violation.id}`
+                        : "/violations",
+                });
+            });
+
+        return alerts
+            .sort((left, right) => {
+                const priorityDifference = priorityRank(left.priority) - priorityRank(right.priority);
+                if (priorityDifference !== 0) {
+                    return priorityDifference;
+                }
+
+                const leftTime = left.dueDateUtc ? new Date(left.dueDateUtc).getTime() : Number.MAX_SAFE_INTEGER;
+                const rightTime = right.dueDateUtc ? new Date(right.dueDateUtc).getTime() : Number.MAX_SAFE_INTEGER;
+
+                return leftTime - rightTime;
+            })
+            .slice(0, maxOperationalAlerts);
+    }, [driverDownloads, drivers, vehicleDownloads, violations]);
 
     const realtimeWidgets = useMemo(() => {
         const latestImport = dashboard?.latestImports[0] ?? null;
@@ -454,6 +647,46 @@ export default function DashboardPage() {
                     <p>{apiOnline ? "Endpoint health odpowiada poprawnie." : "Nie udało się potwierdzić statusu API."}</p>
                     <small>Autorefresh co 30 sekund</small>
                 </article>
+            </section>
+
+            <section className="dashboard-widget operational-alerts-widget">
+                <div className="dashboard-widget-heading">
+                    <div>
+                        <span>Alerty operacyjne</span>
+                        <h3>Pilne sprawy do sprawdzenia</h3>
+                        <p>Najważniejsze sygnały z odczytów, kart kierowców i naruszeń High.</p>
+                    </div>
+                    <Link to="/alerts">Zobacz wszystkie alerty</Link>
+                </div>
+
+                {operationalAlerts.length === 0 ? (
+                    <EmptyState
+                        title="Brak pilnych alertów operacyjnych."
+                        description="Nie znaleziono przeterminowanych odczytów, wygasających kart ani naruszeń High."
+                    />
+                ) : (
+                    <div className="operational-alerts-list">
+                        {operationalAlerts.map((alert) => (
+                            <article className={`operational-alert-card ${alert.priority.toLowerCase()}`} key={alert.id}>
+                                <div className="operational-alert-main">
+                                    <div className="operational-alert-title-row">
+                                        <StatusBadge
+                                            label={getPriorityLabel(alert.priority)}
+                                            tone={getPriorityTone(alert.priority)}
+                                        />
+                                        <span>{alert.type}</span>
+                                    </div>
+                                    <h4>{alert.title}</h4>
+                                    <p>{alert.description}</p>
+                                </div>
+                                <div className="operational-alert-meta">
+                                    <span>{formatAlertDueDate(alert.dueDateUtc)}</span>
+                                    <Link to={alert.actionUrl}>Przejdź</Link>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                )}
             </section>
 
             <section className="dashboard-kpi-grid" aria-label="Kluczowe wskaźniki">

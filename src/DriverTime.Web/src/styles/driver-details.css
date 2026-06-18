@@ -58,6 +58,31 @@
     color: var(--color-muted);
 }
 
+.driver-report-button {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 18px;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: white;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 750;
+}
+
+.driver-report-button:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+}
+
+.driver-report-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
 .driver-profile-data {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
