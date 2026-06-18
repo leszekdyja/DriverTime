@@ -9,8 +9,10 @@ public class DailyRestViolationRule : IComplianceRule
     private const string RuleCode = "DAILY_REST";
     private const long RegularDailyRestMinutes = 660;
     private const long ReducedDailyRestMinutes = 540;
+    private const long FirstSplitDailyRestMinutes = 180;
     private static readonly TimeSpan RegularDailyRest = TimeSpan.FromMinutes(RegularDailyRestMinutes);
     private static readonly TimeSpan ReducedDailyRest = TimeSpan.FromMinutes(ReducedDailyRestMinutes);
+    private static readonly TimeSpan FirstSplitDailyRest = TimeSpan.FromMinutes(FirstSplitDailyRestMinutes);
 
     public string Code => RuleCode;
 
@@ -63,12 +65,14 @@ public class DailyRestViolationRule : IComplianceRule
             dutyPeriods++;
             var windowEnd = currentPeriodStart.AddHours(24);
             var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd);
+            var splitRegularRest = FindSplitRegularDailyRestInWindow(restPeriods, currentPeriodStart, windowEnd);
             var restMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
             maxLongestRest = Max(maxLongestRest, longestRest.Duration);
 
-            if (longestRest.Duration >= RegularDailyRest)
+            if (longestRest.Duration >= RegularDailyRest || splitRegularRest is not null)
             {
-                var nextDuty = GetNextDutyAfterRest(dutyActivities, longestRest.EndUtc);
+                var restEndUtc = splitRegularRest?.SecondRest.EndUtc ?? longestRest.EndUtc;
+                var nextDuty = GetNextDutyAfterRest(dutyActivities, restEndUtc);
                 if (nextDuty is null)
                 {
                     break;
@@ -158,7 +162,8 @@ public class DailyRestViolationRule : IComplianceRule
             {
                 ["restMinutes"] = restMinutes,
                 ["regularDailyRestMinutes"] = RegularDailyRestMinutes,
-                ["reducedDailyRestMinutes"] = ReducedDailyRestMinutes
+                ["reducedDailyRestMinutes"] = ReducedDailyRestMinutes,
+                ["firstSplitDailyRestMinutes"] = FirstSplitDailyRestMinutes
             }
         };
     }
@@ -239,6 +244,40 @@ public class DailyRestViolationRule : IComplianceRule
             .FirstOrDefault() ?? new RestPeriod(windowStart, windowStart);
     }
 
+    private static SplitRegularRest? FindSplitRegularDailyRestInWindow(
+        IReadOnlyList<RestPeriod> restPeriods,
+        DateTime windowStart,
+        DateTime windowEnd)
+    {
+        var restsInWindow = restPeriods
+            .Where(x => x.StartUtc < windowEnd && x.EndUtc > windowStart)
+            .Select(x => new RestPeriod(Max(x.StartUtc, windowStart), Min(x.EndUtc, windowEnd)))
+            .Where(x => x.StartUtc < x.EndUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+
+        for (var firstIndex = 0; firstIndex < restsInWindow.Count; firstIndex++)
+        {
+            var firstRest = restsInWindow[firstIndex];
+            if (firstRest.Duration < FirstSplitDailyRest)
+            {
+                continue;
+            }
+
+            for (var secondIndex = firstIndex + 1; secondIndex < restsInWindow.Count; secondIndex++)
+            {
+                var secondRest = restsInWindow[secondIndex];
+                if (secondRest.Duration >= ReducedDailyRest)
+                {
+                    return new SplitRegularRest(firstRest, secondRest);
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static TimelineActivity? GetNextDutyAfterRest(
         IReadOnlyList<TimelineActivity> dutyActivities,
         DateTime restEndUtc)
@@ -309,4 +348,6 @@ public class DailyRestViolationRule : IComplianceRule
             ? EndUtc - StartUtc
             : TimeSpan.Zero;
     }
+
+    private sealed record SplitRegularRest(RestPeriod FirstRest, RestPeriod SecondRest);
 }
