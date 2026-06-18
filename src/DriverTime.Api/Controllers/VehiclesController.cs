@@ -114,6 +114,20 @@ public class VehiclesController : ControllerBase
                 .ToListAsync(cancellationToken)
         };
 
+        details.Activities = await BuildVehicleActivitiesQuery(normalizedRegistration)
+            .OrderByDescending(x => x.StartUtc)
+            .Select(x => new VehicleActivityDto
+            {
+                Id = x.ActivityId,
+                DddFileId = x.DddFileId,
+                DriverId = x.DriverId,
+                DriverName = x.DriverName,
+                ActivityType = x.ActivityType,
+                StartUtc = x.StartUtc,
+                EndUtc = x.EndUtc
+            })
+            .ToListAsync(cancellationToken);
+
         return Ok(details);
     }
 
@@ -252,6 +266,43 @@ public class VehiclesController : ControllerBase
                     "%" + x.RegistrationNumber.Replace(" ", "").ToUpper()));
     }
 
+    private IQueryable<VehicleActivitySource> BuildVehicleActivitiesQuery(string normalizedRegistration)
+    {
+        return _dbContext.VehicleUses
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.RegistrationNumber != null
+                && x.RegistrationNumber.Replace(" ", "").Length >= 5
+                && EF.Functions.Like(
+                    normalizedRegistration,
+                    "%" + x.RegistrationNumber.Replace(" ", "").ToUpper()))
+            .Join(
+                _dbContext.DriverActivities.AsNoTracking(),
+                vehicleUse => vehicleUse.DddFileId,
+                activity => activity.DddFileId,
+                (vehicleUse, activity) => new { vehicleUse, activity })
+            .Where(x =>
+                x.activity.StartUtc < x.vehicleUse.EndUtc
+                && x.activity.EndUtc > x.vehicleUse.StartUtc)
+            .Select(x => new VehicleActivitySource
+            {
+                ActivityId = x.activity.Id,
+                DddFileId = x.activity.DddFileId,
+                DriverId = x.activity.DddFile.DriverId,
+                DriverName = x.activity.DddFile.Driver == null
+                    ? string.Empty
+                    : x.activity.DddFile.Driver.FirstName + " " + x.activity.DddFile.Driver.LastName,
+                ActivityType = x.activity.ActivityType,
+                StartUtc = x.activity.StartUtc < x.vehicleUse.StartUtc
+                    ? x.vehicleUse.StartUtc
+                    : x.activity.StartUtc,
+                EndUtc = x.activity.EndUtc > x.vehicleUse.EndUtc
+                    ? x.vehicleUse.EndUtc
+                    : x.activity.EndUtc
+            });
+    }
+
     private static VehicleDto MapVehicle(Vehicle vehicle)
     {
         return new VehicleDto
@@ -294,6 +345,23 @@ public class VehiclesController : ControllerBase
         public string DriverLastName { get; set; } = string.Empty;
 
         public string DriverCardNumber { get; set; } = string.Empty;
+
+        public DateTime StartUtc { get; set; }
+
+        public DateTime EndUtc { get; set; }
+    }
+
+    private sealed class VehicleActivitySource
+    {
+        public Guid ActivityId { get; set; }
+
+        public Guid DddFileId { get; set; }
+
+        public Guid? DriverId { get; set; }
+
+        public string DriverName { get; set; } = string.Empty;
+
+        public string ActivityType { get; set; } = string.Empty;
 
         public DateTime StartUtc { get; set; }
 

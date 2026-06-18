@@ -13,12 +13,36 @@ import {
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    getVehicleDownloads,
+    type DownloadStatus,
+    type VehicleDownload,
+} from "../services/downloadsService";
+import {
     getVehicle,
     getVehicleAnalytics,
+    type VehicleActivity,
     type VehicleAnalytics,
     type VehicleDetails,
 } from "../services/vehicleService";
 import "../styles/driver-details.css";
+
+type EffectiveDownloadStatus = DownloadStatus | "NoData";
+
+type TimelineSegment = {
+    id: string;
+    activityType: string;
+    startUtc: Date;
+    endUtc: Date;
+    leftPercent: number;
+    widthPercent: number;
+    durationSeconds: number;
+};
+
+type TimelineDay = {
+    date: string;
+    label: string;
+    segments: TimelineSegment[];
+};
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
@@ -26,9 +50,37 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+});
+
+const chartDayFormatter = new Intl.DateTimeFormat("pl-PL", {
     day: "2-digit",
     month: "2-digit",
 });
+
+const timeFormatter = new Intl.DateTimeFormat("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+});
+
+const activityLabels: Record<string, string> = {
+    DRIVING: "Jazda",
+    WORK: "Praca",
+    AVAILABILITY: "Dyspozycyjność",
+    REST: "Odpoczynek",
+};
+
+const timelineLegend = [
+    { type: "DRIVING", label: activityLabels.DRIVING },
+    { type: "WORK", label: activityLabels.WORK },
+    { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
+    { type: "REST", label: activityLabels.REST },
+];
 
 function formatDate(value: string | null) {
     if (!value) return "Brak danych";
@@ -41,7 +93,7 @@ function formatDate(value: string | null) {
 function formatDay(value: string) {
     const date = new Date(value);
 
-    return Number.isNaN(date.getTime()) ? value : dayFormatter.format(date);
+    return Number.isNaN(date.getTime()) ? value : chartDayFormatter.format(date);
 }
 
 function formatDriverName(firstName: string, lastName: string) {
@@ -50,25 +102,217 @@ function formatDriverName(firstName: string, lastName: string) {
     return fullName || "Brak danych";
 }
 
-function formatMinutes(minutes: number) {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
+function formatDuration(seconds: number) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
 
-    if (hours <= 0) {
-        return `${remainingMinutes} min`;
+    return `${hours} godz. ${minutes} min`;
+}
+
+function formatMinutes(minutes: number) {
+    return formatDuration(minutes * 60);
+}
+
+function getDownloadStatus(download: VehicleDownload | null): EffectiveDownloadStatus {
+    return download?.lastDownloadUtc ? download.status : "NoData";
+}
+
+function getStatusLabel(status: EffectiveDownloadStatus) {
+    if (status === "OK") return "OK";
+    if (status === "Warning") return "Zbliża się termin";
+    if (status === "Overdue") return "Przeterminowany";
+    return "Brak danych";
+}
+
+function getStatusTone(status: EffectiveDownloadStatus) {
+    if (status === "OK") return "success";
+    if (status === "Warning") return "warning";
+    if (status === "Overdue") return "danger";
+    return "neutral";
+}
+
+function toUtcDayKey(date: Date) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+function getUtcDayStart(date: Date) {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function secondsSinceDayStart(date: Date, dayStart: Date) {
+    return Math.max(0, (date.getTime() - dayStart.getTime()) / 1000);
+}
+
+function toTimelinePercent(seconds: number) {
+    return (seconds / 86400) * 100;
+}
+
+function getActivityClass(activityType: string) {
+    const normalized = activityType.toUpperCase();
+
+    if (normalized === "DRIVING") return "driving";
+    if (normalized === "WORK") return "work";
+    if (normalized === "AVAILABILITY") return "availability";
+    if (normalized === "REST") return "rest";
+
+    return "other";
+}
+
+function getActivityLabel(activityType: string) {
+    return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
+}
+
+function buildDailyTimeline(activities: VehicleActivity[]): TimelineDay[] {
+    const rawSegmentsByDay = new Map<string, TimelineSegment[]>();
+
+    for (const activity of activities) {
+        const activityStart = new Date(activity.startUtc);
+        const activityEnd = new Date(activity.endUtc);
+
+        if (
+            Number.isNaN(activityStart.getTime()) ||
+            Number.isNaN(activityEnd.getTime()) ||
+            activityEnd <= activityStart
+        ) {
+            continue;
+        }
+
+        let segmentStart = activityStart;
+
+        while (segmentStart < activityEnd) {
+            const dayStart = getUtcDayStart(segmentStart);
+            const dayEnd = addDays(dayStart, 1);
+            const segmentEnd = activityEnd < dayEnd ? activityEnd : dayEnd;
+            const dayKey = toUtcDayKey(dayStart);
+
+            if (!rawSegmentsByDay.has(dayKey)) {
+                rawSegmentsByDay.set(dayKey, []);
+            }
+
+            rawSegmentsByDay.get(dayKey)!.push(createTimelineSegment({
+                id: activity.id,
+                activityType: activity.activityType,
+                startUtc: segmentStart,
+                endUtc: segmentEnd,
+                dayStart,
+            }));
+
+            segmentStart = segmentEnd;
+        }
     }
 
-    return `${hours} godz. ${remainingMinutes} min`;
+    return Array.from(rawSegmentsByDay.entries())
+        .map(([date, rawSegments]) => {
+            const dayStart = getUtcDayStart(new Date(`${date}T00:00:00Z`));
+            const dayEnd = addDays(dayStart, 1);
+            const ordered = rawSegments.sort(
+                (left, right) => left.startUtc.getTime() - right.startUtc.getTime(),
+            );
+            const segments: TimelineSegment[] = [];
+            let cursor = dayStart;
+
+            for (const segment of ordered) {
+                if (segment.endUtc <= cursor) {
+                    continue;
+                }
+
+                if (segment.startUtc > cursor) {
+                    segments.push(createTimelineSegment({
+                        id: `rest-gap-${date}-${cursor.toISOString()}`,
+                        activityType: "REST",
+                        startUtc: cursor,
+                        endUtc: segment.startUtc,
+                        dayStart,
+                    }));
+                }
+
+                const clippedStart = segment.startUtc < cursor ? cursor : segment.startUtc;
+                const clippedEnd = segment.endUtc > dayEnd ? dayEnd : segment.endUtc;
+
+                if (clippedEnd > clippedStart) {
+                    segments.push(createTimelineSegment({
+                        id: segment.id,
+                        activityType: segment.activityType,
+                        startUtc: clippedStart,
+                        endUtc: clippedEnd,
+                        dayStart,
+                    }));
+                    cursor = clippedEnd;
+                }
+            }
+
+            if (cursor < dayEnd) {
+                segments.push(createTimelineSegment({
+                    id: `rest-gap-${date}-${cursor.toISOString()}`,
+                    activityType: "REST",
+                    startUtc: cursor,
+                    endUtc: dayEnd,
+                    dayStart,
+                }));
+            }
+
+            return {
+                date,
+                label: dayFormatter.format(dayStart),
+                segments,
+            };
+        })
+        .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function createTimelineSegment({
+    id,
+    activityType,
+    startUtc,
+    endUtc,
+    dayStart,
+}: {
+    id: string;
+    activityType: string;
+    startUtc: Date;
+    endUtc: Date;
+    dayStart: Date;
+}): TimelineSegment {
+    const durationSeconds = Math.max(0, (endUtc.getTime() - startUtc.getTime()) / 1000);
+
+    return {
+        id,
+        activityType,
+        startUtc,
+        endUtc,
+        leftPercent: toTimelinePercent(secondsSinceDayStart(startUtc, dayStart)),
+        widthPercent: toTimelinePercent(durationSeconds),
+        durationSeconds,
+    };
+}
+
+function formatTimelineTooltip(segment: TimelineSegment) {
+    return [
+        getActivityLabel(segment.activityType),
+        `${timeFormatter.format(segment.startUtc)} - ${timeFormatter.format(segment.endUtc)}`,
+        formatDuration(segment.durationSeconds),
+    ].join("\n");
 }
 
 export default function VehicleDetailsPage() {
-    const { id } = useParams<{ id: string }>();
+    const { vehicleId } = useParams<{ vehicleId: string }>();
     const [details, setDetails] = useState<VehicleDetails | null>(null);
     const [analytics, setAnalytics] = useState<VehicleAnalytics | null>(null);
+    const [download, setDownload] = useState<VehicleDownload | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
+    const [isDownloadLoading, setIsDownloadLoading] = useState(true);
     const [error, setError] = useState("");
     const [analyticsError, setAnalyticsError] = useState("");
+    const [downloadError, setDownloadError] = useState("");
 
     const chartData = useMemo(
         () => analytics?.dailyUsageLast30Days.map((item) => ({
@@ -79,9 +323,14 @@ export default function VehicleDetailsPage() {
         [analytics],
     );
 
+    const timelineDays = useMemo(
+        () => buildDailyTimeline(details?.activities ?? []),
+        [details?.activities],
+    );
+
     useEffect(() => {
         async function loadDetails() {
-            if (!id) {
+            if (!vehicleId) {
                 setError("Brak identyfikatora pojazdu.");
                 setIsLoading(false);
                 return;
@@ -91,7 +340,7 @@ export default function VehicleDetailsPage() {
             setError("");
 
             try {
-                setDetails(await getVehicle(id));
+                setDetails(await getVehicle(vehicleId));
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
@@ -104,11 +353,11 @@ export default function VehicleDetailsPage() {
         }
 
         void loadDetails();
-    }, [id]);
+    }, [vehicleId]);
 
     useEffect(() => {
         async function loadAnalytics() {
-            if (!id) {
+            if (!vehicleId) {
                 setAnalyticsError("Brak identyfikatora pojazdu.");
                 setIsAnalyticsLoading(false);
                 return;
@@ -118,7 +367,7 @@ export default function VehicleDetailsPage() {
             setAnalyticsError("");
 
             try {
-                setAnalytics(await getVehicleAnalytics(id));
+                setAnalytics(await getVehicleAnalytics(vehicleId));
             } catch (loadError) {
                 setAnalyticsError(
                     loadError instanceof Error
@@ -131,7 +380,34 @@ export default function VehicleDetailsPage() {
         }
 
         void loadAnalytics();
-    }, [id]);
+    }, [vehicleId]);
+
+    useEffect(() => {
+        async function loadDownload() {
+            if (!vehicleId) {
+                setIsDownloadLoading(false);
+                return;
+            }
+
+            setIsDownloadLoading(true);
+            setDownloadError("");
+
+            try {
+                const vehicles = await getVehicleDownloads();
+                setDownload(vehicles.find((vehicle) => vehicle.vehicleId === vehicleId) ?? null);
+            } catch (loadError) {
+                setDownloadError(
+                    loadError instanceof Error
+                        ? loadError.message
+                        : "Wystąpił błąd podczas pobierania terminu odczytu.",
+                );
+            } finally {
+                setIsDownloadLoading(false);
+            }
+        }
+
+        void loadDownload();
+    }, [vehicleId]);
 
     return (
         <div className="driver-details-page">
@@ -187,6 +463,14 @@ export default function VehicleDetailsPage() {
                         <SummaryCard label="Kierowcy" value={String(details.drivers.length)} />
                     </section>
 
+                    <VehicleDownloadSection
+                        download={download}
+                        error={downloadError}
+                        isLoading={isDownloadLoading}
+                    />
+
+                    <VehicleDailyTimelineSection timelineDays={timelineDays} />
+
                     <VehicleAnalyticsSection
                         analytics={analytics}
                         chartData={chartData}
@@ -241,7 +525,7 @@ export default function VehicleDetailsPage() {
                                     <th>Numer karty</th>
                                     <th>Pierwsze użycie</th>
                                     <th>Ostatnie użycie</th>
-                                    <th>Liczba użyć</th>
+                                    <th>Liczba aktywności</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -264,6 +548,125 @@ export default function VehicleDetailsPage() {
                 </>
             ) : null}
         </div>
+    );
+}
+
+function VehicleDownloadSection({
+    download,
+    error,
+    isLoading,
+}: {
+    download: VehicleDownload | null;
+    error: string;
+    isLoading: boolean;
+}) {
+    if (isLoading) {
+        return (
+            <section className="driver-details-section">
+                <h3>Odczyty tachografu</h3>
+                <TableSkeleton rows={1} columns={4} />
+            </section>
+        );
+    }
+
+    if (error) {
+        return (
+            <section className="driver-details-section">
+                <h3>Odczyty tachografu</h3>
+                <p className="driver-details-error" role="alert">
+                    {error}
+                </p>
+            </section>
+        );
+    }
+
+    const status = getDownloadStatus(download);
+
+    return (
+        <section className="driver-details-section">
+            <div className="daily-activity-heading">
+                <div>
+                    <h3>Odczyty tachografu</h3>
+                    <p>Pojazd powinien mieć odczyt tachografu co maksymalnie 90 dni.</p>
+                </div>
+                <StatusBadge label={getStatusLabel(status)} tone={getStatusTone(status)} />
+            </div>
+
+            {status === "NoData" ? (
+                <EmptyState
+                    title="Brak odczytów"
+                    description="Termin pojawi się po imporcie danych tachografu lub użycia pojazdu."
+                />
+            ) : (
+                <dl className="driver-profile-data" style={{ marginTop: 18 }}>
+                    <Info label="Ostatni odczyt" value={formatDate(download?.lastDownloadUtc ?? null)} />
+                    <Info label="Następny wymagany odczyt" value={formatDate(download?.nextRequiredDownloadUtc ?? null)} />
+                    <Info
+                        label="Dni do terminu"
+                        value={download?.daysUntilDue == null ? "Brak danych" : String(download.daysUntilDue)}
+                    />
+                    <Info label="Status" value={getStatusLabel(status)} />
+                </dl>
+            )}
+        </section>
+    );
+}
+
+function VehicleDailyTimelineSection({ timelineDays }: { timelineDays: TimelineDay[] }) {
+    return (
+        <section className="driver-details-section daily-activity-section">
+            <div className="daily-activity-heading">
+                <div>
+                    <h3>Dzienna oś aktywności pojazdu</h3>
+                    <p>Pełny widok 24 godzin z aktywności kierowców powiązanych z użyciem pojazdu.</p>
+                </div>
+                <div className="daily-activity-legend" aria-label="Legenda osi aktywności">
+                    {timelineLegend.map((item) => (
+                        <span key={item.type}>
+                            <i className={`daily-activity-legend-dot ${getActivityClass(item.type)}`} />
+                            {item.label}
+                        </span>
+                    ))}
+                </div>
+            </div>
+
+            {timelineDays.length === 0 ? (
+                <EmptyState
+                    title="Brak aktywności"
+                    description="Dzienna oś pojawi się po imporcie aktywności powiązanych z tym pojazdem."
+                />
+            ) : (
+                <div className="daily-activity-days">
+                    {timelineDays.map((day) => (
+                        <article className="daily-activity-day" key={day.date}>
+                            <h4>{day.label}</h4>
+                            <div className="daily-activity-timeline" aria-label={`Dzienna oś aktywności ${day.date}`}>
+                                <span className="daily-activity-baseline" />
+                                {day.segments.map((segment, index) => (
+                                    <span
+                                        className={`daily-activity-segment ${getActivityClass(segment.activityType)}`}
+                                        key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
+                                        style={{
+                                            left: `${segment.leftPercent}%`,
+                                            width: `${segment.widthPercent}%`,
+                                        }}
+                                        title={formatTimelineTooltip(segment)}
+                                        aria-label={formatTimelineTooltip(segment)}
+                                    />
+                                ))}
+                            </div>
+                            <div className="timeline-hours">
+                                <span>00:00</span>
+                                <span>06:00</span>
+                                <span>12:00</span>
+                                <span>18:00</span>
+                                <span>24:00</span>
+                            </div>
+                        </article>
+                    ))}
+                </div>
+            )}
+        </section>
     );
 }
 
@@ -333,7 +736,7 @@ function VehicleAnalyticsSection({
             </section>
 
             <section className="driver-details-section">
-                <h3>Użycie pojazdu — ostatnie 30 dni</h3>
+                <h3>Użycie pojazdu - ostatnie 30 dni</h3>
                 {chartData.every((item) => item.usesCount === 0 && item.usageMinutes === 0) ? (
                     <EmptyState
                         title="Brak użyć w ostatnich 30 dniach"

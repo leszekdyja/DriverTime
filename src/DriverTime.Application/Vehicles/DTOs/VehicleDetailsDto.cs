@@ -9,6 +9,8 @@ public class VehicleDetailsDto : VehicleDto
     public List<VehicleUseHistoryDto> VehicleUses { get; set; } = new();
 
     public List<VehicleDriverDto> Drivers { get; set; } = new();
+
+    public List<VehicleActivityDto> Activities { get; set; } = new();
 }
 
 public class VehicleUseHistoryDto
@@ -47,4 +49,21 @@ public class VehicleDriverDto
     public DateTime LastUsedAtUtc { get; set; }
 
     public int UsageCount { get; set; }
+}
+
+public class VehicleActivityDto
+{
+    public Guid Id { get; set; }
+
+    public Guid DddFileId { get; set; }
+
+    public Guid? DriverId { get; set; }
+
+    public string DriverName { get; set; } = string.Empty;
+
+    public string ActivityType { get; set; } = string.Empty;
+
+    public DateTime StartUtc { get; set; }
+
+    public DateTime EndUtc { get; set; }
 }

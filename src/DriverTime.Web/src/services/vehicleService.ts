@@ -29,11 +29,22 @@ export type VehicleDriver = {
     usageCount: number;
 };
 
+export type VehicleActivity = {
+    id: string;
+    dddFileId: string;
+    driverId: string | null;
+    driverName: string;
+    activityType: string;
+    startUtc: string;
+    endUtc: string;
+};
+
 export type VehicleDetails = Vehicle & {
     lastActivityAtUtc: string | null;
     dddImportsCount: number;
     vehicleUses: VehicleUseHistory[];
     drivers: VehicleDriver[];
+    activities: VehicleActivity[];
 };
 
 export type VehicleDailyUsage = {

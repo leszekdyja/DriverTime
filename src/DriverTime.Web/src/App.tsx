@@ -41,7 +41,7 @@ export default function App() {
                                 <Route path="drivers/:id" element={<DriverDetailsPage />} />
                                 <Route path="downloads" element={<DownloadsPage />} />
                                 <Route path="vehicles" element={<VehiclesPage />} />
-                                <Route path="vehicles/:id" element={<VehicleDetailsPage />} />
+                                <Route path="vehicles/:vehicleId" element={<VehicleDetailsPage />} />
                                 <Route path="reports" element={<ReportsPage />} />
                                 <Route path="violations" element={<ViolationsPage />} />
                                 <Route path="company-settings" element={<CompanySettingsPage />} />
