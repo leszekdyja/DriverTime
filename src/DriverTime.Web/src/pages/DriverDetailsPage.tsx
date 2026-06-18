@@ -23,19 +23,6 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     timeStyle: "short",
 });
 
-function formatDate(value: string | null) {
-    if (!value) return "Brak danych";
-
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "Brak danych" : dateFormatter.format(date);
-}
-
-function formatDuration(seconds: number) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours} godz. ${minutes} min`;
-}
-
 const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     weekday: "long",
     day: "2-digit",
@@ -57,6 +44,13 @@ const activityLabels: Record<string, string> = {
     REST: "Odpoczynek",
 };
 
+const timelineLegend = [
+    { type: "DRIVING", label: activityLabels.DRIVING },
+    { type: "WORK", label: activityLabels.WORK },
+    { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
+    { type: "REST", label: activityLabels.REST },
+];
+
 type TimelineSegment = {
     id: string;
     activityType: string;
@@ -72,6 +66,19 @@ type TimelineDay = {
     label: string;
     segments: TimelineSegment[];
 };
+
+function formatDate(value: string | null) {
+    if (!value) return "Brak danych";
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Brak danych" : dateFormatter.format(date);
+}
+
+function formatDuration(seconds: number) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours} godz. ${minutes} min`;
+}
 
 function formatMinutes(minutes: number) {
     return formatDuration(minutes * 60);
@@ -126,6 +133,10 @@ function secondsSinceDayStart(date: Date, dayStart: Date) {
     return Math.max(0, (date.getTime() - dayStart.getTime()) / 1000);
 }
 
+function toTimelinePercent(seconds: number) {
+    return (seconds / 86400) * 100;
+}
+
 function getActivityClass(activityType: string) {
     const normalized = activityType.toUpperCase();
 
@@ -141,8 +152,8 @@ function getActivityLabel(activityType: string) {
     return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
 }
 
-function buildDailyTimeline(activities: TimelineSourceActivity[]) {
-    const days = new Map<string, TimelineDay>();
+function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[] {
+    const rawSegmentsByDay = new Map<string, TimelineSegment[]>();
 
     for (const activity of activities) {
         const activityStart = new Date(activity.startUtc);
@@ -163,41 +174,106 @@ function buildDailyTimeline(activities: TimelineSourceActivity[]) {
             const dayEnd = addDays(dayStart, 1);
             const segmentEnd = activityEnd < dayEnd ? activityEnd : dayEnd;
             const dayKey = toUtcDayKey(dayStart);
-            const durationSeconds = Math.max(
-                0,
-                (segmentEnd.getTime() - segmentStart.getTime()) / 1000,
-            );
 
-            if (!days.has(dayKey)) {
-                days.set(dayKey, {
-                    date: dayKey,
-                    label: dayFormatter.format(dayStart),
-                    segments: [],
-                });
+            if (!rawSegmentsByDay.has(dayKey)) {
+                rawSegmentsByDay.set(dayKey, []);
             }
 
-            days.get(dayKey)!.segments.push({
+            rawSegmentsByDay.get(dayKey)!.push(createTimelineSegment({
                 id: activity.id,
                 activityType: activity.activityType,
                 startUtc: segmentStart,
                 endUtc: segmentEnd,
-                leftPercent: secondsSinceDayStart(segmentStart, dayStart) / 864,
-                widthPercent: Math.max(0.2, durationSeconds / 864),
-                durationSeconds,
-            });
+                dayStart,
+            }));
 
             segmentStart = segmentEnd;
         }
     }
 
-    return Array.from(days.values())
-        .map((day) => ({
-            ...day,
-            segments: day.segments.sort(
+    return Array.from(rawSegmentsByDay.entries())
+        .map(([date, rawSegments]) => {
+            const dayStart = getUtcDayStart(new Date(`${date}T00:00:00Z`));
+            const dayEnd = addDays(dayStart, 1);
+            const ordered = rawSegments.sort(
                 (left, right) => left.startUtc.getTime() - right.startUtc.getTime(),
-            ),
-        }))
+            );
+            const segments: TimelineSegment[] = [];
+            let cursor = dayStart;
+
+            for (const segment of ordered) {
+                if (segment.endUtc <= cursor) {
+                    continue;
+                }
+
+                if (segment.startUtc > cursor) {
+                    segments.push(createTimelineSegment({
+                        id: `rest-gap-${date}-${cursor.toISOString()}`,
+                        activityType: "REST",
+                        startUtc: cursor,
+                        endUtc: segment.startUtc,
+                        dayStart,
+                    }));
+                }
+
+                const clippedStart = segment.startUtc < cursor ? cursor : segment.startUtc;
+                const clippedEnd = segment.endUtc > dayEnd ? dayEnd : segment.endUtc;
+
+                if (clippedEnd > clippedStart) {
+                    segments.push(createTimelineSegment({
+                        id: segment.id,
+                        activityType: segment.activityType,
+                        startUtc: clippedStart,
+                        endUtc: clippedEnd,
+                        dayStart,
+                    }));
+                    cursor = clippedEnd;
+                }
+            }
+
+            if (cursor < dayEnd) {
+                segments.push(createTimelineSegment({
+                    id: `rest-gap-${date}-${cursor.toISOString()}`,
+                    activityType: "REST",
+                    startUtc: cursor,
+                    endUtc: dayEnd,
+                    dayStart,
+                }));
+            }
+
+            return {
+                date,
+                label: dayFormatter.format(dayStart),
+                segments,
+            };
+        })
         .sort((left, right) => right.date.localeCompare(left.date));
+}
+
+function createTimelineSegment({
+    id,
+    activityType,
+    startUtc,
+    endUtc,
+    dayStart,
+}: {
+    id: string;
+    activityType: string;
+    startUtc: Date;
+    endUtc: Date;
+    dayStart: Date;
+}): TimelineSegment {
+    const durationSeconds = Math.max(0, (endUtc.getTime() - startUtc.getTime()) / 1000);
+
+    return {
+        id,
+        activityType,
+        startUtc,
+        endUtc,
+        leftPercent: toTimelinePercent(secondsSinceDayStart(startUtc, dayStart)),
+        widthPercent: toTimelinePercent(durationSeconds),
+        durationSeconds,
+    };
 }
 
 function formatTimelineTooltip(segment: TimelineSegment) {
@@ -349,6 +425,14 @@ export default function DriverDetailsPage() {
                             <div>
                                 <h3>Dzienna oś aktywności</h3>
                                 <p>Pełny widok 24 godzin z rzeczywistych aktywności StartUtc i EndUtc.</p>
+                            </div>
+                            <div className="daily-activity-legend" aria-label="Legenda osi aktywności">
+                                {timelineLegend.map((item) => (
+                                    <span key={item.type}>
+                                        <i className={`daily-activity-legend-dot ${getActivityClass(item.type)}`} />
+                                        {item.label}
+                                    </span>
+                                ))}
                             </div>
                         </div>
 
