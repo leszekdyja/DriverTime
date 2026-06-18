@@ -76,8 +76,10 @@ function formatDate(value: string | null) {
 }
 
 function formatDuration(seconds: number) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
+    const safeSeconds = Math.max(seconds, 0);
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+
     return `${hours} godz. ${minutes} min`;
 }
 
