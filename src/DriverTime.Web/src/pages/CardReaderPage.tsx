@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    completeCardReadSession,
     failCardReadSession,
     getCardReadSessions,
     startCardReadSession,
@@ -11,12 +12,17 @@ import {
 import {
     checkCardReaderHelperHealth,
     getCardReaderReaders,
+    readCardAtr,
     startMockCardRead,
+    type CardReaderAtrResult,
     type CardReaderHelperHealth,
     type CardReaderMockReadResult,
+    type CardReaderReader,
     type CardReaderReaderList,
 } from "../services/cardReaderHelperService";
 import "../styles/card-reader.css";
+
+type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "critical";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
@@ -42,23 +48,45 @@ function getStatusLabel(status: string) {
     return status || "Brak danych";
 }
 
-function getStatusTone(status: string) {
+function getStatusTone(status: string): BadgeTone {
     if (status === "Started") return "info";
     if (status === "Completed") return "success";
     if (status === "Failed") return "danger";
     return "neutral";
 }
 
+function getReaderPresenceLabel(reader: CardReaderReader) {
+    if (reader.cardPresent === true) return "Karta obecna";
+    if (reader.cardPresent === false) return "Brak karty";
+    return "Nieznany";
+}
+
+function getReaderPresenceTone(reader: CardReaderReader): BadgeTone {
+    if (reader.cardPresent === true) return "success";
+    if (reader.cardPresent === false) return "warning";
+    return "neutral";
+}
+
+function upsertSession(sessions: CardReadSession[], session: CardReadSession) {
+    return [
+        session,
+        ...sessions.filter((item) => item.id !== session.id),
+    ];
+}
+
 export default function CardReaderPage() {
     const [sessions, setSessions] = useState<CardReadSession[]>([]);
     const [helperHealth, setHelperHealth] = useState<CardReaderHelperHealth | null>(null);
     const [readers, setReaders] = useState<CardReaderReaderList | null>(null);
+    const [selectedReaderName, setSelectedReaderName] = useState("");
+    const [atrResult, setAtrResult] = useState<CardReaderAtrResult | null>(null);
     const [mockReadResult, setMockReadResult] = useState<CardReaderMockReadResult | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [isFailing, setIsFailing] = useState(false);
     const [isCheckingHelper, setIsCheckingHelper] = useState(false);
     const [isCheckingReaders, setIsCheckingReaders] = useState(false);
+    const [isReadingAtr, setIsReadingAtr] = useState(false);
     const [isMockReading, setIsMockReading] = useState(false);
     const [error, setError] = useState("");
     const [helperError, setHelperError] = useState("");
@@ -66,6 +94,13 @@ export default function CardReaderPage() {
     const activeSession = useMemo(
         () => sessions.find((session) => session.status === "Started") ?? null,
         [sessions],
+    );
+
+    const readerList = readers?.readers ?? [];
+
+    const selectedReader = useMemo(
+        () => readerList.find((reader) => reader.name === selectedReaderName) ?? null,
+        [readerList, selectedReaderName],
     );
 
     const loadSessions = useCallback(async () => {
@@ -95,11 +130,13 @@ export default function CardReaderPage() {
 
         try {
             const session = await startCardReadSession({
-                readerName: "Czytnik karty kierowcy",
-                notes: "Sesja przygotowana pod przyszły helper PC/SC.",
+                readerName: selectedReaderName || "Czytnik karty kierowcy",
+                notes: selectedReaderName
+                    ? `Sesja przygotowana dla czytnika: ${selectedReaderName}.`
+                    : "Sesja przygotowana pod przyszły odczyt PC/SC.",
             });
 
-            setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+            setSessions((current) => upsertSession(current, session));
         } catch (startError) {
             setError(
                 startError instanceof Error
@@ -121,12 +158,11 @@ export default function CardReaderPage() {
 
         try {
             const session = await failCardReadSession(activeSession.id, {
-                errorMessage: "Sesja przerwana przed podłączeniem fizycznego helpera.",
+                errorMessage: "Sesja przerwana przed realnym odczytem karty.",
+                notes: selectedReaderName ? `Czytnik: ${selectedReaderName}` : undefined,
             });
 
-            setSessions((current) =>
-                current.map((item) => item.id === session.id ? session : item),
-            );
+            setSessions((current) => upsertSession(current, session));
         } catch (failError) {
             setError(
                 failError instanceof Error
@@ -159,11 +195,25 @@ export default function CardReaderPage() {
     async function checkReaders() {
         setIsCheckingReaders(true);
         setHelperError("");
+        setAtrResult(null);
 
         try {
-            setReaders(await getCardReaderReaders());
+            const readerResponse = await getCardReaderReaders();
+            setReaders(readerResponse);
+
+            const availableReaders = readerResponse.readers;
+            const currentStillExists = availableReaders.some((reader) => reader.name === selectedReaderName);
+
+            if (availableReaders.length > 0 && !currentStillExists) {
+                setSelectedReaderName(availableReaders[0].name);
+            }
+
+            if (availableReaders.length === 0) {
+                setSelectedReaderName("");
+            }
         } catch (checkError) {
             setReaders(null);
+            setSelectedReaderName("");
             setHelperError(
                 checkError instanceof Error
                     ? checkError.message
@@ -174,19 +224,76 @@ export default function CardReaderPage() {
         }
     }
 
-    async function runMockRead() {
-        setIsMockReading(true);
+    async function checkSelectedCardAtr() {
+        if (!selectedReaderName) {
+            setHelperError("Najpierw wybierz czytnik.");
+            return;
+        }
+
+        setIsReadingAtr(true);
         setHelperError("");
+        setAtrResult(null);
 
         try {
-            setMockReadResult(await startMockCardRead());
+            setAtrResult(await readCardAtr(selectedReaderName));
         } catch (readError) {
-            setMockReadResult(null);
             setHelperError(
                 readError instanceof Error
                     ? readError.message
-                    : "Nie udało się wykonać testowego odczytu karty.",
+                    : "Nie udało się odczytać ATR karty.",
             );
+        } finally {
+            setIsReadingAtr(false);
+        }
+    }
+
+    async function runMockRead() {
+        setIsMockReading(true);
+        setHelperError("");
+        setError("");
+
+        let session = activeSession;
+
+        try {
+            if (!session) {
+                session = await startCardReadSession({
+                    readerName: selectedReaderName || "Czytnik karty kierowcy",
+                    notes: "Automatyczna sesja testowego odczytu helpera.",
+                });
+                setSessions((current) => upsertSession(current, session as CardReadSession));
+            }
+
+            const helperResult = await startMockCardRead(selectedReaderName || undefined);
+            setMockReadResult(helperResult);
+
+            const completedSession = await completeCardReadSession(session.id, {
+                notes: [
+                    helperResult.message,
+                    helperResult.selectedReaderName ? `Czytnik: ${helperResult.selectedReaderName}` : "",
+                    helperResult.fileName ? `Plik testowy: ${helperResult.fileName}` : "",
+                ].filter(Boolean).join(" | "),
+            });
+
+            setSessions((current) => upsertSession(current, completedSession));
+        } catch (readError) {
+            const message = readError instanceof Error
+                ? readError.message
+                : "Nie udało się wykonać testowego odczytu karty.";
+
+            setMockReadResult(null);
+            setHelperError(message);
+
+            if (session) {
+                try {
+                    const failedSession = await failCardReadSession(session.id, {
+                        errorMessage: message,
+                        notes: selectedReaderName ? `Czytnik: ${selectedReaderName}` : undefined,
+                    });
+                    setSessions((current) => upsertSession(current, failedSession));
+                } catch {
+                    setError("Helper zgłosił błąd, ale nie udało się zapisać statusu sesji w API.");
+                }
+            }
         } finally {
             setIsMockReading(false);
         }
@@ -199,13 +306,13 @@ export default function CardReaderPage() {
                     <span>Moduł MVP</span>
                     <h2>Odczyt karty</h2>
                     <p>
-                        To pierwszy krok modułu czytnika kart kierowców. Aplikacja śledzi
-                        sesje odczytu, a lokalny helper działa w trybie bezpiecznym/mock.
-                        Realny odczyt PC/SC zostanie dodany w kolejnym etapie.
+                        Helper lokalny wykrywa czytniki PC/SC i potrafi wykonać pierwszy
+                        bezpieczny test komunikacji z kartą: odczyt ATR. Historia sesji jest
+                        zapisywana przez backend DriverTime.
                     </p>
                 </div>
                 <div className="card-reader-actions">
-                    <button type="button" onClick={startSession} disabled={isStarting}>
+                    <button type="button" onClick={startSession} disabled={isStarting || Boolean(activeSession)}>
                         {isStarting ? "Uruchamianie..." : "Rozpocznij sesję"}
                     </button>
                     <button
@@ -226,14 +333,22 @@ export default function CardReaderPage() {
                     <p>{helperHealth?.message ?? "Uruchom helper lokalnie i kliknij „Sprawdź helper”."}</p>
                 </article>
                 <article>
-                    <span>Tryb odczytu</span>
-                    <strong>Mock</strong>
-                    <p>Bezpieczny tryb MVP nie odpytuje jeszcze fizycznej karty ani PC/SC.</p>
+                    <span>PC/SC</span>
+                    <strong>
+                        {helperHealth
+                            ? helperHealth.pcscAvailable ? "Dostępne" : "Niedostępne"
+                            : "Nie sprawdzono"}
+                    </strong>
+                    <p>
+                        {helperHealth
+                            ? `Wykryte czytniki: ${helperHealth.readersCount}.`
+                            : "Status podsystemu pojawi się po sprawdzeniu helpera."}
+                    </p>
                 </article>
                 <article>
                     <span>Aktywna sesja</span>
-                    <strong>{activeSession ? "Tak" : "Nie"}</strong>
-                    <p>{activeSession ? formatDate(activeSession.startedAtUtc) : "Brak aktywnej sesji."}</p>
+                    <strong>{activeSession ? "W trakcie" : "Brak"}</strong>
+                    <p>{activeSession ? `Czytnik: ${activeSession.readerName || "Brak danych"}` : "Testowy odczyt utworzy sesję automatycznie."}</p>
                 </article>
             </section>
 
@@ -253,8 +368,15 @@ export default function CardReaderPage() {
                     <button type="button" onClick={checkReaders} disabled={isCheckingReaders}>
                         {isCheckingReaders ? "Sprawdzanie..." : "Sprawdź czytniki"}
                     </button>
+                    <button
+                        type="button"
+                        onClick={checkSelectedCardAtr}
+                        disabled={!selectedReaderName || isReadingAtr}
+                    >
+                        {isReadingAtr ? "Odczyt ATR..." : "Sprawdź kartę / odczytaj ATR"}
+                    </button>
                     <button type="button" onClick={runMockRead} disabled={isMockReading}>
-                        {isMockReading ? "Odczyt..." : "Testowy odczyt karty"}
+                        {isMockReading ? "Zapisywanie sesji..." : "Testowy odczyt karty"}
                     </button>
                 </div>
 
@@ -275,19 +397,90 @@ export default function CardReaderPage() {
                     </article>
                     <article>
                         <span>Czytniki</span>
-                        <strong>{readers ? readers.readers.length : 0}</strong>
-                        <p>{readers?.message ?? "Lista pojawi się po sprawdzeniu helpera."}</p>
+                        <strong>{readerList.length}</strong>
+                        <p>{readers?.message ?? "Lista pojawi się po sprawdzeniu czytników."}</p>
                     </article>
                     <article>
-                        <span>Wynik testowego odczytu</span>
-                        <strong>{mockReadResult?.status ?? "Brak"}</strong>
-                        <p>{mockReadResult?.message ?? "Testowy wynik pojawi się po uruchomieniu odczytu."}</p>
+                        <span>Wybrany czytnik</span>
+                        <strong>{selectedReaderName || "Brak"}</strong>
+                        <p>{selectedReader?.message ?? "Wybierz czytnik po pobraniu listy z helpera."}</p>
                     </article>
                 </div>
+
+                {readers ? (
+                    <div className="card-reader-readers">
+                        <div className="card-reader-subheading">
+                            <h4>Wykryte czytniki</h4>
+                            <p>Wybierz czytnik, a następnie sprawdź obecność karty przez odczyt ATR.</p>
+                        </div>
+
+                        {readerList.length === 0 ? (
+                            <EmptyState
+                                title="Brak wykrytych czytników"
+                                description={readers.message}
+                            />
+                        ) : (
+                            <div className="card-reader-reader-list">
+                                {readerList.map((reader) => (
+                                    <label
+                                        className={`card-reader-reader-option ${reader.name === selectedReaderName ? "selected" : ""}`}
+                                        key={reader.name}
+                                    >
+                                        <input
+                                            checked={reader.name === selectedReaderName}
+                                            name="selectedReader"
+                                            onChange={() => {
+                                                setSelectedReaderName(reader.name);
+                                                setAtrResult(null);
+                                            }}
+                                            type="radio"
+                                            value={reader.name}
+                                        />
+                                        <span className="card-reader-reader-choice">
+                                            <strong>{reader.name}</strong>
+                                            <span>{reader.message}</span>
+                                        </span>
+                                        <span className="card-reader-reader-meta">
+                                            <StatusBadge
+                                                label={getReaderPresenceLabel(reader)}
+                                                tone={getReaderPresenceTone(reader)}
+                                            />
+                                            <small>{reader.status}</small>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : null}
+
+                {atrResult ? (
+                    <div className="card-reader-atr-result">
+                        <div>
+                            <span>Czytnik</span>
+                            <strong>{atrResult.readerName}</strong>
+                        </div>
+                        <div>
+                            <span>Karta</span>
+                            <StatusBadge
+                                label={atrResult.cardPresent ? "Karta obecna" : "Brak karty"}
+                                tone={atrResult.cardPresent ? "success" : "warning"}
+                            />
+                        </div>
+                        <div>
+                            <span>ATR HEX</span>
+                            <code>{atrResult.atrHex || "Brak danych ATR"}</code>
+                        </div>
+                        {atrResult.errorMessage ? (
+                            <p>{atrResult.errorMessage}</p>
+                        ) : null}
+                    </div>
+                ) : null}
 
                 {mockReadResult ? (
                     <div className="card-reader-mock-result">
                         <strong>{mockReadResult.fileName}</strong>
+                        <span>Czytnik: {mockReadResult.selectedReaderName || "Nie wybrano"}</span>
                         <span>Start: {formatDate(mockReadResult.startedAtUtc)}</span>
                         <span>Koniec: {formatDate(mockReadResult.completedAtUtc)}</span>
                         <span>Ścieżka: {mockReadResult.filePath}</span>
@@ -300,7 +493,7 @@ export default function CardReaderPage() {
                     <div>
                         <span>Historia</span>
                         <h3>Ostatnie sesje odczytu kart</h3>
-                        <p>Lista pokazuje sesje trackingowe, bez zmiany obecnego importu plików DDD.</p>
+                        <p>Historia pochodzi z backendu DriverTime i tabeli CardReadSessions.</p>
                     </div>
                     <button type="button" onClick={() => void loadSessions()} disabled={isLoading}>
                         Odśwież
@@ -318,7 +511,7 @@ export default function CardReaderPage() {
                 ) : sessions.length === 0 ? (
                     <EmptyState
                         title="Brak sesji odczytu"
-                        description="Rozpocznij pierwszą sesję, aby zobaczyć ją w historii."
+                        description="Rozpocznij testowy odczyt, aby zapisać pierwszą sesję w historii."
                     />
                 ) : (
                     <div className="card-reader-table-wrapper">
@@ -326,9 +519,9 @@ export default function CardReaderPage() {
                             <thead>
                                 <tr>
                                     <th>Status</th>
+                                    <th>Czytnik</th>
                                     <th>Start</th>
                                     <th>Zakończenie</th>
-                                    <th>Numer karty</th>
                                     <th>Uwagi</th>
                                 </tr>
                             </thead>
@@ -341,9 +534,9 @@ export default function CardReaderPage() {
                                                 tone={getStatusTone(session.status)}
                                             />
                                         </td>
+                                        <td>{session.readerName || "Brak"}</td>
                                         <td>{formatDate(session.startedAtUtc)}</td>
                                         <td>{formatDate(session.completedAtUtc ?? session.failedAtUtc)}</td>
-                                        <td>{session.driverCardNumber || "Brak"}</td>
                                         <td>{session.errorMessage || session.notes || "Brak"}</td>
                                     </tr>
                                 ))}

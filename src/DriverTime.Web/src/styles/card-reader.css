@@ -112,6 +112,75 @@
     line-height: 1.5;
 }
 
+.card-reader-readers {
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.card-reader-subheading h4 {
+    margin: 0 0 4px;
+    color: var(--color-heading);
+}
+
+.card-reader-subheading p {
+    margin: 0;
+    color: var(--color-muted);
+    line-height: 1.5;
+}
+
+.card-reader-reader-list {
+    display: grid;
+    gap: 10px;
+}
+
+.card-reader-reader-option {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface-muted);
+    cursor: pointer;
+}
+
+.card-reader-reader-option.selected {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+
+.card-reader-reader-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-primary);
+}
+
+.card-reader-reader-choice {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.card-reader-reader-choice strong {
+    color: var(--color-heading);
+    overflow-wrap: anywhere;
+}
+
+.card-reader-reader-choice span,
+.card-reader-reader-meta small {
+    color: var(--color-muted);
+}
+
+.card-reader-reader-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .card-reader-mock-result {
     display: grid;
     gap: 6px;
@@ -126,6 +195,53 @@
 
 .card-reader-mock-result strong {
     color: var(--color-heading);
+}
+
+.card-reader-atr-result {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    color: var(--color-muted);
+}
+
+.card-reader-atr-result div {
+    display: grid;
+    gap: 5px;
+}
+
+.card-reader-atr-result span {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.card-reader-atr-result strong {
+    color: var(--color-heading);
+    overflow-wrap: anywhere;
+}
+
+.card-reader-atr-result code {
+    display: block;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface-muted);
+    color: var(--color-heading);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.card-reader-atr-result p {
+    margin: 0;
+    color: var(--color-danger);
 }
 
 .card-reader-status-grid {
@@ -217,5 +333,14 @@
 
     .card-reader-helper-results {
         grid-template-columns: 1fr;
+    }
+
+    .card-reader-reader-option {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .card-reader-reader-meta {
+        grid-column: 2;
+        justify-content: flex-start;
     }
 }

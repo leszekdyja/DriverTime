@@ -1,4 +1,5 @@
 using DriverTime.Application.Companies.Services;
+using DriverTime.Application.CardReader;
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Downloads;
 using DriverTime.Application.Interfaces;
@@ -51,6 +52,8 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
 
         services.AddScoped<IDownloadScheduleService, DownloadScheduleService>();
+
+        services.AddScoped<ICardReadSessionService, CardReadSessionService>();
 
         services.AddScoped<IDriverActivityService, DriverActivityService>();
 

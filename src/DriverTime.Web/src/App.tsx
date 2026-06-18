@@ -8,6 +8,7 @@ import { ThemeProvider } from "./theme/ThemeProvider";
 import DashboardPage from "./pages/DashboardPage";
 import AccountPage from "./pages/AccountPage";
 import AlertsPage from "./pages/AlertsPage";
+import CardReaderPage from "./pages/CardReaderPage";
 import CompanySettingsPage from "./pages/CompanySettingsPage";
 import DriverDetailsPage from "./pages/DriverDetailsPage";
 import DriversPage from "./pages/DriversPage";
@@ -39,6 +40,7 @@ export default function App() {
                                 <Route path="imports/:id" element={<ImportDetailsPage />} />
                                 <Route path="drivers" element={<DriversPage />} />
                                 <Route path="drivers/:id" element={<DriverDetailsPage />} />
+                                <Route path="card-reader" element={<CardReaderPage />} />
                                 <Route path="downloads" element={<DownloadsPage />} />
                                 <Route path="vehicles" element={<VehiclesPage />} />
                                 <Route path="vehicles/:vehicleId" element={<VehicleDetailsPage />} />

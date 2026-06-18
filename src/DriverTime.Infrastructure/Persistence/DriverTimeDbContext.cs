@@ -38,6 +38,8 @@ public class DriverTimeDbContext : DbContext
     public DbSet<ComplianceRunViolation> ComplianceRunViolations =>
         Set<ComplianceRunViolation>();
 
+    public DbSet<CardReadSession> CardReadSessions => Set<CardReadSession>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -265,6 +267,35 @@ public class DriverTimeDbContext : DbContext
 
             entity.Property(x => x.MetadataJson)
                 .HasMaxLength(8000);
+        });
+
+        modelBuilder.Entity<CardReadSession>(entity =>
+        {
+            entity.ToTable("CardReadSessions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.StartedAtUtc });
+            entity.HasIndex(x => x.Status);
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ReaderName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.DriverCardNumber)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

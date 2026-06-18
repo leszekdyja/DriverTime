@@ -9,6 +9,7 @@ const navigationItems = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
     { to: "/alerts", label: "Alerty", icon: "alerts" },
     { to: "/drivers", label: "Kierowcy", icon: "drivers" },
+    { to: "/card-reader", label: "Odczyt karty", icon: "cardReader" },
     { to: "/vehicles", label: "Pojazdy", icon: "vehicles" },
     { to: "/downloads", label: "Odczyty", icon: "downloads" },
     { to: "/reports", label: "Raporty", icon: "reports" },
@@ -116,6 +117,7 @@ function NavigationIcon({ name }: { name: string }) {
     const paths: Record<string, ReactNode> = {
         dashboard: <><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></>,
         drivers: <><circle cx="9" cy="8" r="4" /><path d="M3 21v-2a6 6 0 0 1 12 0v2" /><path d="M16 4.5a4 4 0 0 1 0 7" /><path d="M18 15a6 6 0 0 1 3 5" /></>,
+        cardReader: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 9h5" /><path d="M7 13h10" /><path d="M16 9h1" /></>,
         vehicles: <><path d="M5 17h14" /><path d="M7 17v2" /><path d="M17 17v2" /><path d="M6 13l2-5h8l2 5" /><path d="M4 13h16v4H4z" /><circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /></>,
         downloads: <><path d="M12 3v10" /><path d="m8 9 4 4 4-4" /><path d="M5 21h14" /><path d="M7 17h10" /></>,
         reports: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /><path d="M2 21h22" /></>,
