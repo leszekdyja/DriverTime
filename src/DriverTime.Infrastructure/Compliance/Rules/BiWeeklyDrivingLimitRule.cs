@@ -1,4 +1,3 @@
-using System.Globalization;
 using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
 using Microsoft.Extensions.Logging;
@@ -31,12 +30,7 @@ public class BiWeeklyDrivingLimitRule : IComplianceRule
             RuleName = Name
         };
 
-        var weeklyDriving = timeline
-            .Where(IsDriving)
-            .GroupBy(x => GetIsoWeekStart(x.StartUtc))
-            .ToDictionary(
-                group => group.Key,
-                group => group.Aggregate(TimeSpan.Zero, (sum, activity) => sum + activity.Duration));
+        var weeklyDriving = WeeklyDrivingTimelineHelper.GetDrivingByIsoWeek(timeline);
 
         if (weeklyDriving.Count == 0)
         {
@@ -117,19 +111,6 @@ public class BiWeeklyDrivingLimitRule : IComplianceRule
             (long)Math.Round(maxBiWeeklyDriving.TotalMinutes),
             pairsOverLimit,
             violationCount);
-    }
-
-    private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
-
-    private static DateTime GetIsoWeekStart(DateTime value)
-    {
-        var year = ISOWeek.GetYear(value);
-        var week = ISOWeek.GetWeekOfYear(value);
-
-        return DateTime.SpecifyKind(
-            ISOWeek.ToDateTime(year, week, DayOfWeek.Monday),
-            DateTimeKind.Utc);
     }
 
     private static string FormatDuration(TimeSpan duration) =>
