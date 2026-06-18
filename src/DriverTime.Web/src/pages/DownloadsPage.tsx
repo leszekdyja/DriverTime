@@ -14,15 +14,16 @@ import {
 } from "../services/downloadsService";
 import "../styles/dashboard.css";
 import "../styles/drivers.css";
+import "../styles/downloads.css";
 
-type Tab = "drivers" | "vehicles";
-type Filter = "All" | DownloadStatus;
+type Filter = "All" | DownloadStatus | "NoData";
 
 const filters: Array<{ value: Filter; label: string }> = [
     { value: "All", label: "Wszystkie" },
     { value: "OK", label: "OK" },
-    { value: "Warning", label: "Ostrzeżenie" },
+    { value: "Warning", label: "Zbliża się termin" },
     { value: "Overdue", label: "Przeterminowane" },
+    { value: "NoData", label: "Brak danych" },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -32,7 +33,7 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 
 function formatDate(value: string | null) {
     if (!value) {
-        return "Brak odczytu";
+        return "Brak danych";
     }
 
     const date = new Date(value);
@@ -42,7 +43,7 @@ function formatDate(value: string | null) {
 
 function formatDays(daysUntilDue: number | null) {
     if (daysUntilDue === null) {
-        return "Brak odczytu";
+        return "Brak danych";
     }
 
     if (daysUntilDue < 0) {
@@ -56,24 +57,47 @@ function formatDays(daysUntilDue: number | null) {
     return `${daysUntilDue} dni`;
 }
 
-function statusLabel(status: DownloadStatus) {
-    if (status === "OK") return "OK";
-    if (status === "Warning") return "Ostrzeżenie";
-    return "Przeterminowany";
+function getEffectiveStatus(item: { lastDownloadUtc: string | null; status: DownloadStatus }): Filter {
+    return item.lastDownloadUtc ? item.status : "NoData";
 }
 
-function statusTone(status: DownloadStatus) {
+function statusLabel(status: Filter) {
+    if (status === "OK") return "OK";
+    if (status === "Warning") return "Zbliża się termin";
+    if (status === "Overdue") return "Przeterminowany";
+    if (status === "NoData") return "Brak danych";
+    return "Wszystkie";
+}
+
+function statusTone(status: Filter) {
     if (status === "OK") return "success";
     if (status === "Warning") return "warning";
-    return "danger";
+    if (status === "Overdue") return "danger";
+    if (status === "NoData") return "info";
+    return "neutral";
 }
 
-function filterByStatus<T extends { status: DownloadStatus }>(items: T[], filter: Filter) {
-    return filter === "All" ? items : items.filter((item) => item.status === filter);
+function filterByStatus<T extends { lastDownloadUtc: string | null; status: DownloadStatus }>(
+    items: T[],
+    filter: Filter,
+) {
+    return filter === "All"
+        ? items
+        : items.filter((item) => getEffectiveStatus(item) === filter);
+}
+
+function countByStatus<T extends { lastDownloadUtc: string | null; status: DownloadStatus }>(
+    items: T[],
+    status: Filter,
+) {
+    return items.filter((item) => getEffectiveStatus(item) === status).length;
+}
+
+function getDriverName(driver: DriverDownload) {
+    return [driver.firstName, driver.lastName].filter(Boolean).join(" ") || "Brak danych";
 }
 
 export default function DownloadsPage() {
-    const [activeTab, setActiveTab] = useState<Tab>("drivers");
     const [activeFilter, setActiveFilter] = useState<Filter>("All");
     const [dashboard, setDashboard] = useState<DownloadDashboard | null>(null);
     const [drivers, setDrivers] = useState<DriverDownload[]>([]);
@@ -120,100 +144,131 @@ export default function DownloadsPage() {
         [activeFilter, vehicles],
     );
 
-    const visibleItemsCount = activeTab === "drivers"
-        ? filteredDrivers.length
-        : filteredVehicles.length;
-
-    const dueIn7Days = (dashboard?.warningDrivers ?? 0) + (dashboard?.warningVehicles ?? 0);
+    const okDownloads = countByStatus(drivers, "OK") + countByStatus(vehicles, "OK");
+    const dueSoonDownloads = (dashboard?.warningDrivers ?? countByStatus(drivers, "Warning")) +
+        (dashboard?.warningVehicles ?? countByStatus(vehicles, "Warning"));
+    const overdueDownloads = (dashboard?.overdueDrivers ?? countByStatus(drivers, "Overdue")) +
+        (dashboard?.overdueVehicles ?? countByStatus(vehicles, "Overdue"));
+    const noDataDownloads = countByStatus(drivers, "NoData") + countByStatus(vehicles, "NoData");
 
     return (
-        <div className="drivers-page">
-            <div className="drivers-heading">
+        <div className="downloads-page">
+            <header className="downloads-heading">
                 <div>
-                    <h2>Terminy odczytów</h2>
-                    <p>Kontrola cyklicznych pobrań z kart kierowców i tachografów.</p>
-                </div>
-                <span className="drivers-count">{visibleItemsCount} rekordów</span>
-            </div>
-
-            <section className="dashboard-kpi-grid" aria-label="Podsumowanie terminów odczytów" style={{ marginTop: 28 }}>
-                <article className={`metric-card ${(dashboard?.overdueDrivers ?? 0) > 0 ? "red" : "green"}`}>
-                    <div className="metric-card-heading"><span>Kierowcy po terminie</span></div>
-                    <strong>{dashboard?.overdueDrivers ?? 0}</strong>
-                    <small>Karta kierowcy powyżej 28 dni</small>
-                </article>
-                <article className={`metric-card ${(dashboard?.overdueVehicles ?? 0) > 0 ? "red" : "green"}`}>
-                    <div className="metric-card-heading"><span>Pojazdy po terminie</span></div>
-                    <strong>{dashboard?.overdueVehicles ?? 0}</strong>
-                    <small>Tachograf lub pojazd powyżej 90 dni</small>
-                </article>
-                <article className={`metric-card ${dueIn7Days > 0 ? "amber" : "green"}`}>
-                    <div className="metric-card-heading"><span>Odczyty do 7 dni</span></div>
-                    <strong>{dueIn7Days}</strong>
-                    <small>Kierowcy i pojazdy wymagające odczytu</small>
-                </article>
-                <article className={`metric-card ${(dashboard?.warningDrivers ?? 0) > 0 ? "amber" : "green"}`}>
-                    <div className="metric-card-heading"><span>Kierowcy do 7 dni</span></div>
-                    <strong>{dashboard?.warningDrivers ?? 0}</strong>
-                    <small>Zbliżający się termin karty</small>
-                </article>
-                <article className={`metric-card ${(dashboard?.warningVehicles ?? 0) > 0 ? "amber" : "green"}`}>
-                    <div className="metric-card-heading"><span>Pojazdy do 7 dni</span></div>
-                    <strong>{dashboard?.warningVehicles ?? 0}</strong>
-                    <small>Zbliżający się termin tachografu</small>
-                </article>
-            </section>
-
-            <section className="drivers-panel" style={{ marginTop: 28 }}>
-                <div className="section-heading">
-                    <h3>Odczyty kierowców i pojazdów</h3>
-                    <p>Karty kierowców: 28 dni. Tachografy i pojazdy: 90 dni.</p>
-                </div>
-
-                <div className="drivers-toolbar" role="tablist" aria-label="Typ odczytów">
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab("drivers")}
-                        aria-selected={activeTab === "drivers"}
-                    >
-                        Kierowcy
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab("vehicles")}
-                        aria-selected={activeTab === "vehicles"}
-                    >
-                        Pojazdy
-                    </button>
-                </div>
-
-                <div className="drivers-toolbar" aria-label="Filtry statusu">
-                    {filters.map((filter) => (
-                        <button
-                            key={filter.value}
-                            type="button"
-                            onClick={() => setActiveFilter(filter.value)}
-                            aria-pressed={activeFilter === filter.value}
-                        >
-                            {filter.label}
-                        </button>
-                    ))}
-                </div>
-
-                {error ? (
-                    <p className="drivers-message error" role="alert">
-                        {error}
+                    <span>Odczyty</span>
+                    <h2>Terminy pobrań kart i tachografów</h2>
+                    <p>
+                        Karta kierowcy powinna być pobierana maksymalnie co 28 dni,
+                        a tachograf lub pojazd maksymalnie co 90 dni.
                     </p>
-                ) : null}
+                </div>
+                <strong>{filteredDrivers.length + filteredVehicles.length} rekordów po filtrze</strong>
+            </header>
 
-                {isLoading ? (
-                    <TableSkeleton rows={6} columns={6} />
-                ) : activeTab === "drivers" ? (
-                    <DriversTable drivers={filteredDrivers} />
-                ) : (
-                    <VehiclesTable vehicles={filteredVehicles} />
-                )}
+            <section className="downloads-summary" aria-label="Podsumowanie terminów odczytów">
+                <SummaryCard label="OK" value={okDownloads} tone="green" description="Więcej niż 7 dni do terminu" />
+                <SummaryCard label="Zbliża się termin" value={dueSoonDownloads} tone="amber" description="7 dni lub mniej" />
+                <SummaryCard label="Przeterminowane" value={overdueDownloads} tone="red" description="Termin odczytu minął" />
+                <SummaryCard label="Brak danych" value={noDataDownloads} tone="blue" description="Brak daty ostatniego odczytu" />
             </section>
+
+            <section className="downloads-rules" aria-label="Zasady terminów">
+                <article>
+                    <span>28 dni</span>
+                    <strong>Karta kierowcy</strong>
+                    <p>Następny wymagany odczyt jest liczony jako ostatni odczyt + 28 dni.</p>
+                </article>
+                <article>
+                    <span>90 dni</span>
+                    <strong>Tachograf / pojazd</strong>
+                    <p>Następny wymagany odczyt jest liczony jako ostatni odczyt + 90 dni.</p>
+                </article>
+            </section>
+
+            <section className="downloads-filters" aria-label="Filtry statusu">
+                {filters.map((filter) => (
+                    <button
+                        key={filter.value}
+                        type="button"
+                        onClick={() => setActiveFilter(filter.value)}
+                        aria-pressed={activeFilter === filter.value}
+                    >
+                        {filter.label}
+                    </button>
+                ))}
+            </section>
+
+            {error ? (
+                <p className="downloads-error" role="alert">
+                    {error}
+                </p>
+            ) : null}
+
+            {isLoading ? (
+                <section className="downloads-section" aria-busy="true">
+                    <TableSkeleton rows={8} columns={6} />
+                </section>
+            ) : (
+                <>
+                    <section className="downloads-section">
+                        <SectionHeading
+                            title="Kierowcy"
+                            description="Terminy pobrań kart kierowców na podstawie ostatnich dostępnych odczytów."
+                            count={filteredDrivers.length}
+                        />
+                        <DriversTable drivers={filteredDrivers} />
+                    </section>
+
+                    <section className="downloads-section">
+                        <SectionHeading
+                            title="Pojazdy i tachografy"
+                            description="Terminy pobrań tachografów i pojazdów na podstawie danych DDD."
+                            count={filteredVehicles.length}
+                        />
+                        <VehiclesTable vehicles={filteredVehicles} />
+                    </section>
+                </>
+            )}
+        </div>
+    );
+}
+
+function SummaryCard({
+    label,
+    value,
+    tone,
+    description,
+}: {
+    label: string;
+    value: number;
+    tone: "green" | "amber" | "red" | "blue";
+    description: string;
+}) {
+    return (
+        <article className={`downloads-summary-card ${tone}`}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{description}</small>
+        </article>
+    );
+}
+
+function SectionHeading({
+    title,
+    description,
+    count,
+}: {
+    title: string;
+    description: string;
+    count: number;
+}) {
+    return (
+        <div className="downloads-section-heading">
+            <div>
+                <h3>{title}</h3>
+                <p>{description}</p>
+            </div>
+            <span>{count} rekordów</span>
         </div>
     );
 }
@@ -229,35 +284,39 @@ function DriversTable({ drivers }: { drivers: DriverDownload[] }) {
     }
 
     return (
-        <div className="drivers-table-wrapper">
-            <table className="drivers-table">
+        <div className="downloads-table-wrapper">
+            <table className="downloads-table">
                 <thead>
                     <tr>
                         <th>Kierowca</th>
                         <th>Numer karty</th>
                         <th>Ostatni odczyt</th>
-                        <th>Następny termin</th>
+                        <th>Następny wymagany odczyt</th>
                         <th>Dni do terminu</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {drivers.map((driver) => (
-                        <tr key={driver.driverId}>
-                            <td>
-                                <Link className="driver-details-link" to={`/drivers/${driver.driverId}`}>
-                                    {[driver.firstName, driver.lastName].filter(Boolean).join(" ") || "Brak danych"}
-                                </Link>
-                            </td>
-                            <td>{driver.cardNumber || "Brak"}</td>
-                            <td>{formatDate(driver.lastDownloadUtc)}</td>
-                            <td>{formatDate(driver.nextRequiredDownloadUtc)}</td>
-                            <td>{formatDays(driver.daysUntilDue)}</td>
-                            <td>
-                                <StatusBadge label={statusLabel(driver.status)} tone={statusTone(driver.status)} />
-                            </td>
-                        </tr>
-                    ))}
+                    {drivers.map((driver) => {
+                        const status = getEffectiveStatus(driver);
+
+                        return (
+                            <tr key={driver.driverId}>
+                                <td data-label="Kierowca">
+                                    <Link className="driver-details-link" to={`/drivers/${driver.driverId}`}>
+                                        {getDriverName(driver)}
+                                    </Link>
+                                </td>
+                                <td data-label="Numer karty">{driver.cardNumber || "Brak"}</td>
+                                <td data-label="Ostatni odczyt">{formatDate(driver.lastDownloadUtc)}</td>
+                                <td data-label="Następny odczyt">{formatDate(driver.nextRequiredDownloadUtc)}</td>
+                                <td data-label="Dni do terminu">{formatDays(driver.daysUntilDue)}</td>
+                                <td data-label="Status">
+                                    <StatusBadge label={statusLabel(status)} tone={statusTone(status)} />
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -275,33 +334,37 @@ function VehiclesTable({ vehicles }: { vehicles: VehicleDownload[] }) {
     }
 
     return (
-        <div className="drivers-table-wrapper">
-            <table className="drivers-table">
+        <div className="downloads-table-wrapper">
+            <table className="downloads-table">
                 <thead>
                     <tr>
-                        <th>Rejestracja pojazdu</th>
+                        <th>Rejestracja</th>
                         <th>Ostatni odczyt</th>
-                        <th>Następny termin</th>
+                        <th>Następny wymagany odczyt</th>
                         <th>Dni do terminu</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {vehicles.map((vehicle) => (
-                        <tr key={vehicle.vehicleId}>
-                            <td>
-                                <Link className="driver-details-link" to={`/vehicles/${vehicle.vehicleId}`}>
-                                    {vehicle.registrationNumber}
-                                </Link>
-                            </td>
-                            <td>{formatDate(vehicle.lastDownloadUtc)}</td>
-                            <td>{formatDate(vehicle.nextRequiredDownloadUtc)}</td>
-                            <td>{formatDays(vehicle.daysUntilDue)}</td>
-                            <td>
-                                <StatusBadge label={statusLabel(vehicle.status)} tone={statusTone(vehicle.status)} />
-                            </td>
-                        </tr>
-                    ))}
+                    {vehicles.map((vehicle) => {
+                        const status = getEffectiveStatus(vehicle);
+
+                        return (
+                            <tr key={vehicle.vehicleId}>
+                                <td data-label="Rejestracja">
+                                    <Link className="driver-details-link" to={`/vehicles/${vehicle.vehicleId}`}>
+                                        {vehicle.registrationNumber}
+                                    </Link>
+                                </td>
+                                <td data-label="Ostatni odczyt">{formatDate(vehicle.lastDownloadUtc)}</td>
+                                <td data-label="Następny odczyt">{formatDate(vehicle.nextRequiredDownloadUtc)}</td>
+                                <td data-label="Dni do terminu">{formatDays(vehicle.daysUntilDue)}</td>
+                                <td data-label="Status">
+                                    <StatusBadge label={statusLabel(status)} tone={statusTone(status)} />
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>

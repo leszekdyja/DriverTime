@@ -160,9 +160,9 @@ function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[]
         const activityEnd = new Date(activity.endUtc);
 
         if (
-            Number.isNaN(activityStart.getTime())
-            || Number.isNaN(activityEnd.getTime())
-            || activityEnd <= activityStart
+            Number.isNaN(activityStart.getTime()) ||
+            Number.isNaN(activityEnd.getTime()) ||
+            activityEnd <= activityStart
         ) {
             continue;
         }

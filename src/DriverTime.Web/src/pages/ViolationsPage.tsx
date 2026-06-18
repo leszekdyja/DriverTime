@@ -242,6 +242,7 @@ export default function ViolationsPage() {
     const [selectedDriver, setSelectedDriver] = useState(driverIdFromQuery);
     const [selectedSeverity, setSelectedSeverity] = useState("");
     const [selectedStatus, setSelectedStatus] = useState("");
+    const [violationTypeFilter, setViolationTypeFilter] = useState("");
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [selectedViolation, setSelectedViolation] = useState<DriverViolation | null>(null);
@@ -316,6 +317,8 @@ export default function ViolationsPage() {
             const occurredDate = formatDateForInput(violation.occurredAtUtc);
             const severity = normalizeSeverity(violation.severity);
             const status = normalizeStatus(violation.status);
+            const violationType = violation.violationType.trim().toLowerCase();
+            const searchedViolationType = violationTypeFilter.trim().toLowerCase();
 
             if (selectedDriver && violation.driverId !== selectedDriver) {
                 return false;
@@ -329,6 +332,10 @@ export default function ViolationsPage() {
                 return false;
             }
 
+            if (searchedViolationType && !violationType.includes(searchedViolationType)) {
+                return false;
+            }
+
             if (dateFrom && occurredDate && occurredDate < dateFrom) {
                 return false;
             }
@@ -339,7 +346,7 @@ export default function ViolationsPage() {
 
             return true;
         });
-    }, [dateFrom, dateTo, filterError, selectedDriver, selectedSeverity, selectedStatus, violations]);
+    }, [dateFrom, dateTo, filterError, selectedDriver, selectedSeverity, selectedStatus, violationTypeFilter, violations]);
 
     const summary = useMemo(() => {
         const result = {
@@ -437,6 +444,7 @@ export default function ViolationsPage() {
         setSelectedDriver("");
         setSelectedSeverity("");
         setSelectedStatus("");
+        setViolationTypeFilter("");
         setDateFrom("");
         setDateTo("");
         setFilterError("");
@@ -498,7 +506,7 @@ export default function ViolationsPage() {
             </section>
 
             <section className="violations-summary" aria-label="Podsumowanie naruszeń">
-                <SummaryCard label="Wszystkie" value={summary.total} tone="total" description="Wynik po filtrach" />
+                <SummaryCard label="Po filtrach" value={summary.total} tone="total" description="Liczba widocznych naruszeń" />
                 <SummaryCard label={severityLabels.info} value={summary.info} tone="info" description="Niższy priorytet" />
                 <SummaryCard label={severityLabels.warning} value={summary.warning} tone="warning" description="Wymaga weryfikacji" />
                 <SummaryCard label={severityLabels.critical} value={summary.critical} tone="critical" description="Wysokie ryzyko" />
@@ -592,6 +600,15 @@ export default function ViolationsPage() {
                         <option value="in-review">W analizie</option>
                         <option value="resolved">Zamknięte</option>
                     </select>
+                </label>
+                <label>
+                    Typ naruszenia
+                    <input
+                        type="search"
+                        value={violationTypeFilter}
+                        onChange={(event) => setViolationTypeFilter(event.target.value)}
+                        placeholder="np. Weekly rest compensation"
+                    />
                 </label>
                 <label>
                     Data od
