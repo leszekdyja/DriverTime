@@ -38,16 +38,14 @@ public class ReducedWeeklyRestRule : IComplianceRule
         var validTimeline = GetValidTimeline(timeline);
         var ignoredActivities = timeline.Count - validTimeline.Count;
         var weeks = GetActiveWeekRanges(validTimeline);
+        var restPeriods = WeeklyRestTimelineHelper.BuildContinuousRestPeriods(validTimeline);
         var reducedWeeklyRests = 0;
         var weeksBelowReducedRest = 0;
         var maxWeeklyRest = TimeSpan.Zero;
 
         foreach (var week in weeks)
         {
-            var longestRest = GetRestActivitiesForWeek(validTimeline, week)
-                .Select(x => x.Duration)
-                .DefaultIfEmpty(TimeSpan.Zero)
-                .Max();
+            var longestRest = WeeklyRestTimelineHelper.GetLongestRestOverlappingWeek(restPeriods, week);
 
             maxWeeklyRest = Max(maxWeeklyRest, longestRest);
 
@@ -136,20 +134,6 @@ public class ReducedWeeklyRestRule : IComplianceRule
             .OrderBy(x => x)
             .ToList();
     }
-
-    private static IEnumerable<TimelineActivity> GetRestActivitiesForWeek(
-        IReadOnlyList<TimelineActivity> timeline,
-        DateTime weekStart)
-    {
-        var weekEnd = weekStart.AddDays(7);
-
-        return timeline
-            .Where(IsRest)
-            .Where(x => x.StartUtc < weekEnd && x.EndUtc > weekStart);
-    }
-
-    private static bool IsRest(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase);
 
     private static DateTime GetIsoWeekStart(DateTime value)
     {
