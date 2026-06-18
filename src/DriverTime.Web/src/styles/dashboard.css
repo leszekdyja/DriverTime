@@ -376,6 +376,19 @@
     font-size: 13px;
 }
 
+.dashboard-chart-legend em {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    font-style: normal;
+}
+
+.dashboard-chart-legend small {
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 650;
+}
+
 .dashboard-chart-legend i,
 .dashboard-chart-tooltip i {
     width: 10px;
@@ -412,6 +425,19 @@
     gap: 8px;
     color: var(--color-muted);
     font-size: 12px;
+}
+
+.dashboard-activity-center-value {
+    fill: var(--color-heading);
+    font-size: 22px;
+    font-weight: 850;
+}
+
+.dashboard-activity-center-label {
+    fill: var(--color-muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
 }
 
 .dashboard-widget,

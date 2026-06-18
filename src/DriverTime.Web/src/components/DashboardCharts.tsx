@@ -55,6 +55,8 @@ type TooltipPayloadItem = {
         hours?: number;
         count?: number;
         imports?: number;
+        percent?: number;
+        isTrack?: boolean;
     };
 };
 
@@ -84,6 +86,34 @@ function PremiumTooltip({ active, label, payload }: PremiumTooltipProps) {
     );
 }
 
+function ActivityDistributionTooltip({ active, payload }: PremiumTooltipProps) {
+    if (!active || !payload?.length) {
+        return null;
+    }
+
+    const visibleItems = payload.filter((item) => !item.payload?.isTrack);
+
+    if (visibleItems.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="dashboard-chart-tooltip">
+            {visibleItems.map((item, index) => {
+                const hours = safeNumber(Number(item.value ?? item.payload?.hours ?? 0));
+                const percent = safeNumber(Number(item.payload?.percent ?? 0));
+
+                return (
+                    <span key={`${item.name ?? "activity"}-${index}`}>
+                        <i style={{ background: item.color ?? "var(--color-primary)" }} />
+                        {item.name ?? item.payload?.label ?? "Aktywność"}: {formatHours(hours)} ({formatPercent(percent)})
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
 function formatTooltipValue(item: TooltipPayloadItem) {
     if (item.payload?.hours !== undefined && item.value === item.payload.hours) {
         return formatHours(Number(item.value));
@@ -92,11 +122,26 @@ function formatTooltipValue(item: TooltipPayloadItem) {
     return item.value;
 }
 
+function safeNumber(value: number) {
+    return Number.isFinite(value) ? Math.max(value, 0) : 0;
+}
+
 function formatHours(value: number) {
-    return `${value.toLocaleString("pl-PL", {
+    const safeValue = safeNumber(value);
+
+    return `${safeValue.toLocaleString("pl-PL", {
         maximumFractionDigits: 1,
-        minimumFractionDigits: value > 0 && value < 1 ? 1 : 0,
+        minimumFractionDigits: safeValue > 0 && safeValue < 1 ? 1 : 0,
     })} h`;
+}
+
+function formatPercent(value: number) {
+    const safeValue = safeNumber(value);
+
+    return `${safeValue.toLocaleString("pl-PL", {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: safeValue > 0 && safeValue < 1 ? 1 : 0,
+    })}%`;
 }
 
 function hasValues<T extends { count?: number; hours?: number; imports?: number }>(data: T[]) {
@@ -113,6 +158,50 @@ const DashboardCharts = memo(function DashboardCharts({
     const hasDurationData = durationData.some((item) => item.hours > 0);
     const hasImportData = hasValues(importData);
     const hasViolationData = hasValues(violationData);
+    const activityTotalHours = activityData.reduce((total, item) => total + safeNumber(item.hours), 0);
+    const restActivity = activityData.find((item) => item.type === "REST");
+    const restHours = safeNumber(restActivity?.hours ?? 0);
+    const restPercent = activityTotalHours > 0 ? (restHours / activityTotalHours) * 100 : 0;
+    const workActivityData = activityData.filter((item) => item.type !== "REST");
+    const workTotalHours = workActivityData.reduce((total, item) => total + safeNumber(item.hours), 0);
+    const restRingData = [
+        {
+            ...restActivity,
+            type: "REST",
+            label: "Odpoczynek",
+            hours: restHours,
+            percent: restPercent,
+            color: restActivity?.color ?? "var(--chart-rest)",
+        },
+        {
+            type: "ACTIVE_REMAINDER",
+            label: "Tło odpoczynku",
+            hours: Math.max(activityTotalHours - restHours, 0),
+            percent: Math.max(100 - restPercent, 0),
+            color: "var(--color-border)",
+            isTrack: true,
+        },
+    ];
+    const outerActivityData = workActivityData.map((item) => ({
+        ...item,
+        hours: safeNumber(item.hours),
+        percent: workTotalHours > 0 ? (safeNumber(item.hours) / workTotalHours) * 100 : 0,
+    }));
+    const activityLegendItems = activityData.map((item) => {
+        const isRest = item.type === "REST";
+        const percent = isRest
+            ? restPercent
+            : workTotalHours > 0
+                ? (safeNumber(item.hours) / workTotalHours) * 100
+                : 0;
+
+        return {
+            label: item.label,
+            description: isRest ? "wewnętrzny pierścień" : undefined,
+            value: `${formatHours(item.hours)} · ${formatPercent(percent)}`,
+            color: item.color,
+        };
+    });
 
     return (
         <section className="dashboard-charts-grid" aria-label="Wykresy analityczne dashboardu">
@@ -120,36 +209,70 @@ const DashboardCharts = memo(function DashboardCharts({
                 <ChartHeading
                     eyebrow="Aktywności"
                     title="Aktywności według typu"
-                    description="Udział łącznego czasu aktywności według typu."
+                    description="Zewnętrzny pierścień pokazuje aktywności robocze, wewnętrzny udział odpoczynku."
                 />
                 {hasActivityData ? (
                     <div className="dashboard-chart dashboard-chart-pie">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                                <Tooltip content={<PremiumTooltip />} />
+                                <Tooltip content={<ActivityDistributionTooltip />} />
                                 <Pie
-                                    data={activityData}
+                                    data={restRingData}
                                     dataKey="hours"
                                     nameKey="label"
-                                    innerRadius="58%"
-                                    outerRadius="82%"
-                                    paddingAngle={4}
+                                    innerRadius="48%"
+                                    outerRadius="52%"
+                                    paddingAngle={0}
+                                    startAngle={90}
+                                    endAngle={-270}
                                     stroke="var(--color-surface)"
                                     strokeWidth={3}
                                 >
-                                    {activityData.map((item) => (
+                                    {restRingData.map((item) => (
+                                        <Cell
+                                            fill={item.color}
+                                            fillOpacity={item.type === "ACTIVE_REMAINDER" ? 0.18 : 1}
+                                            key={item.type}
+                                        />
+                                    ))}
+                                </Pie>
+                                <Pie
+                                    data={outerActivityData}
+                                    dataKey="hours"
+                                    nameKey="label"
+                                    innerRadius="63%"
+                                    outerRadius="88%"
+                                    paddingAngle={4}
+                                    startAngle={90}
+                                    endAngle={-270}
+                                    stroke="var(--color-surface)"
+                                    strokeWidth={3}
+                                >
+                                    {outerActivityData.map((item) => (
                                         <Cell fill={item.color} key={item.type} />
                                     ))}
                                 </Pie>
+                                <text
+                                    className="dashboard-activity-center-value"
+                                    dominantBaseline="central"
+                                    textAnchor="middle"
+                                    x="50%"
+                                    y="46%"
+                                >
+                                    {formatPercent(restPercent)}
+                                </text>
+                                <text
+                                    className="dashboard-activity-center-label"
+                                    dominantBaseline="central"
+                                    textAnchor="middle"
+                                    x="50%"
+                                    y="57%"
+                                >
+                                    Odpoczynek
+                                </text>
                             </PieChart>
                         </ResponsiveContainer>
-                        <ChartLegend
-                            items={activityData.map((item) => ({
-                                label: item.label,
-                                value: formatHours(item.hours),
-                                color: item.color,
-                            }))}
-                        />
+                        <ChartLegend items={activityLegendItems} />
                     </div>
                 ) : (
                     <EmptyState
@@ -318,14 +441,17 @@ function ChartHeading({
 function ChartLegend({
     items,
 }: {
-    items: Array<{ label: string; value: string; color: string }>;
+    items: Array<{ label: string; value: string; color: string; description?: string }>;
 }) {
     return (
         <div className="dashboard-chart-legend">
             {items.map((item) => (
                 <span key={item.label}>
                     <i style={{ background: item.color }} />
-                    {item.label}
+                    <em>
+                        {item.label}
+                        {item.description ? <small>{item.description}</small> : null}
+                    </em>
                     <strong>{item.value}</strong>
                 </span>
             ))}
