@@ -77,11 +77,26 @@ function PremiumTooltip({ active, label, payload }: PremiumTooltipProps) {
             {payload.map((item, index) => (
                 <span key={`${item.name ?? "value"}-${index}`}>
                     <i style={{ background: item.color ?? "var(--color-primary)" }} />
-                    {item.name ?? item.payload?.label ?? "Wartość"}: {item.value}
+                    {item.name ?? item.payload?.label ?? "Wartość"}: {formatTooltipValue(item)}
                 </span>
             ))}
         </div>
     );
+}
+
+function formatTooltipValue(item: TooltipPayloadItem) {
+    if (item.payload?.hours !== undefined && item.value === item.payload.hours) {
+        return formatHours(Number(item.value));
+    }
+
+    return item.value;
+}
+
+function formatHours(value: number) {
+    return `${value.toLocaleString("pl-PL", {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: value > 0 && value < 1 ? 1 : 0,
+    })} h`;
 }
 
 function hasValues<T extends { count?: number; hours?: number; imports?: number }>(data: T[]) {
@@ -94,7 +109,7 @@ const DashboardCharts = memo(function DashboardCharts({
     importData,
     violationData,
 }: DashboardChartsProps) {
-    const hasActivityData = hasValues(activityData);
+    const hasActivityData = activityData.some((item) => item.hours > 0);
     const hasDurationData = durationData.some((item) => item.hours > 0);
     const hasImportData = hasValues(importData);
     const hasViolationData = hasValues(violationData);
@@ -105,7 +120,7 @@ const DashboardCharts = memo(function DashboardCharts({
                 <ChartHeading
                     eyebrow="Aktywności"
                     title="Aktywności według typu"
-                    description="Udział zdarzeń z kart kierowców."
+                    description="Udział łącznego czasu aktywności według typu."
                 />
                 {hasActivityData ? (
                     <div className="dashboard-chart dashboard-chart-pie">
@@ -114,7 +129,7 @@ const DashboardCharts = memo(function DashboardCharts({
                                 <Tooltip content={<PremiumTooltip />} />
                                 <Pie
                                     data={activityData}
-                                    dataKey="count"
+                                    dataKey="hours"
                                     nameKey="label"
                                     innerRadius="58%"
                                     outerRadius="82%"
@@ -131,7 +146,7 @@ const DashboardCharts = memo(function DashboardCharts({
                         <ChartLegend
                             items={activityData.map((item) => ({
                                 label: item.label,
-                                value: `${item.count}`,
+                                value: formatHours(item.hours),
                                 color: item.color,
                             }))}
                         />
@@ -139,7 +154,7 @@ const DashboardCharts = memo(function DashboardCharts({
                 ) : (
                     <EmptyState
                         title="Brak aktywności"
-                        description="Zaimportuj pliki DDD, aby zobaczyć strukturę aktywności."
+                        description="Zaimportuj pliki DDD, aby zobaczyć strukturę czasu aktywności."
                     />
                 )}
             </article>
@@ -165,7 +180,8 @@ const DashboardCharts = memo(function DashboardCharts({
                                     axisLine={false}
                                     tickLine={false}
                                     tick={{ fill: "var(--color-muted)", fontSize: 12 }}
-                                    width={42}
+                                    tickFormatter={(value) => formatHours(Number(value))}
+                                    width={54}
                                 />
                                 <Tooltip content={<PremiumTooltip />} />
                                 <Bar dataKey="hours" name="Godziny" radius={[10, 10, 4, 4]} maxBarSize={64}>
