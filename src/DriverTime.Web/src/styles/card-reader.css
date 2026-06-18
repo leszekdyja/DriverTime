@@ -1,0 +1,221 @@
+.card-reader-page {
+    width: 100%;
+    max-width: 1400px;
+}
+
+.card-reader-hero,
+.card-reader-panel,
+.card-reader-status-grid article {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+}
+
+.card-reader-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: center;
+    padding: 28px;
+}
+
+.card-reader-hero span,
+.card-reader-heading span,
+.card-reader-status-grid span {
+    color: var(--color-primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.card-reader-hero h2,
+.card-reader-heading h3 {
+    margin: 8px 0;
+    color: var(--color-heading);
+}
+
+.card-reader-hero p,
+.card-reader-heading p,
+.card-reader-status-grid p {
+    margin: 0;
+    color: var(--color-muted);
+    line-height: 1.6;
+}
+
+.card-reader-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.card-reader-actions button,
+.card-reader-helper-actions button,
+.card-reader-heading button {
+    min-height: 42px;
+    padding: 9px 14px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: white;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 750;
+}
+
+.card-reader-actions button.secondary,
+.card-reader-heading button {
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-heading);
+}
+
+.card-reader-actions button:disabled,
+.card-reader-helper-actions button:disabled,
+.card-reader-heading button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.card-reader-helper-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.card-reader-helper-results {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.card-reader-helper-results article {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface-muted);
+}
+
+.card-reader-helper-results strong {
+    color: var(--color-heading);
+    font-size: 22px;
+}
+
+.card-reader-helper-results p {
+    margin: 0;
+    color: var(--color-muted);
+    line-height: 1.5;
+}
+
+.card-reader-mock-result {
+    display: grid;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
+}
+
+.card-reader-mock-result strong {
+    color: var(--color-heading);
+}
+
+.card-reader-status-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 22px;
+}
+
+.card-reader-status-grid article {
+    display: grid;
+    gap: 8px;
+    min-height: 132px;
+    padding: 20px;
+}
+
+.card-reader-status-grid strong {
+    color: var(--color-heading);
+    font-size: 24px;
+}
+
+.card-reader-panel {
+    margin-top: 22px;
+    padding: 24px;
+}
+
+.card-reader-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.card-reader-error {
+    padding: 12px 14px;
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}
+
+.card-reader-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+}
+
+.card-reader-table {
+    width: 100%;
+    min-width: 780px;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.card-reader-table th,
+.card-reader-table td {
+    padding: 13px 15px;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+}
+
+.card-reader-table th {
+    background: var(--color-surface-muted);
+    color: var(--color-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.card-reader-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+@media (max-width: 900px) {
+    .card-reader-hero,
+    .card-reader-heading {
+        align-items: stretch;
+        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+
+    .card-reader-actions {
+        justify-content: flex-start;
+    }
+
+    .card-reader-status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-reader-helper-results {
+        grid-template-columns: 1fr;
+    }
+}
