@@ -45,12 +45,21 @@ const activityLabels: Record<string, string> = {
     REST: "Odpoczynek",
 };
 
+const activityIcons: Record<string, string> = {
+    DRIVING: "🚚",
+    WORK: "⚒",
+    AVAILABILITY: "◷",
+    REST: "🛏",
+};
+
 const timelineLegend = [
     { type: "DRIVING", label: activityLabels.DRIVING },
     { type: "WORK", label: activityLabels.WORK },
     { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
     { type: "REST", label: activityLabels.REST },
 ];
+
+const minimumIconSegmentWidthPercent = 2.4;
 
 type TimelineSegment = {
     id: string;
@@ -153,6 +162,10 @@ function getActivityClass(activityType: string) {
 
 function getActivityLabel(activityType: string) {
     return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
+}
+
+function getActivityIcon(activityType: string) {
+    return activityIcons[activityType.toUpperCase()] || "•";
 }
 
 function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[] {
@@ -460,6 +473,9 @@ export default function DriverDetailsPage() {
                                 {timelineLegend.map((item) => (
                                     <span key={item.type}>
                                         <i className={`daily-activity-legend-dot ${getActivityClass(item.type)}`} />
+                                        <span className="daily-activity-legend-icon" aria-hidden="true">
+                                            {getActivityIcon(item.type)}
+                                        </span>
                                         {item.label}
                                     </span>
                                 ))}
@@ -496,7 +512,13 @@ export default function DriverDetailsPage() {
                                                     }}
                                                     title={formatTimelineTooltip(segment)}
                                                     aria-label={formatTimelineTooltip(segment)}
-                                                />
+                                                >
+                                                    {segment.widthPercent >= minimumIconSegmentWidthPercent ? (
+                                                        <span className="daily-activity-segment-icon" aria-hidden="true">
+                                                            {getActivityIcon(segment.activityType)}
+                                                        </span>
+                                                    ) : null}
+                                                </span>
                                             ))}
                                         </div>
                                         <div className="timeline-hours">

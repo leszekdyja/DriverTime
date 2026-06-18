@@ -478,6 +478,18 @@
     border-radius: 50%;
 }
 
+.daily-activity-legend-icon {
+    display: inline-grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    font-size: 12px;
+    line-height: 1;
+}
+
 .daily-activity-legend-dot.driving { background: #2563eb; }
 .daily-activity-legend-dot.work { background: #7c3aed; }
 .daily-activity-legend-dot.availability { background: #f97316; }
@@ -531,11 +543,29 @@
 
 .daily-activity-segment {
     position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     top: 0;
     bottom: 0;
     min-width: 1px;
+    overflow: hidden;
     border-radius: 0;
     box-shadow: 0 1px 4px rgba(15, 23, 42, 0.16);
+}
+
+.daily-activity-segment-icon {
+    display: inline-grid;
+    width: 20px;
+    height: 20px;
+    place-items: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, white 26%, transparent);
+    color: white;
+    font-size: 12px;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+    pointer-events: none;
 }
 
 .daily-activity-segment.driving { background: #2563eb; }
