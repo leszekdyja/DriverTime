@@ -159,49 +159,167 @@ public class TimelineBuilderService : ITimelineBuilderService
     {
         var ordered = rawActivities
             .Where(x => x.StartUtc < x.EndUtc)
-            .OrderBy(x => x.StartUtc)
+            .OrderByDescending(x => GetActivityPriority(x.ActivityType))
+            .ThenBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
 
-        var timeline = new List<TimelineActivity>();
+        var resolved = new List<TimelineActivity>();
 
         foreach (var activity in ordered)
         {
-            var normalized = new TimelineActivity
+            AddResolvedActivity(resolved, new TimelineActivity
             {
                 SourceActivityId = activity.SourceActivityId,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
                 StartUtc = activity.StartUtc,
                 EndUtc = activity.EndUtc
-            };
+            });
+        }
 
-            if (timeline.Count > 0)
+        return MergeAdjacentSameType(resolved);
+    }
+
+    private static void AddResolvedActivity(
+        List<TimelineActivity> resolved,
+        TimelineActivity activity)
+    {
+        var remaining = new List<TimelineActivity> { activity };
+
+        foreach (var existing in resolved.OrderBy(x => x.StartUtc).ToList())
+        {
+            if (remaining.Count == 0)
             {
-                var previous = timeline[^1];
+                break;
+            }
 
-                if (normalized.StartUtc < previous.EndUtc)
-                {
-                    normalized.StartUtc = previous.EndUtc;
-                }
+            if (existing.EndUtc <= activity.StartUtc)
+            {
+                continue;
+            }
 
-                if (normalized.StartUtc >= normalized.EndUtc)
+            if (existing.StartUtc >= activity.EndUtc)
+            {
+                break;
+            }
+
+            var next = new List<TimelineActivity>();
+
+            foreach (var segment in remaining)
+            {
+                if (existing.EndUtc <= segment.StartUtc ||
+                    existing.StartUtc >= segment.EndUtc)
                 {
+                    next.Add(segment);
                     continue;
                 }
 
-                if (previous.ActivityType == normalized.ActivityType &&
-                    previous.EndUtc == normalized.StartUtc)
+                var existingPriority = GetActivityPriority(existing.ActivityType);
+                var segmentPriority = GetActivityPriority(segment.ActivityType);
+
+                if (existingPriority >= segmentPriority)
                 {
-                    previous.EndUtc = normalized.EndUtc;
+                    next.AddRange(SubtractOverlap(segment, existing));
+                    continue;
+                }
+
+                resolved.Remove(existing);
+                resolved.AddRange(SubtractOverlap(existing, segment));
+                next.Add(segment);
+            }
+
+            remaining = next;
+        }
+
+        foreach (var segment in remaining.Where(x => x.StartUtc < x.EndUtc))
+        {
+            resolved.Add(segment);
+        }
+    }
+
+    private static IReadOnlyList<TimelineActivity> MergeAdjacentSameType(
+        IEnumerable<TimelineActivity> activities)
+    {
+        var ordered = activities
+            .Where(x => x.StartUtc < x.EndUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+
+        if (ordered.Count == 0)
+        {
+            return Array.Empty<TimelineActivity>();
+        }
+
+        var merged = new List<TimelineActivity>();
+
+        foreach (var activity in ordered)
+        {
+            if (merged.Count > 0)
+            {
+                var previous = merged[^1];
+
+                if (previous.ActivityType == activity.ActivityType &&
+                    previous.EndUtc == activity.StartUtc)
+                {
+                    previous.EndUtc = activity.EndUtc;
                     continue;
                 }
             }
 
-            timeline.Add(normalized);
+            merged.Add(new TimelineActivity
+            {
+                SourceActivityId = activity.SourceActivityId,
+                DriverId = activity.DriverId,
+                ActivityType = activity.ActivityType,
+                StartUtc = activity.StartUtc,
+                EndUtc = activity.EndUtc
+            });
         }
 
-        return timeline;
+        return merged;
+    }
+
+    private static IEnumerable<TimelineActivity> SubtractOverlap(
+        TimelineActivity activity,
+        TimelineActivity overlap)
+    {
+        if (overlap.StartUtc > activity.StartUtc)
+        {
+            yield return new TimelineActivity
+            {
+                SourceActivityId = activity.SourceActivityId,
+                DriverId = activity.DriverId,
+                ActivityType = activity.ActivityType,
+                StartUtc = activity.StartUtc,
+                EndUtc = overlap.StartUtc
+            };
+        }
+
+        if (overlap.EndUtc < activity.EndUtc)
+        {
+            yield return new TimelineActivity
+            {
+                SourceActivityId = activity.SourceActivityId,
+                DriverId = activity.DriverId,
+                ActivityType = activity.ActivityType,
+                StartUtc = overlap.EndUtc,
+                EndUtc = activity.EndUtc
+            };
+        }
+    }
+
+    private static int GetActivityPriority(string activityType)
+    {
+        return activityType switch
+        {
+            ActivityTypeNormalizer.Work => 40,
+            ActivityTypeNormalizer.Rest => 30,
+            ActivityTypeNormalizer.Availability => 20,
+            ActivityTypeNormalizer.Driving => 10,
+            _ => 0
+        };
     }
 
     private static DateTime EnsureUtc(DateTime value)

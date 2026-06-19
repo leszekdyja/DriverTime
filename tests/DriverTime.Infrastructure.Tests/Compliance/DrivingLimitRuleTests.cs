@@ -262,6 +262,22 @@ public class DrivingLimitRuleTests
         Assert.AreEqual(0, result.Violations.Count);
     }
 
+    [TestMethod]
+    public void ComplianceTimelineNormalization_RemovesLongDrivingCoveredByRestAndWork()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = NormalizeComplianceTimeline(BuildCoveredLongDrivingTimeline(driverId));
+        var drivingMinutes = timeline
+            .Where(x => x.ActivityType == ActivityTypeNormalizer.Driving)
+            .Sum(x => (long)Math.Round(x.Duration.TotalMinutes));
+
+        Assert.AreEqual(32, drivingMinutes);
+        Assert.AreEqual(0, _dailyRule.Evaluate(driverId, timeline).Violations.Count);
+        Assert.AreEqual(0, _weeklyRule.Evaluate(driverId, timeline).Violations.Count);
+        Assert.AreEqual(0, _biWeeklyRule.Evaluate(driverId, timeline).Violations.Count);
+        Assert.AreEqual(0, _continuousRule.Evaluate(driverId, timeline).Violations.Count);
+    }
+
     private static TimelineActivity[] BuildCoveredLongDrivingTimeline(Guid driverId)
     {
         return
@@ -272,6 +288,18 @@ public class DrivingLimitRuleTests
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:07:00Z", "2026-06-08T10:39:00Z"),
             Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T10:39:00Z", "2026-06-09T00:00:00Z")
         ];
+    }
+
+    private static IReadOnlyList<TimelineActivity> NormalizeComplianceTimeline(
+        IEnumerable<TimelineActivity> timeline)
+    {
+        var method = typeof(TimelineBuilderService).GetMethod(
+            "NormalizeTimeline",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.IsNotNull(method);
+
+        return (IReadOnlyList<TimelineActivity>)method.Invoke(null, [timeline])!;
     }
 
     private static TimelineActivity Activity(
