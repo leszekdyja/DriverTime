@@ -44,13 +44,19 @@ app.MapGet("/health", (PcscReaderService readerService) =>
 app.MapGet("/api/readers", (PcscReaderService readerService) =>
 {
     var snapshot = readerService.GetReaders();
+    IReadOnlyList<ReaderInfo> readers = snapshot.Readers.Count == 0
+        ? new[] { PcscReaderService.CreateMockReader() }
+        : snapshot.Readers;
 
     return Results.Ok(new
     {
         status = snapshot.PcscAvailable ? "ok" : "unavailable",
         pcscAvailable = snapshot.PcscAvailable,
-        message = snapshot.Message,
-        readers = snapshot.Readers
+        message = snapshot.Readers.Count == 0
+            ? $"{snapshot.Message} Możesz użyć czytnika testowego, aby sprawdzić przepływ UI bez urządzenia."
+            : snapshot.Message,
+        mockModeAvailable = snapshot.Readers.Count == 0,
+        readers
     });
 });
 
@@ -70,6 +76,9 @@ app.MapPost("/api/card/read/start", (StartCardReadRequest? request) =>
 {
     var startedAtUtc = DateTime.UtcNow;
     var completedAtUtc = startedAtUtc.AddSeconds(2);
+    var selectedReaderName = string.IsNullOrWhiteSpace(request?.SelectedReaderName)
+        ? PcscReaderService.MockReaderName
+        : request.SelectedReaderName.Trim();
     var fileName = $"mock-driver-card-{completedAtUtc:yyyyMMdd-HHmmss}.ddd";
     var filePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -82,7 +91,8 @@ app.MapPost("/api/card/read/start", (StartCardReadRequest? request) =>
     {
         status = "completed",
         message = "Tryb testowy — realny odczyt karty zostanie dodany w następnym kroku.",
-        selectedReaderName = request?.SelectedReaderName ?? string.Empty,
+        selectedReaderName,
+        mockMode = true,
         startedAtUtc,
         completedAtUtc,
         fileName,
@@ -94,6 +104,20 @@ app.Run();
 
 internal sealed class PcscReaderService
 {
+    public const string MockReaderName = "DriverTime czytnik testowy";
+
+    public static ReaderInfo CreateMockReader()
+    {
+        return new ReaderInfo(
+            Name: MockReaderName,
+            CardPresent: false,
+            Status: "mock",
+            Message: "Tryb testowy bez fizycznego czytnika. Służy tylko do sprawdzenia UI i historii sesji.",
+            ErrorCode: null,
+            ErrorCodeHex: string.Empty,
+            IsMock: true);
+    }
+
     public ReaderSnapshot GetReaders()
     {
         if (!OperatingSystem.IsWindows())
@@ -497,7 +521,8 @@ internal sealed record ReaderInfo(
     string Status,
     string Message,
     uint? ErrorCode,
-    string ErrorCodeHex);
+    string ErrorCodeHex,
+    bool IsMock = false);
 
 internal sealed record PcscDiagnostics(
     string Status,

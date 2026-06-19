@@ -7,6 +7,7 @@ export type CardReaderReader = {
     message: string;
     errorCode: number | null;
     errorCodeHex: string;
+    isMock?: boolean;
 };
 
 export type CardReaderHelperHealth = {
@@ -23,6 +24,7 @@ export type CardReaderReaderList = {
     status: string;
     pcscAvailable: boolean;
     message: string;
+    mockModeAvailable?: boolean;
     readers: CardReaderReader[];
 };
 
@@ -68,6 +70,7 @@ export type CardReaderMockReadResult = {
     status: string;
     message: string;
     selectedReaderName: string;
+    mockMode?: boolean;
     startedAtUtc: string;
     completedAtUtc: string;
     fileName: string;

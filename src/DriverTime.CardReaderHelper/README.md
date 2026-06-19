@@ -20,13 +20,15 @@ Ten projekt to lokalny helper MVP dla przyszłego fizycznego odczytu kart kierow
 
 - `GET /health` - sprawdza, czy helper działa, czy PC/SC jest dostępne i ile czytników wykryto.
 - `GET /api/readers` - zwraca wykryte czytniki PC/SC oraz informację, czy karta jest obecna, jeśli system pozwala to ustalić.
+  Jeżeli nie ma fizycznego czytnika, endpoint zwraca jawnie oznaczony czytnik testowy, który służy tylko do sprawdzenia interfejsu i historii sesji.
 - `GET /api/diagnostics` - zwraca szczegółową diagnostykę PC/SC: listę czytników, status połączenia, ATR, protokół i komunikaty błędów.
 - `GET /api/readers/{readerName}/atr` - łączy się z kartą w wybranym czytniku i odczytuje ATR, czyli podstawową odpowiedź identyfikującą kartę.
 - `POST /api/card/read/start` - działa nadal w trybie testowym i nie wykonuje realnego odczytu danych DDD/C1B.
+  Endpoint może działać bez fizycznego czytnika i zwraca wynik mockowy z nazwą testowego pliku.
 
 ## Obecne ograniczenia
 
-Ten etap wykrywa lokalne czytniki PC/SC i testuje obecność karty przez odczyt ATR. Helper nadal nie pobiera danych z karty kierowcy, nie wykonuje komend APDU `SELECT` i nie zapisuje pliku DDD/C1B. Realny odczyt karty zostanie dodany w kolejnym kroku.
+Ten etap wykrywa lokalne czytniki PC/SC i testuje obecność karty przez odczyt ATR. Gdy czytnika nie ma, można użyć trybu testowego/mock, który nie komunikuje się z kartą i nie generuje prawdziwego pliku DDD/C1B. Helper nadal nie pobiera danych z karty kierowcy, nie wykonuje komend APDU `SELECT` i nie zapisuje pliku DDD/C1B. Realny odczyt karty zostanie dodany w kolejnym kroku.
 
 ## Ważne
 

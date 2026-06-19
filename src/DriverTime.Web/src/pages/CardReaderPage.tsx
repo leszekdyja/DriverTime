@@ -93,6 +93,7 @@ export default function CardReaderPage() {
     );
 
     const readerList = readers?.readers ?? [];
+    const realReadersCount = readerList.filter((reader) => !reader.isMock).length;
 
     const selectedReader = useMemo(
         () => readerList.find((reader) => reader.name === selectedReaderName) ?? null,
@@ -251,6 +252,11 @@ export default function CardReaderPage() {
             return;
         }
 
+        if (selectedReader?.isMock) {
+            setHelperError("Czytnik testowy nie ma fizycznej karty ani ATR. Użyj przycisku „Testowy odczyt karty”, aby sprawdzić przepływ UI.");
+            return;
+        }
+
         setIsReadingAtr(true);
         setHelperError("");
         setAtrResult(null);
@@ -348,7 +354,7 @@ export default function CardReaderPage() {
                 <article>
                     <span>PC/SC</span>
                     <strong>{helperHealth ? helperHealth.pcscAvailable ? "Dostępne" : "Niedostępne" : "Nie sprawdzono"}</strong>
-                    <p>{helperHealth ? `Wykryte czytniki: ${helperHealth.readersCount}.` : "Status podsystemu pojawi się po sprawdzeniu helpera."}</p>
+                    <p>{helperHealth ? `Wykryte realne czytniki: ${helperHealth.readersCount}.` : "Status podsystemu pojawi się po sprawdzeniu helpera."}</p>
                 </article>
                 <article>
                     <span>Aktywna sesja</span>
@@ -394,7 +400,7 @@ export default function CardReaderPage() {
                     </article>
                     <article>
                         <span>Czytniki</span>
-                        <strong>{readerList.length}</strong>
+                        <strong>{realReadersCount}</strong>
                         <p>{readers?.message ?? "Lista pojawi się po sprawdzeniu czytników."}</p>
                     </article>
                     <article>
@@ -408,7 +414,7 @@ export default function CardReaderPage() {
                     <div className="card-reader-readers">
                         <div className="card-reader-subheading">
                             <h4>Wykryte czytniki</h4>
-                            <p>Wybierz czytnik, a następnie sprawdź obecność karty przez odczyt ATR.</p>
+                            <p>Wybierz realny czytnik do testu ATR albo czytnik testowy, żeby sprawdzić UI bez urządzenia.</p>
                         </div>
 
                         {readerList.length === 0 ? (
@@ -432,7 +438,10 @@ export default function CardReaderPage() {
                                             <span>{reader.message}</span>
                                         </span>
                                         <span className="card-reader-reader-meta">
-                                            <StatusBadge label={getReaderPresenceLabel(reader)} tone={getReaderPresenceTone(reader)} />
+                                            <StatusBadge
+                                                label={reader.isMock ? "Tryb testowy" : getReaderPresenceLabel(reader)}
+                                                tone={reader.isMock ? "info" : getReaderPresenceTone(reader)}
+                                            />
                                             <small>{reader.status}</small>
                                         </span>
                                     </label>
@@ -490,6 +499,7 @@ export default function CardReaderPage() {
                 {mockReadResult ? (
                     <div className="card-reader-mock-result">
                         <strong>{mockReadResult.fileName}</strong>
+                        <span>Tryb: {mockReadResult.mockMode ? "testowy bez odczytu APDU" : "nieznany"}</span>
                         <span>Czytnik: {mockReadResult.selectedReaderName || "Nie wybrano"}</span>
                         <span>Start: {formatDate(mockReadResult.startedAtUtc)}</span>
                         <span>Koniec: {formatDate(mockReadResult.completedAtUtc)}</span>
