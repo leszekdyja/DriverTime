@@ -16,6 +16,8 @@ import {
     getCardReaderStatus,
     readCardAtr,
     startMockCardRead,
+    startTachographStructureRead,
+    startTechnicalCardRead,
     type CardReaderAtrResult,
     type CardReaderDiagnostics,
     type CardReaderHelperHealth,
@@ -23,6 +25,8 @@ import {
     type CardReaderReader,
     type CardReaderReaderList,
     type CardReaderStatus,
+    type CardReaderTechnicalReadResult,
+    type TachographCardReadResult,
 } from "../services/cardReaderHelperService";
 import "../styles/card-reader.css";
 
@@ -66,6 +70,24 @@ function getReaderPresenceTone(reader: Pick<CardReaderReader, "cardPresent">): B
     return "neutral";
 }
 
+function getExportFormatLabel(format: string) {
+    if (format === "TechnicalJson") return "Techniczny JSON";
+    if (format === "C1B") return "C1B";
+    if (format === "DDD") return "DDD";
+    if (format === "Unknown") return "Nieznany";
+    return format || "Nieznany";
+}
+
+function formatFileSize(bytes: number) {
+    if (!bytes || bytes < 0) return "Brak danych";
+    if (bytes < 1024) return `${bytes} B`;
+    return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function getApduTone(success: boolean): BadgeTone {
+    return success ? "success" : "warning";
+}
+
 function upsertSession(sessions: CardReadSession[], session: CardReadSession) {
     return [session, ...sessions.filter((item) => item.id !== session.id)];
 }
@@ -79,6 +101,8 @@ export default function CardReaderPage() {
     const [atrResult, setAtrResult] = useState<CardReaderAtrResult | null>(null);
     const [readerStatus, setReaderStatus] = useState<CardReaderStatus | null>(null);
     const [mockReadResult, setMockReadResult] = useState<CardReaderMockReadResult | null>(null);
+    const [technicalReadResult, setTechnicalReadResult] = useState<CardReaderTechnicalReadResult | null>(null);
+    const [tachographStructureResult, setTachographStructureResult] = useState<TachographCardReadResult | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [isFailing, setIsFailing] = useState(false);
@@ -87,6 +111,8 @@ export default function CardReaderPage() {
     const [isCheckingDiagnostics, setIsCheckingDiagnostics] = useState(false);
     const [isReadingAtr, setIsReadingAtr] = useState(false);
     const [isMockReading, setIsMockReading] = useState(false);
+    const [isTechnicalReading, setIsTechnicalReading] = useState(false);
+    const [isStructureReading, setIsStructureReading] = useState(false);
     const [error, setError] = useState("");
     const [helperError, setHelperError] = useState("");
 
@@ -349,6 +375,143 @@ export default function CardReaderPage() {
         }
     }
 
+    async function runTechnicalRead() {
+        if (!selectedReaderName) {
+            setHelperError("Najpierw wybierz czytnik.");
+            return;
+        }
+
+        setIsTechnicalReading(true);
+        setHelperError("");
+        setError("");
+        setTechnicalReadResult(null);
+
+        let session = activeSession;
+
+        try {
+            if (!session) {
+                session = await startCardReadSession({
+                    readerName: selectedReaderName,
+                    notes: "Automatyczna sesja technicznego odczytu karty przez lokalny helper.",
+                });
+                setSessions((current) => upsertSession(current, session as CardReadSession));
+            }
+
+            const helperResult = await startTechnicalCardRead(selectedReaderName);
+            setTechnicalReadResult(helperResult);
+
+            if (helperResult.success) {
+                const completedSession = await completeCardReadSession(session.id, {
+                    notes: [
+                        helperResult.message,
+                        helperResult.readerName ? `Czytnik: ${helperResult.readerName}` : "",
+                        helperResult.outputFileName ? `Plik: ${helperResult.outputFileName}` : "",
+                        helperResult.isImportable
+                            ? `Eksport ${getExportFormatLabel(helperResult.exportFormat)} gotowy do importu.`
+                            : `Etap techniczny: ${getExportFormatLabel(helperResult.exportFormat)} bez pełnego C1B/DDD.`,
+                    ].filter(Boolean).join(" | "),
+                });
+
+                setSessions((current) => upsertSession(current, completedSession));
+                return;
+            }
+
+            const failedSession = await failCardReadSession(session.id, {
+                errorMessage: helperResult.message,
+                notes: helperResult.errorDetails || `Czytnik: ${selectedReaderName}`,
+            });
+            setSessions((current) => upsertSession(current, failedSession));
+        } catch (readError) {
+            const message = readError instanceof Error
+                ? readError.message
+                : "Nie udało się wykonać technicznego odczytu karty.";
+
+            setHelperError(message);
+
+            if (session) {
+                try {
+                    const failedSession = await failCardReadSession(session.id, {
+                        errorMessage: message,
+                        notes: selectedReaderName ? `Czytnik: ${selectedReaderName}` : undefined,
+                    });
+                    setSessions((current) => upsertSession(current, failedSession));
+                } catch {
+                    setError("Helper zgłosił błąd, ale nie udało się zapisać statusu sesji w API.");
+                }
+            }
+        } finally {
+            setIsTechnicalReading(false);
+        }
+    }
+
+    async function runTachographStructureRead() {
+        if (!selectedReaderName) {
+            setHelperError("Najpierw wybierz czytnik.");
+            return;
+        }
+
+        setIsStructureReading(true);
+        setHelperError("");
+        setError("");
+        setTachographStructureResult(null);
+
+        let session = activeSession;
+
+        try {
+            if (!session) {
+                session = await startCardReadSession({
+                    readerName: selectedReaderName,
+                    notes: "Automatyczna sesja odczytu struktury karty tachografu przez lokalny helper.",
+                });
+                setSessions((current) => upsertSession(current, session as CardReadSession));
+            }
+
+            const helperResult = await startTachographStructureRead(selectedReaderName);
+            setTachographStructureResult(helperResult);
+
+            if (helperResult.success) {
+                const completedSession = await completeCardReadSession(session.id, {
+                    notes: [
+                        helperResult.message,
+                        helperResult.readerName ? `Czytnik: ${helperResult.readerName}` : "",
+                        helperResult.outputFileName ? `Plik: ${helperResult.outputFileName}` : "",
+                        `Format: ${getExportFormatLabel(helperResult.exportFormat)}`,
+                        helperResult.isImportable ? "Gotowy do importu." : "Odczyt struktury bez pełnego C1B/DDD.",
+                    ].filter(Boolean).join(" | "),
+                });
+
+                setSessions((current) => upsertSession(current, completedSession));
+                return;
+            }
+
+            const failedSession = await failCardReadSession(session.id, {
+                errorMessage: helperResult.message,
+                notes: helperResult.errorDetails || `Czytnik: ${selectedReaderName}`,
+            });
+            setSessions((current) => upsertSession(current, failedSession));
+        } catch (readError) {
+            const message = readError instanceof Error
+                ? readError.message
+                : "Nie udało się wykonać odczytu struktury karty.";
+
+            setHelperError(message);
+
+            if (session) {
+                try {
+                    const failedSession = await failCardReadSession(session.id, {
+                        errorMessage: message,
+                        notes: selectedReaderName ? `Czytnik: ${selectedReaderName}` : undefined,
+                    });
+                    setSessions((current) => upsertSession(current, failedSession));
+                } catch {
+                    setError("Helper zgłosił błąd, ale nie udało się zapisać statusu sesji w API.");
+                }
+            }
+        } finally {
+            setIsStructureReading(false);
+        }
+    }
+
     return (
         <div className="card-reader-page">
             <section className="card-reader-hero">
@@ -424,6 +587,12 @@ export default function CardReaderPage() {
                     </button>
                     <button type="button" onClick={checkSelectedCardAtr} disabled={!selectedReaderName || isReadingAtr}>
                         {isReadingAtr ? "Odczyt ATR..." : "Sprawdź kartę / odczytaj ATR"}
+                    </button>
+                    <button type="button" onClick={runTechnicalRead} disabled={!selectedReaderName || isTechnicalReading}>
+                        {isTechnicalReading ? "Odczyt karty..." : "Odczytaj kartę"}
+                    </button>
+                    <button type="button" onClick={runTachographStructureRead} disabled={!selectedReaderName || isStructureReading}>
+                        {isStructureReading ? "Odczyt struktury..." : "Odczytaj strukturę karty"}
                     </button>
                     <button type="button" onClick={runMockRead} disabled={isMockReading}>
                         {isMockReading ? "Zapisywanie sesji..." : "Testowy odczyt karty"}
@@ -536,6 +705,179 @@ export default function CardReaderPage() {
                             </div>
                         )}
                     </section>
+                ) : null}
+
+                {technicalReadResult ? (
+                    <div className="card-reader-read-result">
+                        <div>
+                            <span>Workflow odczytu karty</span>
+                            <StatusBadge
+                                label={technicalReadResult.success ? "Odczyt techniczny wykonany" : "Błąd odczytu"}
+                                tone={technicalReadResult.success ? "success" : "danger"}
+                            />
+                        </div>
+                        <p>{technicalReadResult.message}</p>
+
+                        <div className="card-reader-workflow-grid">
+                            <article className="card-reader-workflow-card">
+                                <header>
+                                    <span>Krok 1</span>
+                                    <strong>Odczyt techniczny</strong>
+                                </header>
+                                <dl>
+                                    <div><dt>Czytnik</dt><dd>{technicalReadResult.readerName || "Brak danych"}</dd></div>
+                                    <div><dt>Żądany czytnik</dt><dd>{technicalReadResult.requestedReaderName || "Nie podano"}</dd></div>
+                                    <div><dt>Wybrany czytnik</dt><dd>{technicalReadResult.selectedReaderName || "Brak danych"}{technicalReadResult.selectedReaderIsMock ? " (tryb testowy)" : ""}</dd></div>
+                                    <div><dt>ATR</dt><dd><code>{technicalReadResult.atr || "Brak ATR"}</code></dd></div>
+                                    <div><dt>Plik wynikowy</dt><dd>{technicalReadResult.outputFileName || "Nie utworzono"}</dd></div>
+                                    <div><dt>Rozmiar</dt><dd>{formatFileSize(technicalReadResult.fileSizeBytes)}</dd></div>
+                                    <div><dt>Ścieżka lokalna helpera</dt><dd>{technicalReadResult.outputPath || "Brak"}</dd></div>
+                                </dl>
+                            </article>
+
+                            <article className="card-reader-workflow-card">
+                                <header>
+                                    <span>Krok 2</span>
+                                    <strong>Eksport DDD/C1B</strong>
+                                </header>
+                                <dl>
+                                    <div><dt>Format</dt><dd>{getExportFormatLabel(technicalReadResult.exportFormat)}</dd></div>
+                                    <div>
+                                        <dt>Status eksportu</dt>
+                                        <dd>
+                                            <StatusBadge
+                                                label={technicalReadResult.isImportable ? "Importowalny" : "Nieimportowalny"}
+                                                tone={technicalReadResult.isImportable ? "success" : "warning"}
+                                            />
+                                        </dd>
+                                    </div>
+                                    <div><dt>Następny krok</dt><dd>{technicalReadResult.nextStepMessage || "Pełny eksport C1B/DDD wymaga kolejnego kroku implementacji APDU."}</dd></div>
+                                </dl>
+                            </article>
+
+                            <article className="card-reader-workflow-card card-reader-import-step">
+                                <header>
+                                    <span>Krok 3</span>
+                                    <strong>Import do DriverTime</strong>
+                                </header>
+                                {technicalReadResult.isImportable ? (
+                                    <p>Plik ma format {getExportFormatLabel(technicalReadResult.exportFormat)} i będzie można przekazać go do istniejącego importu DDD.</p>
+                                ) : (
+                                    <p className="card-reader-import-blocked">
+                                        Ten plik jest technicznym wynikiem komunikacji z kartą. Nie jest jeszcze plikiem DDD/C1B i nie może być zaimportowany do ewidencji czasu pracy.
+                                    </p>
+                                )}
+                                <button type="button" disabled>
+                                    {technicalReadResult.isImportable ? "Import do DriverTime będzie dostępny w kolejnym kroku" : "Import niedostępny dla technicznego JSON-a"}
+                                </button>
+                            </article>
+                        </div>
+
+                        {technicalReadResult.apduResponses.length > 0 ? (
+                            <div className="card-reader-apdu-list">
+                                {technicalReadResult.apduResponses.map((response) => (
+                                    <article key={`${response.name}-${response.commandHex}`}>
+                                        <strong>{response.name}</strong>
+                                        <span>SW: {response.statusWord || "brak"}</span>
+                                        <code>{response.responseHex || response.message}</code>
+                                    </article>
+                                ))}
+                            </div>
+                        ) : null}
+                        {technicalReadResult.errorDetails ? <p>{technicalReadResult.errorDetails}</p> : null}
+                    </div>
+                ) : null}
+
+                {tachographStructureResult ? (
+                    <div className="card-reader-read-result">
+                        <div>
+                            <span>Odczyt struktury karty</span>
+                            <StatusBadge
+                                label={tachographStructureResult.success ? "Struktura sprawdzona" : "Błąd odczytu struktury"}
+                                tone={tachographStructureResult.success ? "success" : "danger"}
+                            />
+                        </div>
+                        <p>{tachographStructureResult.message}</p>
+
+                        <div className="card-reader-workflow-grid">
+                            <article className="card-reader-workflow-card">
+                                <header>
+                                    <span>Komunikacja</span>
+                                    <strong>ATR i aplikacja</strong>
+                                </header>
+                                <dl>
+                                    <div><dt>Czytnik</dt><dd>{tachographStructureResult.readerName || "Brak danych"}</dd></div>
+                                    <div><dt>Żądany czytnik</dt><dd>{tachographStructureResult.requestedReaderName || "Nie podano"}</dd></div>
+                                    <div><dt>Wybrany czytnik</dt><dd>{tachographStructureResult.selectedReaderName || "Brak danych"}{tachographStructureResult.selectedReaderIsMock ? " (tryb testowy)" : ""}</dd></div>
+                                    <div><dt>ATR</dt><dd><code>{tachographStructureResult.atr || "Brak ATR"}</code></dd></div>
+                                    <div><dt>Plik wynikowy</dt><dd>{tachographStructureResult.outputFileName || "Nie utworzono"}</dd></div>
+                                    <div><dt>Rozmiar</dt><dd>{formatFileSize(tachographStructureResult.fileSizeBytes)}</dd></div>
+                                </dl>
+                            </article>
+
+                            <article className="card-reader-workflow-card">
+                                <header>
+                                    <span>Eksport</span>
+                                    <strong>{getExportFormatLabel(tachographStructureResult.exportFormat)}</strong>
+                                </header>
+                                <p>{tachographStructureResult.nextStepMessage}</p>
+                            </article>
+
+                            <article className="card-reader-workflow-card card-reader-import-step">
+                                <header>
+                                    <span>Import</span>
+                                    <strong>Import do DriverTime</strong>
+                                </header>
+                                <p className="card-reader-import-blocked">
+                                    Ten wynik jest technicznym odczytem struktury karty. Nie jest jeszcze plikiem DDD/C1B i nie może być zaimportowany do ewidencji czasu pracy.
+                                </p>
+                                <button type="button" disabled>Import niedostępny</button>
+                            </article>
+                        </div>
+
+                        {tachographStructureResult.apduResponses.length > 0 ? (
+                            <div className="card-reader-apdu-list">
+                                <h4>Próby SELECT aplikacji</h4>
+                                {tachographStructureResult.apduResponses.map((response) => (
+                                    <article key={`${response.name}-${response.commandHex}`}>
+                                        <strong>{response.name}</strong>
+                                        <StatusBadge label={`SW: ${response.statusWord || "brak"}`} tone={getApduTone(response.success)} />
+                                        <span>{response.statusMeaning}</span>
+                                        <code>{response.responseHex || response.message}</code>
+                                    </article>
+                                ))}
+                            </div>
+                        ) : null}
+
+                        {tachographStructureResult.fileReads.length > 0 ? (
+                            <div className="card-reader-file-read-list">
+                                <h4>Próby plików EF</h4>
+                                {tachographStructureResult.fileReads.map((file) => (
+                                    <article key={`${file.fileName}-${file.fileId}`}>
+                                        <header>
+                                            <div>
+                                                <strong>{file.fileName}</strong>
+                                                <span>{file.description}</span>
+                                            </div>
+                                            <StatusBadge
+                                                label={file.readSucceeded ? "Odczytano fragment" : file.selectSucceeded ? "Wybrano plik" : "Nie wybrano"}
+                                                tone={file.readSucceeded ? "success" : file.selectSucceeded ? "info" : "warning"}
+                                            />
+                                        </header>
+                                        <dl>
+                                            <div><dt>File ID</dt><dd>{file.fileId}</dd></div>
+                                            <div><dt>SELECT SW</dt><dd>{file.selectResponse.statusWord || "brak"} - {file.selectResponse.statusMeaning}</dd></div>
+                                            <div><dt>READ SW</dt><dd>{file.readResponse ? `${file.readResponse.statusWord || "brak"} - ${file.readResponse.statusMeaning}` : "Nie wykonano"}</dd></div>
+                                            <div><dt>Dane</dt><dd><code>{file.readResponse?.dataHex || "Brak danych"}</code></dd></div>
+                                        </dl>
+                                        <p>{file.message}</p>
+                                    </article>
+                                ))}
+                            </div>
+                        ) : null}
+
+                        {tachographStructureResult.errorDetails ? <p>{tachographStructureResult.errorDetails}</p> : null}
+                    </div>
                 ) : null}
 
                 {mockReadResult ? (

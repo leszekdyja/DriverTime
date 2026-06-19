@@ -197,6 +197,161 @@
     color: var(--color-heading);
 }
 
+.card-reader-read-result {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: var(--color-surface-muted);
+}
+
+.card-reader-read-result > div:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.card-reader-read-result p {
+    margin: 0;
+    color: var(--color-muted);
+}
+
+.card-reader-read-result dl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+}
+
+.card-reader-read-result dl div {
+    display: grid;
+    grid-template-columns: minmax(140px, 220px) 1fr;
+    gap: 12px;
+}
+
+.card-reader-read-result dt {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.card-reader-read-result dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.card-reader-workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.card-reader-workflow-card {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+}
+
+.card-reader-workflow-card header {
+    display: grid;
+    gap: 4px;
+}
+
+.card-reader-workflow-card header span {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.card-reader-workflow-card header strong {
+    color: var(--color-heading);
+    font-size: 16px;
+}
+
+.card-reader-import-step button {
+    width: fit-content;
+    padding: 9px 12px;
+}
+
+.card-reader-import-blocked {
+    padding: 12px;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--color-heading);
+    font-weight: 700;
+}
+
+.card-reader-read-result code,
+.card-reader-apdu-list code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.card-reader-apdu-list {
+    display: grid;
+    gap: 8px;
+}
+
+.card-reader-apdu-list h4,
+.card-reader-file-read-list h4 {
+    margin: 4px 0;
+    color: var(--color-heading);
+}
+
+.card-reader-apdu-list article {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+}
+
+.card-reader-file-read-list {
+    display: grid;
+    gap: 10px;
+}
+
+.card-reader-file-read-list article {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+}
+
+.card-reader-file-read-list header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.card-reader-file-read-list header div {
+    display: grid;
+    gap: 4px;
+}
+
+.card-reader-file-read-list header span {
+    color: var(--color-muted);
+}
+
+.card-reader-file-read-list p {
+    margin: 0;
+    color: var(--color-muted);
+}
+
 .card-reader-atr-result {
     display: grid;
     gap: 10px;
@@ -434,6 +589,14 @@
     }
 
     .card-reader-helper-results {
+        grid-template-columns: 1fr;
+    }
+
+    .card-reader-workflow-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-reader-read-result dl div {
         grid-template-columns: 1fr;
     }
 

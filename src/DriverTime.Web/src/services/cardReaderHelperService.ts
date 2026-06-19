@@ -90,6 +90,95 @@ export type CardReaderMockReadResult = {
     filePath: string;
 };
 
+export type CardReaderApduResponse = {
+    name: string;
+    commandHex: string;
+    responseHex: string;
+    statusWord: string;
+    success: boolean;
+    message: string;
+};
+
+export type CardReaderStructuredApduResponse = {
+    name: string;
+    description: string;
+    commandHex: string;
+    responseHex: string;
+    dataHex: string;
+    statusWord: string;
+    sw1: string;
+    sw2: string;
+    success: boolean;
+    statusMeaning: string;
+    message: string;
+};
+
+export type CardReaderFileReadResult = {
+    fileName: string;
+    fileId: string;
+    description: string;
+    selectResponse: CardReaderStructuredApduResponse;
+    readResponse: CardReaderStructuredApduResponse | null;
+    selectSucceeded: boolean;
+    readSucceeded: boolean;
+    message: string;
+};
+
+export type CardReaderExportFormat = "TechnicalJson" | "C1B" | "DDD" | "Unknown" | string;
+
+export type CardReaderDddExportResult = {
+    isImportable: boolean;
+    exportFormat: CardReaderExportFormat;
+    nextStepMessage: string;
+    outputFileName: string;
+    outputPath: string;
+    fileSizeBytes: number;
+};
+
+export type CardReaderTechnicalReadResult = {
+    success: boolean;
+    message: string;
+    requestedReaderName: string;
+    selectedReaderName: string;
+    selectedReaderIsMock: boolean;
+    readerName: string;
+    atr: string;
+    outputFileName: string;
+    outputPath: string;
+    fileSizeBytes: number;
+    startedAtUtc: string;
+    finishedAtUtc: string;
+    errorDetails: string;
+    isMock: boolean;
+    fullDddExportReady: boolean;
+    isImportable: boolean;
+    exportFormat: CardReaderExportFormat;
+    nextStepMessage: string;
+    apduResponses: CardReaderApduResponse[];
+};
+
+export type TachographCardReadResult = {
+    success: boolean;
+    message: string;
+    requestedReaderName: string;
+    selectedReaderName: string;
+    selectedReaderIsMock: boolean;
+    readerName: string;
+    atr: string;
+    outputFileName: string;
+    outputPath: string;
+    fileSizeBytes: number;
+    startedAtUtc: string;
+    finishedAtUtc: string;
+    errorDetails: string;
+    isMock: boolean;
+    isImportable: boolean;
+    exportFormat: CardReaderExportFormat;
+    nextStepMessage: string;
+    apduResponses: CardReaderStructuredApduResponse[];
+    fileReads: CardReaderFileReadResult[];
+};
+
 async function getJson<T>(
     path: string,
     errorMessage: string,
@@ -150,7 +239,35 @@ export function startMockCardRead(
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ selectedReaderName }),
+            body: JSON.stringify({ selectedReaderName, readerName: selectedReaderName }),
+        },
+    );
+}
+
+export function startTechnicalCardRead(
+    selectedReaderName?: string,
+): Promise<CardReaderTechnicalReadResult> {
+    return getJson<CardReaderTechnicalReadResult>(
+        "/api/card/read/technical",
+        "Nie udało się uruchomić technicznego odczytu karty.",
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedReaderName, readerName: selectedReaderName }),
+        },
+    );
+}
+
+export function startTachographStructureRead(
+    selectedReaderName?: string,
+): Promise<TachographCardReadResult> {
+    return getJson<TachographCardReadResult>(
+        "/api/card/read/tachograph-structure",
+        "Nie udało się uruchomić odczytu struktury karty.",
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedReaderName, readerName: selectedReaderName }),
         },
     );
 }
