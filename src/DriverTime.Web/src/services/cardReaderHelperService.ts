@@ -43,6 +43,19 @@ export type CardReaderAtrResult = {
     pcscState: number;
 };
 
+export type CardReaderStatus = {
+    readerName: string;
+    readerConnected: boolean;
+    cardPresent: boolean;
+    atr: string;
+    atrLength: number;
+    status: string;
+    message: string;
+    errorMessage: string;
+    isMockReader: boolean;
+    checkedAtUtc: string;
+};
+
 export type CardReaderDiagnosticReader = {
     name: string;
     cardPresent: boolean | null;
@@ -116,6 +129,15 @@ export function readCardAtr(readerName: string): Promise<CardReaderAtrResult> {
     return getJson<CardReaderAtrResult>(
         `/api/readers/${encodeURIComponent(readerName)}/atr`,
         "Nie udało się odczytać ATR karty.",
+    );
+}
+
+export function getCardReaderStatus(readerName?: string): Promise<CardReaderStatus> {
+    const query = readerName ? `?readerName=${encodeURIComponent(readerName)}` : "";
+
+    return getJson<CardReaderStatus>(
+        `/api/reader-status${query}`,
+        "Nie udało się pobrać statusu czytnika.",
     );
 }
 

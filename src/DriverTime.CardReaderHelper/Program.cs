@@ -72,6 +72,20 @@ app.MapGet("/api/readers/{readerName}/atr", (string readerName, PcscReaderServic
     return Results.Ok(result);
 });
 
+app.MapGet("/api/readers/{readerName}/status", (string readerName, PcscReaderService readerService) =>
+{
+    var result = readerService.GetReaderConnectionStatus(Uri.UnescapeDataString(readerName));
+
+    return Results.Ok(result);
+});
+
+app.MapGet("/api/reader-status", (string? readerName, PcscReaderService readerService) =>
+{
+    var result = readerService.GetReaderConnectionStatus(readerName);
+
+    return Results.Ok(result);
+});
+
 app.MapPost("/api/card/read/start", (StartCardReadRequest? request) =>
 {
     var startedAtUtc = DateTime.UtcNow;
@@ -116,6 +130,58 @@ internal sealed class PcscReaderService
             ErrorCode: null,
             ErrorCodeHex: string.Empty,
             IsMock: true);
+    }
+
+    public ReaderConnectionStatus GetReaderConnectionStatus(string? readerName)
+    {
+        if (string.Equals(readerName, MockReaderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return ReaderConnectionStatus.Mock();
+        }
+
+        var snapshot = GetReaders();
+        var selectedReader = string.IsNullOrWhiteSpace(readerName)
+            ? snapshot.Readers.FirstOrDefault()
+            : snapshot.Readers.FirstOrDefault(x =>
+                string.Equals(x.Name, readerName, StringComparison.OrdinalIgnoreCase));
+
+        if (selectedReader is null)
+        {
+            return snapshot.Readers.Count == 0
+                ? ReaderConnectionStatus.NoReader(snapshot.Message)
+                : ReaderConnectionStatus.NoReader("Nie znaleziono wskazanego czytnika.");
+        }
+
+        if (selectedReader.CardPresent != true)
+        {
+            return new ReaderConnectionStatus(
+                ReaderName: selectedReader.Name,
+                ReaderConnected: true,
+                CardPresent: selectedReader.CardPresent == true,
+                Atr: string.Empty,
+                AtrLength: 0,
+                Status: selectedReader.Status,
+                Message: selectedReader.Message,
+                ErrorMessage: selectedReader.ErrorCodeHex,
+                IsMockReader: selectedReader.IsMock,
+                CheckedAtUtc: DateTime.UtcNow);
+        }
+
+        var atr = ReadAtr(selectedReader.Name);
+
+        return new ReaderConnectionStatus(
+            ReaderName: selectedReader.Name,
+            ReaderConnected: atr.Connected,
+            CardPresent: atr.CardPresent,
+            Atr: atr.AtrHex,
+            AtrLength: atr.AtrLength,
+            Status: atr.Status,
+            Message: atr.ErrorMessage.Length == 0
+                ? "Karta jest włożona i ATR został odczytany."
+                : atr.ErrorMessage,
+            ErrorMessage: atr.ErrorCodeHex,
+            IsMockReader: selectedReader.IsMock,
+            CheckedAtUtc: DateTime.UtcNow);
     }
 
     public ReaderSnapshot GetReaders()
@@ -523,6 +589,49 @@ internal sealed record ReaderInfo(
     uint? ErrorCode,
     string ErrorCodeHex,
     bool IsMock = false);
+
+internal sealed record ReaderConnectionStatus(
+    string ReaderName,
+    bool ReaderConnected,
+    bool CardPresent,
+    string Atr,
+    int AtrLength,
+    string Status,
+    string Message,
+    string ErrorMessage,
+    bool IsMockReader,
+    DateTime CheckedAtUtc)
+{
+    public static ReaderConnectionStatus Mock()
+    {
+        return new ReaderConnectionStatus(
+            ReaderName: PcscReaderService.MockReaderName,
+            ReaderConnected: false,
+            CardPresent: false,
+            Atr: string.Empty,
+            AtrLength: 0,
+            Status: "mock",
+            Message: "Tryb testowy bez fizycznego czytnika. ATR nie jest dostępny.",
+            ErrorMessage: string.Empty,
+            IsMockReader: true,
+            CheckedAtUtc: DateTime.UtcNow);
+    }
+
+    public static ReaderConnectionStatus NoReader(string message)
+    {
+        return new ReaderConnectionStatus(
+            ReaderName: string.Empty,
+            ReaderConnected: false,
+            CardPresent: false,
+            Atr: string.Empty,
+            AtrLength: 0,
+            Status: "reader-not-connected",
+            Message: message,
+            ErrorMessage: string.Empty,
+            IsMockReader: false,
+            CheckedAtUtc: DateTime.UtcNow);
+    }
+}
 
 internal sealed record PcscDiagnostics(
     string Status,

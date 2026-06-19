@@ -23,6 +23,7 @@ Ten projekt to lokalny helper MVP dla przyszłego fizycznego odczytu kart kierow
   Jeżeli nie ma fizycznego czytnika, endpoint zwraca jawnie oznaczony czytnik testowy, który służy tylko do sprawdzenia interfejsu i historii sesji.
 - `GET /api/diagnostics` - zwraca szczegółową diagnostykę PC/SC: listę czytników, status połączenia, ATR, protokół i komunikaty błędów.
 - `GET /api/readers/{readerName}/atr` - łączy się z kartą w wybranym czytniku i odczytuje ATR, czyli podstawową odpowiedź identyfikującą kartę.
+- `GET /api/reader-status?readerName=...` - zwraca bieżący stan czytnika i karty: nazwę czytnika, informację czy czytnik jest podłączony, czy karta jest włożona, ATR oraz flagę trybu testowego.
 - `POST /api/card/read/start` - działa nadal w trybie testowym i nie wykonuje realnego odczytu danych DDD/C1B.
   Endpoint może działać bez fizycznego czytnika i zwraca wynik mockowy z nazwą testowego pliku.
 

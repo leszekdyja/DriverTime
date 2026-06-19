@@ -13,6 +13,7 @@ import {
     checkCardReaderHelperHealth,
     getCardReaderDiagnostics,
     getCardReaderReaders,
+    getCardReaderStatus,
     readCardAtr,
     startMockCardRead,
     type CardReaderAtrResult,
@@ -21,6 +22,7 @@ import {
     type CardReaderMockReadResult,
     type CardReaderReader,
     type CardReaderReaderList,
+    type CardReaderStatus,
 } from "../services/cardReaderHelperService";
 import "../styles/card-reader.css";
 
@@ -75,6 +77,7 @@ export default function CardReaderPage() {
     const [diagnostics, setDiagnostics] = useState<CardReaderDiagnostics | null>(null);
     const [selectedReaderName, setSelectedReaderName] = useState("");
     const [atrResult, setAtrResult] = useState<CardReaderAtrResult | null>(null);
+    const [readerStatus, setReaderStatus] = useState<CardReaderStatus | null>(null);
     const [mockReadResult, setMockReadResult] = useState<CardReaderMockReadResult | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
@@ -208,6 +211,28 @@ export default function CardReaderPage() {
             setIsCheckingReaders(false);
         }
     }
+
+    const refreshReaderStatus = useCallback(async (readerName?: string) => {
+        try {
+            const status = await getCardReaderStatus(readerName || selectedReaderName || undefined);
+            setReaderStatus(status);
+        } catch {
+            setReaderStatus(null);
+        }
+    }, [selectedReaderName]);
+
+    useEffect(() => {
+        if (!helperHealth && !readers) {
+            return;
+        }
+
+        void refreshReaderStatus();
+        const intervalId = window.setInterval(() => {
+            void refreshReaderStatus();
+        }, 4000);
+
+        return () => window.clearInterval(intervalId);
+    }, [helperHealth, readers, refreshReaderStatus]);
 
     async function checkDiagnostics() {
         setIsCheckingDiagnostics(true);
@@ -361,6 +386,21 @@ export default function CardReaderPage() {
                     <strong>{activeSession ? "W trakcie" : "Brak"}</strong>
                     <p>{activeSession ? `Czytnik: ${activeSession.readerName || "Brak danych"}` : "Testowy odczyt utworzy sesję automatycznie."}</p>
                 </article>
+                <article>
+                    <span>Status czytnika</span>
+                    <strong>{readerStatus?.readerConnected ? "Podłączony" : readerStatus?.isMockReader ? "Tryb testowy" : "Brak czytnika"}</strong>
+                    <p>{readerStatus?.message ?? "Status będzie odświeżany po sprawdzeniu helpera lub czytników."}</p>
+                </article>
+                <article>
+                    <span>Status karty</span>
+                    <strong>{readerStatus?.cardPresent ? "Karta włożona" : "Brak karty"}</strong>
+                    <p>{readerStatus?.checkedAtUtc ? `Ostatnie sprawdzenie: ${formatDate(readerStatus.checkedAtUtc)}` : "Brak ostatniego sprawdzenia."}</p>
+                </article>
+                <article>
+                    <span>ATR</span>
+                    <strong>{readerStatus?.atr ? `${readerStatus.atrLength} bajtów` : "Brak"}</strong>
+                    <p>{readerStatus?.atr || "ATR pojawi się po włożeniu karty do realnego czytnika."}</p>
+                </article>
             </section>
 
             <section className="card-reader-panel">
@@ -429,6 +469,8 @@ export default function CardReaderPage() {
                                             onChange={() => {
                                                 setSelectedReaderName(reader.name);
                                                 setAtrResult(null);
+                                                setReaderStatus(null);
+                                                void refreshReaderStatus(reader.name);
                                             }}
                                             type="radio"
                                             value={reader.name}
