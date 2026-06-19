@@ -63,9 +63,9 @@ public class ReducedWeeklyRestCompensationRuleTests
         Assert.AreEqual("High", result.Violations[0].Severity);
         Assert.AreEqual(21 * 60, result.Violations[0].LimitMinutes);
         Assert.AreEqual(0, result.Violations[0].ActualMinutes);
-        Assert.AreEqual(24 * 60, result.Violations[0].Metadata["reducedRestMinutes"]);
-        Assert.AreEqual(45 * 60, result.Violations[0].Metadata["requiredRegularWeeklyRestMinutes"]);
-        Assert.AreEqual(21 * 60, result.Violations[0].Metadata["compensationDebtMinutes"]);
+        Assert.AreEqual(24L * 60, result.Violations[0].Metadata["reducedRestMinutes"]);
+        Assert.AreEqual(45L * 60, result.Violations[0].Metadata["requiredRegularWeeklyRestMinutes"]);
+        Assert.AreEqual(21L * 60, result.Violations[0].Metadata["compensationDebtMinutes"]);
     }
 
     [TestMethod]

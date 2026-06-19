@@ -91,7 +91,9 @@ public class DailyRestViolationRule : IComplianceRule
                     description: $"Wykryto skrócony odpoczynek dzienny: {FormatDuration(longestRest.Duration)} zamiast regularnych 11 godzin.",
                     startUtc: currentPeriodStart,
                     endUtc: longestRest.EndUtc,
-                    restMinutes: restMinutes));
+                    analysisWindowEndUtc: windowEnd,
+                    longestRest: longestRest,
+                    reason: "ReducedDailyRest"));
 
                 var nextDuty = GetNextDutyAfterRest(dutyActivities, longestRest.EndUtc);
                 if (nextDuty is null)
@@ -115,7 +117,9 @@ public class DailyRestViolationRule : IComplianceRule
                 description: "Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h.",
                 startUtc: currentPeriodStart,
                 endUtc: GetViolationEndUtc(dutyActivities, currentPeriodStart, windowEnd),
-                restMinutes: restMinutes));
+                analysisWindowEndUtc: windowEnd,
+                longestRest: longestRest,
+                reason: "MissingContinuousReducedDailyRest"));
 
             var nextPeriodStart = dutyActivities
                 .FirstOrDefault(x => x.StartUtc >= windowEnd);
@@ -146,24 +150,37 @@ public class DailyRestViolationRule : IComplianceRule
         string description,
         DateTime startUtc,
         DateTime endUtc,
-        long restMinutes)
+        DateTime analysisWindowEndUtc,
+        RestPeriod longestRest,
+        string reason)
     {
+        var longestRestMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
+        var finalDescription = BuildDescription(reason, startUtc, analysisWindowEndUtc, longestRest.Duration);
+
         return new ComplianceViolationCandidate
         {
             Code = RuleCode,
             RuleName = "Daily rest",
             Severity = severity,
-            Description = description,
+            Description = finalDescription,
             PeriodStartUtc = startUtc,
             PeriodEndUtc = endUtc,
-            ActualMinutes = restMinutes,
+            ActualMinutes = longestRestMinutes,
             LimitMinutes = RegularDailyRestMinutes,
-            Metadata = new Dictionary<string, long>
+            Metadata = new Dictionary<string, object>
             {
-                ["restMinutes"] = restMinutes,
+                ["restMinutes"] = longestRestMinutes,
+                ["longestRestMinutes"] = longestRestMinutes,
+                ["analysisWindowStartUtc"] = startUtc.ToString("O"),
+                ["analysisWindowEndUtc"] = analysisWindowEndUtc.ToString("O"),
+                ["longestRestStartUtc"] = longestRest.StartUtc.ToString("O"),
+                ["longestRestEndUtc"] = longestRest.EndUtc.ToString("O"),
+                ["requiredReducedRestMinutes"] = ReducedDailyRestMinutes,
+                ["requiredRegularRestMinutes"] = RegularDailyRestMinutes,
                 ["regularDailyRestMinutes"] = RegularDailyRestMinutes,
                 ["reducedDailyRestMinutes"] = ReducedDailyRestMinutes,
-                ["firstSplitDailyRestMinutes"] = FirstSplitDailyRestMinutes
+                ["firstSplitDailyRestMinutes"] = FirstSplitDailyRestMinutes,
+                ["reason"] = reason
             }
         };
     }
@@ -332,6 +349,22 @@ public class DailyRestViolationRule : IComplianceRule
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours} godz. {duration.Minutes} min";
+
+    private static string BuildDescription(
+        string reason,
+        DateTime analysisWindowStartUtc,
+        DateTime analysisWindowEndUtc,
+        TimeSpan longestRest)
+    {
+        var window = $"od {FormatDateTime(analysisWindowStartUtc)} do {FormatDateTime(analysisWindowEndUtc)}";
+
+        return reason == "ReducedDailyRest"
+            ? $"Wykryto skrócony odpoczynek dzienny w wymaganym oknie 24h {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)} zamiast regularnych 11 godzin."
+            : $"Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)}.";
+    }
+
+    private static string FormatDateTime(DateTime value) =>
+        value.ToString("yyyy-MM-dd HH:mm 'UTC'");
 
     private static TimeSpan Max(TimeSpan left, TimeSpan right) =>
         left >= right ? left : right;

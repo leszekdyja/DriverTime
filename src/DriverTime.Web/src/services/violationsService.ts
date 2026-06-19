@@ -17,6 +17,7 @@ export type DriverViolation = {
     status?: string;
     actualDurationMinutes: number;
     limitDurationMinutes: number;
+    metadata?: Record<string, number | string | null>;
 };
 
 export type ViolationFilters = {

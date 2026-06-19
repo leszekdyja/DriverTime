@@ -1,4 +1,4 @@
-using DriverTime.Domain.Compliance;
+﻿using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -75,7 +75,7 @@ public class DailyRestViolationRuleTests
 
         Assert.IsFalse(result.Violations.Any(x => x.Severity == "HIGH"));
         Assert.IsFalse(result.Violations.Any(x =>
-            x.Description.Contains("Nie znaleziono ciągłego odpoczynku minimum 9 godzin", StringComparison.Ordinal)));
+            x.Description.Contains("Nie znaleziono ciÄ…gĹ‚ego odpoczynku minimum 9 godzin", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -95,8 +95,13 @@ public class DailyRestViolationRuleTests
 
         Assert.AreEqual(1, result.Violations.Count);
         Assert.AreEqual("HIGH", result.Violations[0].Severity);
-        Assert.AreEqual("Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h.", result.Violations[0].Description);
         Assert.AreEqual(300, result.Violations[0].ActualMinutes);
+        Assert.IsTrue(result.Violations[0].Description.Contains("Nie znaleziono", StringComparison.Ordinal));
+        Assert.AreEqual("2026-06-17T00:00:00.0000000Z", result.Violations[0].Metadata["analysisWindowStartUtc"]);
+        Assert.AreEqual("2026-06-18T00:00:00.0000000Z", result.Violations[0].Metadata["analysisWindowEndUtc"]);
+        Assert.AreEqual(300L, result.Violations[0].Metadata["longestRestMinutes"]);
+        Assert.AreEqual(540L, result.Violations[0].Metadata["requiredReducedRestMinutes"]);
+        Assert.AreEqual("MissingContinuousReducedDailyRest", result.Violations[0].Metadata["reason"]);
     }
 
     [TestMethod]

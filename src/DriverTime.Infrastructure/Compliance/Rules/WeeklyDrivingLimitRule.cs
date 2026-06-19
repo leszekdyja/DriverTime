@@ -58,7 +58,7 @@ public class WeeklyDrivingLimitRule : IComplianceRule
                 PeriodEndUtc = week.WeekStart.AddDays(7),
                 ActualMinutes = actualMinutes,
                 LimitMinutes = WeeklyLimitMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["totalDrivingMinutes"] = actualMinutes,
                     ["limitMinutes"] = WeeklyLimitMinutes,

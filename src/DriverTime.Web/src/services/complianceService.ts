@@ -19,7 +19,7 @@ export type ComplianceViolationPreview = {
     periodEndUtc: string;
     actualMinutes: number;
     limitMinutes: number;
-    metadata: Record<string, number>;
+    metadata: Record<string, number | string | null>;
 };
 
 export type ComplianceDebugSummary = {
@@ -97,6 +97,7 @@ export function mapComplianceViolation(
         status: "open",
         actualDurationMinutes: violation.actualMinutes,
         limitDurationMinutes: violation.limitMinutes,
+        metadata: violation.metadata,
     };
 }
 

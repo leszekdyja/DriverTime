@@ -1,6 +1,8 @@
 import { apiFetch } from "./apiClient";
 import type { DriverViolation } from "./driverViolationsService";
 
+export type { DriverViolation };
+
 export type CalendarActivity = {
     id: string;
     startUtc: string;

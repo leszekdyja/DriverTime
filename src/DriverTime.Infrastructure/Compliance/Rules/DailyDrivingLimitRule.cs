@@ -66,7 +66,7 @@ public class DailyDrivingLimitRule : IComplianceRule
                 PeriodEndUtc = day.Day.AddDays(1),
                 ActualMinutes = (long)Math.Round(day.TotalDriving.TotalMinutes),
                 LimitMinutes = (long)limit.TotalMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["totalDrivingMinutes"] = (long)Math.Round(day.TotalDriving.TotalMinutes),
                     ["exceededMinutes"] = exceededMinutes

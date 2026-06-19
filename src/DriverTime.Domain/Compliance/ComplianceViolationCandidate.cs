@@ -18,5 +18,5 @@ public class ComplianceViolationCandidate
 
     public long LimitMinutes { get; set; }
 
-    public Dictionary<string, long> Metadata { get; set; } = new();
+    public Dictionary<string, object> Metadata { get; set; } = new();
 }

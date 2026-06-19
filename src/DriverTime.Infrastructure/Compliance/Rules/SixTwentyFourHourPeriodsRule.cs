@@ -134,7 +134,7 @@ public class SixTwentyFourHourPeriodsRule : IComplianceRule
             PeriodEndUtc = deadlineUtc,
             ActualMinutes = actualMinutes,
             LimitMinutes = SixTwentyFourHourPeriodsMinutes,
-            Metadata = new Dictionary<string, long>
+            Metadata = new Dictionary<string, object>
             {
                 ["previousWeeklyRestEndUtc"] = previousWeeklyRest.EndUtc.Ticks,
                 ["nextWeeklyRestStartUtc"] = nextWeeklyRestStartUtc?.Ticks ?? 0,

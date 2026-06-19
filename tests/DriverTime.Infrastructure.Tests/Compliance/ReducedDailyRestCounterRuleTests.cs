@@ -49,9 +49,9 @@ public class ReducedDailyRestCounterRuleTests
         Assert.AreEqual("High", result.Violations[0].Severity);
         Assert.AreEqual(4, result.Violations[0].ActualMinutes);
         Assert.AreEqual(3, result.Violations[0].LimitMinutes);
-        Assert.AreEqual(4, result.Violations[0].Metadata["reducedDailyRestCount"]);
-        Assert.AreEqual(3, result.Violations[0].Metadata["allowedReducedDailyRestCount"]);
-        Assert.AreEqual(9 * 60, result.Violations[0].Metadata["violatingRestMinutes"]);
+        Assert.AreEqual(4L, result.Violations[0].Metadata["reducedDailyRestCount"]);
+        Assert.AreEqual(3L, result.Violations[0].Metadata["allowedReducedDailyRestCount"]);
+        Assert.AreEqual(9L * 60, result.Violations[0].Metadata["violatingRestMinutes"]);
     }
 
     [TestMethod]

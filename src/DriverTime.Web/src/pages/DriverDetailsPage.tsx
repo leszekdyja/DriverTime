@@ -174,6 +174,63 @@ function displayViolationType(violation: DriverViolation) {
     return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
+function getViolationMetadataString(violation: DriverViolation, key: string) {
+    const value = violation.metadata?.[key];
+
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getViolationMetadataNumber(violation: DriverViolation, key: string) {
+    const value = violation.metadata?.[key];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+}
+
+function formatMetadataDate(value: string | null) {
+    return value ? formatDate(value) : "Brak danych";
+}
+
+function DailyRestViolationDetails({ violation }: { violation: DriverViolation }) {
+    if (violation.code !== "DAILY_REST") {
+        return null;
+    }
+
+    const windowStart = getViolationMetadataString(violation, "analysisWindowStartUtc");
+    const windowEnd = getViolationMetadataString(violation, "analysisWindowEndUtc");
+    const longestRestMinutes = getViolationMetadataNumber(violation, "longestRestMinutes");
+    const requiredReducedRestMinutes = getViolationMetadataNumber(violation, "requiredReducedRestMinutes");
+
+    if (!windowStart && !windowEnd && longestRestMinutes === null && requiredReducedRestMinutes === null) {
+        return null;
+    }
+
+    return (
+        <dl className="violation-metadata-details">
+            <div>
+                <dt>Analizowane okno 24h</dt>
+                <dd>{formatMetadataDate(windowStart)} - {formatMetadataDate(windowEnd)}</dd>
+            </div>
+            <div>
+                <dt>Najdłuższy ciągły odpoczynek</dt>
+                <dd>{longestRestMinutes === null ? "Brak danych" : formatMinutes(longestRestMinutes)}</dd>
+            </div>
+            <div>
+                <dt>Wymagane minimum</dt>
+                <dd>{requiredReducedRestMinutes === null ? "9 godz. 0 min" : formatMinutes(requiredReducedRestMinutes)}</dd>
+            </div>
+        </dl>
+    );
+}
+
 function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[] {
     const rawSegmentsByDay = new Map<string, TimelineSegment[]>();
 
@@ -570,7 +627,7 @@ export default function DriverDetailsPage() {
                             <div className="driver-details-table violations-table">
                                 <table>
                                     <thead><tr><th>Data i czas</th><th>Typ</th><th>Opis</th><th>Poziom</th><th>Czas / przekroczenie</th></tr></thead>
-                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{displayViolationType(item)}</td><td>{item.description}</td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{getSeverityLabel(item.severity)}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
+                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{displayViolationType(item)}</td><td><p className="violation-description">{item.description}</p><DailyRestViolationDetails violation={item} /></td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{getSeverityLabel(item.severity)}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
                                 </table>
                             </div>
                         )}

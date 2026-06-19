@@ -6,6 +6,7 @@ import {
     getDriverActivityCalendar,
     type ActivityCalendarDay,
     type CalendarActivity,
+    type DriverViolation,
 } from "../services/driverActivityCalendarService";
 
 const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -13,6 +14,12 @@ const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     day: "2-digit",
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
+    dateStyle: "medium",
+    timeStyle: "short",
     timeZone: "UTC",
 });
 
@@ -41,6 +48,70 @@ function formatDuration(seconds: number) {
     const hours = Math.floor(Math.max(seconds, 0) / 3600);
     const minutes = Math.floor((Math.max(seconds, 0) % 3600) / 60);
     return `${hours} godz. ${minutes} min`;
+}
+
+function formatMinutes(minutes: number) {
+    return formatDuration(minutes * 60);
+}
+
+function formatDateTime(value: string | null) {
+    if (!value) return "Brak danych";
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Brak danych" : dateTimeFormatter.format(date);
+}
+
+function getViolationMetadataString(violation: DriverViolation, key: string) {
+    const value = violation.metadata?.[key];
+
+    return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getViolationMetadataNumber(violation: DriverViolation, key: string) {
+    const value = violation.metadata?.[key];
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+}
+
+function DailyRestViolationDetails({ violation }: { violation: DriverViolation }) {
+    if (violation.code !== "DAILY_REST") {
+        return null;
+    }
+
+    const windowStart = getViolationMetadataString(violation, "analysisWindowStartUtc");
+    const windowEnd = getViolationMetadataString(violation, "analysisWindowEndUtc");
+    const longestRestMinutes = getViolationMetadataNumber(violation, "longestRestMinutes");
+    const requiredReducedRestMinutes = getViolationMetadataNumber(violation, "requiredReducedRestMinutes");
+
+    if (!windowStart && !windowEnd && longestRestMinutes === null && requiredReducedRestMinutes === null) {
+        return null;
+    }
+
+    return (
+        <dl className="violation-metadata-details">
+            <div>
+                <dt>Analizowane okno 24h</dt>
+                <dd>{formatDateTime(windowStart)} - {formatDateTime(windowEnd)}</dd>
+            </div>
+            <div>
+                <dt>Najdłuższy ciągły odpoczynek</dt>
+                <dd>{longestRestMinutes === null ? "Brak danych" : formatMinutes(longestRestMinutes)}</dd>
+            </div>
+            <div>
+                <dt>Wymagane minimum</dt>
+                <dd>{requiredReducedRestMinutes === null ? "9 godz. 0 min" : formatMinutes(requiredReducedRestMinutes)}</dd>
+            </div>
+        </dl>
+    );
 }
 
 function formatDay(value: string) {
@@ -178,7 +249,7 @@ const CalendarDayCard = memo(function CalendarDayCard({ day }: { day: ActivityCa
                     {day.violations.map((violation, index) => (
                         <li key={`${violation.code}-${violation.occurredAtUtc}-${index}`}>
                             <span className={`severity-dot ${violation.severity.toLowerCase()}`} />
-                            <div><strong>{violation.violationType}</strong><p>{violation.description}</p></div>
+                            <div><strong>{violation.violationType}</strong><p>{violation.description}</p><DailyRestViolationDetails violation={violation} /></div>
                         </li>
                     ))}
                 </ul>

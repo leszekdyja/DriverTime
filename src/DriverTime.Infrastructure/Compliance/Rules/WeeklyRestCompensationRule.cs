@@ -92,7 +92,7 @@ public class WeeklyRestCompensationRule : IComplianceRule
                 PeriodEndUtc = deadlineUtc,
                 ActualMinutes = 0,
                 LimitMinutes = missingMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["reducedWeeklyRestMinutes"] = (long)Math.Round(reducedRest.Duration.TotalMinutes),
                     ["missingCompensationMinutes"] = missingMinutes,

@@ -150,7 +150,8 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
             Description = violation.Description,
             Severity = violation.Severity,
             ActualDurationMinutes = violation.ActualMinutes,
-            LimitDurationMinutes = violation.LimitMinutes
+            LimitDurationMinutes = violation.LimitMinutes,
+            Metadata = violation.Metadata
         };
     }
 

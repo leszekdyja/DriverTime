@@ -73,7 +73,7 @@ public class ReducedWeeklyRestRule : IComplianceRule
                 PeriodEndUtc = week.AddDays(7),
                 ActualMinutes = restMinutes,
                 LimitMinutes = MinimumReducedWeeklyRestMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["longestRestMinutes"] = restMinutes,
                     ["minimumReducedWeeklyRestMinutes"] = MinimumReducedWeeklyRestMinutes,

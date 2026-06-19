@@ -66,7 +66,7 @@ public class RegularWeeklyRestRule : IComplianceRule
                 PeriodEndUtc = week.AddDays(7),
                 ActualMinutes = restMinutes,
                 LimitMinutes = RegularWeeklyRestMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["longestRestMinutes"] = restMinutes,
                     ["requiredRegularWeeklyRestMinutes"] = RegularWeeklyRestMinutes,

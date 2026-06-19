@@ -72,7 +72,7 @@ public class BiWeeklyDrivingLimitRule : IComplianceRule
                 PeriodEndUtc = weekStart.AddDays(14),
                 ActualMinutes = actualMinutes,
                 LimitMinutes = BiWeeklyLimitMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["totalDrivingMinutes"] = actualMinutes,
                     ["limitMinutes"] = BiWeeklyLimitMinutes,

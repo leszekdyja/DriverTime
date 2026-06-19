@@ -107,7 +107,7 @@ public class ReducedDailyRestCounterRule : IComplianceRule
             PeriodEndUtc = periodEndUtc,
             ActualMinutes = reducedDailyRestCount,
             LimitMinutes = AllowedReducedDailyRestCount,
-            Metadata = new Dictionary<string, long>
+            Metadata = new Dictionary<string, object>
             {
                 ["periodStartUtc"] = periodStartUtc.Ticks,
                 ["periodEndUtc"] = periodEndUtc.Ticks,

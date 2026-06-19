@@ -93,7 +93,7 @@ public class ReducedWeeklyRestCompensationRule : IComplianceRule
                 PeriodEndUtc = compensationDeadlineUtc,
                 ActualMinutes = foundCompensationMinutes,
                 LimitMinutes = compensationDebtMinutes,
-                Metadata = new Dictionary<string, long>
+                Metadata = new Dictionary<string, object>
                 {
                     ["reducedRestStartUtc"] = reducedRest.StartUtc.Ticks,
                     ["reducedRestEndUtc"] = reducedRest.EndUtc.Ticks,

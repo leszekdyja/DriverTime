@@ -66,7 +66,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                         PeriodEndUtc = activity.EndUtc,
                         ActualMinutes = (long)Math.Round(continuousDriving.TotalMinutes),
                         LimitMinutes = LimitMinutes,
-                        Metadata = new Dictionary<string, long>
+                        Metadata = new Dictionary<string, object>
                         {
                             ["continuousDrivingMinutes"] = (long)Math.Round(continuousDriving.TotalMinutes),
                             ["limitMinutes"] = LimitMinutes,

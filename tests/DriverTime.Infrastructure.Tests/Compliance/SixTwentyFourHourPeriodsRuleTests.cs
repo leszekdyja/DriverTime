@@ -50,8 +50,8 @@ public class SixTwentyFourHourPeriodsRuleTests
         Assert.AreEqual(1, result.Violations.Count);
         Assert.AreEqual("SIX_24H_PERIODS", result.Violations[0].Code);
         Assert.AreEqual("High", result.Violations[0].Severity);
-        Assert.AreEqual(120, result.Violations[0].Metadata["exceededMinutes"]);
-        Assert.AreNotEqual(0, result.Violations[0].Metadata["nextWeeklyRestStartUtc"]);
+        Assert.AreEqual(120L, result.Violations[0].Metadata["exceededMinutes"]);
+        Assert.AreNotEqual(0L, result.Violations[0].Metadata["nextWeeklyRestStartUtc"]);
     }
 
     [TestMethod]
@@ -65,8 +65,8 @@ public class SixTwentyFourHourPeriodsRuleTests
         var result = _rule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(1, result.Violations.Count);
-        Assert.AreEqual(22 * 60, result.Violations[0].Metadata["exceededMinutes"]);
-        Assert.AreEqual(0, result.Violations[0].Metadata["nextWeeklyRestStartUtc"]);
+        Assert.AreEqual(22L * 60, result.Violations[0].Metadata["exceededMinutes"]);
+        Assert.AreEqual(0L, result.Violations[0].Metadata["nextWeeklyRestStartUtc"]);
     }
 
     [TestMethod]
