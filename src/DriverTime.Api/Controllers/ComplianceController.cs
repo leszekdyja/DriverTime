@@ -29,7 +29,8 @@ public class ComplianceController : ControllerBase
     [HttpGet("drivers/{driverId:guid}/preview")]
     public async Task<ActionResult<CompliancePreviewResponseDto>> PreviewForDriver(
         Guid driverId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool includeTimeline = false)
     {
         if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
         {
@@ -42,6 +43,7 @@ public class ComplianceController : ControllerBase
         var preview = await _complianceEngine.PreviewForDriverAsync(
             _currentUser.CompanyId,
             driverId,
+            includeTimeline,
             cancellationToken);
 
         if (preview is null)
@@ -71,7 +73,7 @@ public class ComplianceController : ControllerBase
         var preview = await _complianceEngine.PreviewForDriverAsync(
             _currentUser.CompanyId,
             driverId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (preview is null)
         {
@@ -109,7 +111,7 @@ public class ComplianceController : ControllerBase
         var preview = await _complianceEngine.PreviewForDriverAsync(
             _currentUser.CompanyId,
             driverId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (preview is null)
         {

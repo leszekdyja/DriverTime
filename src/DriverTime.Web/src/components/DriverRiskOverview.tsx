@@ -12,6 +12,7 @@ import {
     type DriverRisk,
     type DriverRiskOverview as DriverRiskOverviewData,
 } from "../services/dashboardService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import Pagination from "./Pagination";
 import { EmptyState, TableSkeleton } from "./UiStates";
 
@@ -63,7 +64,7 @@ function DriverRiskOverview() {
         const drivers = overview?.drivers ?? [];
         return drivers.filter((driver) => {
             const matchesRisk = riskFilter === "All" || driver.riskStatus === riskFilter;
-            const haystack = `${driver.firstName} ${driver.lastName} ${driver.cardNumber}`
+            const haystack = `${driver.lastName} ${driver.firstName} ${driver.cardNumber}`
                 .toLocaleLowerCase("pl-PL");
             return matchesRisk && (!deferredSearch || haystack.includes(deferredSearch));
         });
@@ -153,7 +154,7 @@ function DriverRiskOverview() {
 const RiskRow = memo(function RiskRow({ driver }: { driver: DriverRisk }) {
     return (
         <tr className={driver.riskStatus === "Critical" ? "critical-risk-row" : undefined}>
-            <td><Link to={`/drivers/${driver.driverId}`}>{`${driver.firstName} ${driver.lastName}`.trim() || "Brak danych"}</Link></td>
+            <td><Link to={`/drivers/${driver.driverId}`}>{formatDriverNameOrFallback(driver.firstName, driver.lastName)}</Link></td>
             <td>{driver.cardNumber || "Brak danych"}</td>
             <td><span className={`risk-badge ${driver.riskStatus.toLowerCase()}`}>{getRiskLabel(driver.riskStatus)}</span></td>
             <td>{driver.violationsCount}</td>

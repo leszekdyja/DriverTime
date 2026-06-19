@@ -11,6 +11,8 @@ import {
 import { exportViolationsExcel } from "../services/excelExportService";
 import { exportViolationsPdf } from "../services/pdfExportService";
 import type { DriverViolation } from "../services/violationsService";
+import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/violations.css";
 
 type SeverityLevel = "info" | "warning" | "critical";
@@ -26,8 +28,8 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 
 const severityLabels: Record<SeverityLevel, string> = {
     info: "Info",
-    warning: "Warning",
-    critical: "Critical",
+    warning: "Ostrzeżenie",
+    critical: "Krytyczne",
 };
 
 const statusLabels: Record<ViolationStatus, string> = {
@@ -50,9 +52,9 @@ const severityTones: Record<SeverityLevel, "info" | "warning" | "critical"> = {
 
 const alertSeverityLabels: Record<AlertSeverity, string> = {
     info: "Info",
-    warning: "Warning",
-    serious: "Serious",
-    critical: "Critical",
+    warning: "Ostrzeżenie",
+    serious: "Ostrzeżenie",
+    critical: "Krytyczne",
 };
 
 const alertSeverityTones: Record<AlertSeverity, "info" | "warning" | "danger" | "critical"> = {
@@ -105,11 +107,14 @@ function formatMinutes(minutes: number) {
 }
 
 function displayDriver(violation: DriverViolation) {
-    return (
-        [violation.driverFirstName, violation.driverLastName]
-            .filter(Boolean)
-            .join(" ") || "Brak danych"
+    return formatDriverNameOrFallback(
+        violation.driverFirstName,
+        violation.driverLastName,
     );
+}
+
+function displayViolationType(violation: DriverViolation) {
+    return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
 function normalizeSeverity(severity: string): SeverityLevel {
@@ -298,9 +303,7 @@ export default function ViolationsPage() {
     const driverOptions = useMemo(() => {
         return drivers
             .map((driver) => {
-                const name = [driver.firstName, driver.lastName]
-                    .filter(Boolean)
-                    .join(" ") || "Brak danych";
+                const name = formatDriverNameOrFallback(driver.firstName, driver.lastName);
                 const cardNumber = driver.cardNumber || "Brak numeru karty";
 
                 return [driver.id, `${name} (${cardNumber})`] as const;
@@ -317,7 +320,7 @@ export default function ViolationsPage() {
             const occurredDate = formatDateForInput(violation.occurredAtUtc);
             const severity = normalizeSeverity(violation.severity);
             const status = normalizeStatus(violation.status);
-            const violationType = violation.violationType.trim().toLowerCase();
+            const violationType = displayViolationType(violation).trim().toLowerCase();
             const searchedViolationType = violationTypeFilter.trim().toLowerCase();
 
             if (selectedDriver && violation.driverId !== selectedDriver) {
@@ -548,7 +551,7 @@ export default function ViolationsPage() {
                                     <div>
                                         <span>{isWithinLastDay(violation.occurredAtUtc) ? "Nowe naruszenie" : "Poważne naruszenie"}</span>
                                         <strong>{displayDriver(violation)}</strong>
-                                        <p>{violation.description || violation.violationType}</p>
+                                        <p>{violation.description || displayViolationType(violation)}</p>
                                         <small>{formatDate(violation.occurredAtUtc)}</small>
                                     </div>
                                     <div className="violation-alert-actions">
@@ -607,7 +610,7 @@ export default function ViolationsPage() {
                         type="search"
                         value={violationTypeFilter}
                         onChange={(event) => setViolationTypeFilter(event.target.value)}
-                        placeholder="np. Weekly rest compensation"
+                        placeholder="np. kompensacja odpoczynku"
                     />
                 </label>
                 <label>
@@ -687,13 +690,13 @@ export default function ViolationsPage() {
                                             <td data-label="Numer karty">
                                                 {violation.driverCardNumber || "Brak danych"}
                                             </td>
-                                            <td data-label="Typ naruszenia">{violation.violationType}</td>
+                                            <td data-label="Typ naruszenia">{displayViolationType(violation)}</td>
                                             <td data-label="Data">{formatDate(violation.occurredAtUtc)}</td>
                                             <td data-label="Opis" className="violation-description">
                                                 {violation.description}
                                             </td>
                                             <td data-label="Poziom">
-                                                <StatusBadge label={severityLabels[severity]} tone={severityTones[severity]} />
+                                                <StatusBadge label={getSeverityLabel(violation.severity)} tone={severityTones[severity]} />
                                             </td>
                                             <td data-label="Status">
                                                 <StatusBadge label={statusLabels[status]} tone={statusTones[status]} />
@@ -768,7 +771,7 @@ function ViolationDetailsModal({
                 <div className="violation-details-header">
                     <div>
                         <span>Szczegóły naruszenia</span>
-                        <h3 id="violation-details-title">{violation.violationType || "Naruszenie"}</h3>
+                        <h3 id="violation-details-title">{displayViolationType(violation)}</h3>
                     </div>
                     <button type="button" onClick={onClose} aria-label="Zamknij szczegóły">
                         ×
@@ -776,7 +779,7 @@ function ViolationDetailsModal({
                 </div>
 
                 <div className="violation-details-badges">
-                    <StatusBadge label={severityLabels[severity]} tone={severityTones[severity]} />
+                    <StatusBadge label={getSeverityLabel(violation.severity)} tone={severityTones[severity]} />
                     <StatusBadge label={statusLabels[status]} tone={statusTones[status]} />
                 </div>
 

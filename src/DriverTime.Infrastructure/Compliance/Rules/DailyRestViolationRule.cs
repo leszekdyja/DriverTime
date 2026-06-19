@@ -112,7 +112,7 @@ public class DailyRestViolationRule : IComplianceRule
 
             result.Violations.Add(CreateViolation(
                 severity: "HIGH",
-                description: "Brak prawidłowego odpoczynku dziennego minimum 9 godzin między okresami pracy lub jazdy.",
+                description: "Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h.",
                 startUtc: currentPeriodStart,
                 endUtc: GetViolationEndUtc(dutyActivities, currentPeriodStart, windowEnd),
                 restMinutes: restMinutes));

@@ -59,6 +59,47 @@ public class DailyRestViolationRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithSeveralDutyActivitiesThenLongContinuousRest_DoesNotReturnMissingDailyRestViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T06:00:00Z", "2026-06-17T08:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T09:00:00Z", "2026-06-17T09:45:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T10:15:00Z", "2026-06-17T11:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-17T11:15:00Z", "2026-06-17T21:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-18T05:30:00Z", "2026-06-18T07:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.IsFalse(result.Violations.Any(x => x.Severity == "HIGH"));
+        Assert.IsFalse(result.Violations.Any(x =>
+            x.Description.Contains("Nie znaleziono ciągłego odpoczynku minimum 9 godzin", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void Evaluate_WithLargeTotalRestButNoNineHourContinuousBlock_ReturnsClearMissingContinuousRestViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T00:00:00Z", "2026-06-17T01:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T06:00:00Z", "2026-06-17T07:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T12:00:00Z", "2026-06-17T13:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T18:00:00Z", "2026-06-17T19:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-18T00:30:00Z", "2026-06-18T01:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("HIGH", result.Violations[0].Severity);
+        Assert.AreEqual("Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h.", result.Violations[0].Description);
+        Assert.AreEqual(300, result.Violations[0].ActualMinutes);
+    }
+
+    [TestMethod]
     public void Evaluate_WithThreePlusNineHourSplitRestInOrder_ReturnsNoViolation()
     {
         var driverId = Guid.NewGuid();

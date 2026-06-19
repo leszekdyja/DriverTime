@@ -136,7 +136,7 @@ public class ComplianceSchedulerWorker : BackgroundService
         var preview = await complianceEngine.PreviewForDriverAsync(
             companyId,
             driverId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (preview is null)
         {

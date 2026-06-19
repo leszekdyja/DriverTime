@@ -12,6 +12,7 @@ import {
     type DriverDownload,
     type VehicleDownload,
 } from "../services/downloadsService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/dashboard.css";
 import "../styles/drivers.css";
 import "../styles/downloads.css";
@@ -101,7 +102,7 @@ function countByStatus<T extends { lastDownloadUtc: string | null; status: Downl
 }
 
 function getDriverName(driver: DriverDownload) {
-    return [driver.firstName, driver.lastName].filter(Boolean).join(" ") || "Brak danych";
+    return formatDriverNameOrFallback(driver.firstName, driver.lastName);
 }
 
 export default function DownloadsPage() {

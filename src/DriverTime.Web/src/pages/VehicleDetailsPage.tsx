@@ -24,6 +24,7 @@ import {
     type VehicleAnalytics,
     type VehicleDetails,
 } from "../services/vehicleService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/driver-details.css";
 
 type EffectiveDownloadStatus = DownloadStatus | "NoData";
@@ -94,12 +95,6 @@ function formatDay(value: string) {
     const date = new Date(value);
 
     return Number.isNaN(date.getTime()) ? value : chartDayFormatter.format(date);
-}
-
-function formatDriverName(firstName: string, lastName: string) {
-    const fullName = `${firstName} ${lastName}`.trim();
-
-    return fullName || "Brak danych";
 }
 
 function formatDuration(seconds: number) {
@@ -539,7 +534,7 @@ export default function VehicleDetailsPage() {
                                     <tr key={driver.driverId}>
                                         <td>
                                             <Link className="table-link" to={`/drivers/${driver.driverId}`}>
-                                                {formatDriverName(driver.firstName, driver.lastName)}
+                                                {formatDriverNameOrFallback(driver.firstName, driver.lastName)}
                                             </Link>
                                         </td>
                                         <td>{driver.cardNumber || "Brak"}</td>

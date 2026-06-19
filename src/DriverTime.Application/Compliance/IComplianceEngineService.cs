@@ -7,5 +7,6 @@ public interface IComplianceEngineService
     Task<CompliancePreviewResponseDto?> PreviewForDriverAsync(
         Guid companyId,
         Guid driverId,
+        bool includeTimeline = false,
         CancellationToken cancellationToken = default);
 }

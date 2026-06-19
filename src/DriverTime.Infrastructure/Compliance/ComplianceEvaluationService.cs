@@ -64,7 +64,7 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         var preview = await _complianceEngineService.PreviewForDriverAsync(
             companyId,
             driverId,
-            cancellationToken);
+            cancellationToken: cancellationToken);
 
         if (preview is null)
         {

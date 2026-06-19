@@ -9,6 +9,11 @@ import {
     type AlertItem,
     type AlertSeverity,
 } from "../services/alertsService";
+import {
+    getAlertCategoryLabel,
+    getComplianceRuleLabel,
+    getSeverityLabel,
+} from "../utils/complianceLabels";
 import "../styles/dashboard.css";
 import "../styles/drivers.css";
 
@@ -16,7 +21,7 @@ type Filter = "All" | AlertCategory | AlertSeverity;
 
 const filters: Array<{ value: Filter; label: string }> = [
     { value: "All", label: "Wszystkie" },
-    { value: "Compliance", label: "Compliance" },
+    { value: "Compliance", label: "Zgodność" },
     { value: "Downloads", label: "Odczyty" },
     { value: "Imports", label: "Importy" },
     { value: "Critical", label: "Krytyczne" },
@@ -39,15 +44,19 @@ function formatDate(value: string | null) {
 }
 
 function categoryLabel(category: AlertCategory) {
-    if (category === "Downloads") return "Odczyty";
-    if (category === "Imports") return "Importy";
-    return "Compliance";
+    return getAlertCategoryLabel(category);
 }
 
 function severityLabel(severity: AlertSeverity) {
-    if (severity === "Critical") return "Krytyczne";
-    if (severity === "Warning") return "Ostrzeżenie";
-    return "Info";
+    return getSeverityLabel(severity);
+}
+
+function alertDescription(alert: AlertItem) {
+    if (alert.type === "ComplianceViolation") {
+        return getComplianceRuleLabel(alert.description);
+    }
+
+    return alert.description || "Brak opisu";
 }
 
 function severityTone(severity: AlertSeverity) {
@@ -194,7 +203,7 @@ export default function AlertsPage() {
                                         </td>
                                         <td>{categoryLabel(alert.category)}</td>
                                         <td>{alert.title}</td>
-                                        <td>{alert.description || "Brak opisu"}</td>
+                                        <td>{alertDescription(alert)}</td>
                                         <td>{alert.relatedEntityName || alert.relatedEntityType || "Brak danych"}</td>
                                         <td>{formatDate(alert.dueDateUtc ?? alert.createdAtUtc)}</td>
                                         <td>

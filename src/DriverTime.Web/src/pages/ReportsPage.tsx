@@ -10,6 +10,7 @@ import {
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/reports.css";
 
 const pageSize = 12;
@@ -59,7 +60,7 @@ function formatDuration(seconds: number) {
 function getDriverName(driver?: ReportDriver) {
     if (!driver) return "Wszyscy kierowcy";
 
-    return `${driver.firstName} ${driver.lastName}`.trim() || "Kierowca bez nazwy";
+    return formatDriverNameOrFallback(driver.firstName, driver.lastName, "Kierowca bez nazwy");
 }
 
 function getActivityLabel(activityType: string) {
@@ -211,7 +212,7 @@ export default function ReportsPage() {
                 "Czas trwania (sekundy)",
             ],
             ...activities.map((activity) => [
-                `${activity.driverFirstName} ${activity.driverLastName}`.trim() || "Brak danych",
+                formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName),
                 activity.driverCardNumber || "Brak danych",
                 formatDate(activity.startUtc),
                 formatDate(activity.endUtc),
@@ -336,7 +337,7 @@ export default function ReportsPage() {
                         <option value="">Wszyscy kierowcy</option>
                         {drivers.map((driver) => (
                             <option key={driver.id} value={driver.cardNumber}>
-                                {driver.firstName} {driver.lastName} ({driver.cardNumber})
+                                {formatDriverNameOrFallback(driver.firstName, driver.lastName)} ({driver.cardNumber})
                             </option>
                         ))}
                     </select>
@@ -461,7 +462,7 @@ export default function ReportsPage() {
                                         <tr key={activity.id}>
                                             <td data-label="Kierowca">
                                                 <strong className="reports-driver-name">
-                                                    {`${activity.driverFirstName} ${activity.driverLastName}`.trim() || "Brak danych"}
+                                                    {formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName)}
                                                 </strong>
                                             </td>
                                             <td data-label="Numer karty">{activity.driverCardNumber || "Brak danych"}</td>

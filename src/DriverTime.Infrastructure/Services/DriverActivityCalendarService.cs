@@ -1,4 +1,6 @@
 using DriverTime.Application.Drivers.DTOs;
+using DriverTime.Application.Compliance;
+using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Infrastructure.Persistence;
@@ -10,16 +12,16 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
-    private readonly IDriverViolationService _driverViolationService;
+    private readonly IComplianceEngineService _complianceEngineService;
 
     public DriverActivityCalendarService(
         DriverTimeDbContext dbContext,
         ICurrentUserService currentUser,
-        IDriverViolationService driverViolationService)
+        IComplianceEngineService complianceEngineService)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
-        _driverViolationService = driverViolationService;
+        _complianceEngineService = complianceEngineService;
     }
 
     public async Task<DriverActivityCalendarDto?> GetAsync(
@@ -28,13 +30,18 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
         DateOnly to,
         CancellationToken cancellationToken = default)
     {
-        var driverExists = await _dbContext.Drivers
+        var driver = await _dbContext.Drivers
             .AsNoTracking()
-            .AnyAsync(
-                x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId,
-                cancellationToken);
+            .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId)
+            .Select(x => new
+            {
+                x.FirstName,
+                x.LastName,
+                x.CardNumber
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (!driverExists)
+        if (driver is null)
         {
             return null;
         }
@@ -57,9 +64,15 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
                 x.ActivityType
             })
             .ToListAsync(cancellationToken);
-        var violations = await _driverViolationService
-            .GetViolationsForDriverAsync(driverId, cancellationToken)
-            ?? Array.Empty<DriverViolationDto>();
+        var preview = await _complianceEngineService.PreviewForDriverAsync(
+            _currentUser.CompanyId,
+            driverId,
+            includeTimeline: false,
+            cancellationToken);
+        var violations = preview?.Violations
+            .Select(x => MapViolation(x, driver.FirstName, driver.LastName, driver.CardNumber))
+            .ToList()
+            ?? [];
         var result = new DriverActivityCalendarDto
         {
             DriverId = driverId,
@@ -107,7 +120,7 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
             }
 
             day.Violations = violations
-                .Where(x => x.OccurredAtUtc < dayEnd && GetViolationEnd(x) > dayStart)
+                .Where(x => GetViolationPresentationDate(x) == date)
                 .OrderBy(x => x.OccurredAtUtc)
                 .ToList();
             result.Days.Add(day);
@@ -119,11 +132,52 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
     private static DateTime ToUtc(DateOnly date) =>
         DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
-    private static DateTime GetViolationEnd(
-        DriverViolationDto violation) =>
-        violation.PeriodEndUtc > violation.OccurredAtUtc
-            ? violation.PeriodEndUtc
-            : violation.OccurredAtUtc.AddTicks(1);
+    private static DriverViolationDto MapViolation(
+        ComplianceViolationPreviewDto violation,
+        string firstName,
+        string lastName,
+        string cardNumber)
+    {
+        return new DriverViolationDto
+        {
+            Code = violation.Code,
+            DriverFirstName = firstName,
+            DriverLastName = lastName,
+            DriverCardNumber = cardNumber,
+            ViolationType = violation.RuleName,
+            OccurredAtUtc = violation.PeriodStartUtc,
+            PeriodEndUtc = violation.PeriodEndUtc,
+            Description = violation.Description,
+            Severity = violation.Severity,
+            ActualDurationMinutes = violation.ActualMinutes,
+            LimitDurationMinutes = violation.LimitMinutes
+        };
+    }
+
+    private static DateOnly GetViolationPresentationDate(
+        DriverViolationDto violation)
+    {
+        var code = violation.Code.ToUpperInvariant();
+        var type = violation.ViolationType.ToUpperInvariant();
+
+        if (code.Contains("COMPENSATION", StringComparison.Ordinal) ||
+            type.Contains("COMPENSATION", StringComparison.Ordinal))
+        {
+            return DateOnly.FromDateTime(violation.PeriodEndUtc.Date);
+        }
+
+        if (code.Contains("WEEKLY", StringComparison.Ordinal) ||
+            type.Contains("WEEKLY", StringComparison.Ordinal))
+        {
+            var endUtc = violation.PeriodEndUtc > violation.OccurredAtUtc
+                ? violation.PeriodEndUtc.AddTicks(-1)
+                : violation.OccurredAtUtc;
+
+            return DateOnly.FromDateTime(endUtc.Date);
+        }
+
+        return DateOnly.FromDateTime(violation.OccurredAtUtc.Date);
+    }
 
     private static void AddDuration(
         DriverActivityCalendarDayDto day,

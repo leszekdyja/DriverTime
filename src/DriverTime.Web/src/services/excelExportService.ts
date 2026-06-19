@@ -13,6 +13,8 @@ import type {
 
 import type { ReportActivity, ReportDriver } from "./reportsService";
 import type { DriverViolation } from "./violationsService";
+import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 
 type ReportTotals = {
     driving: number;
@@ -33,9 +35,9 @@ const severityLabels: Record<string, string> = {
     low: "Niski",
     medium: "Średni",
     high: "Wysoki",
-    minor: "Minor",
-    serious: "Serious",
-    "very serious": "Very serious",
+    minor: "Niskie",
+    serious: "Ostrzeżenie",
+    "very serious": "Krytyczne",
 };
 
 const activityLabels: Record<string, string> = {
@@ -110,7 +112,7 @@ function dateCell(value: string): CellObject {
 }
 
 function driverName(firstName: string, lastName: string) {
-    return [firstName, lastName].filter(Boolean).join(" ") || "Brak danych";
+    return formatDriverNameOrFallback(firstName, lastName);
 }
 
 function getDriverName(driver?: ReportDriver) {
@@ -366,10 +368,10 @@ export async function exportViolationsExcel(violations: DriverViolation[]) {
         ...violations.map((violation) => [
             dataCell(driverName(violation.driverFirstName, violation.driverLastName)),
             dataCell(violation.driverCardNumber || "Brak danych"),
-            dataCell(violation.violationType),
+            dataCell(getComplianceRuleLabel(violation.violationType, violation.code)),
             dateCell(violation.occurredAtUtc),
             dataCell(violation.description),
-            dataCell(severityLabels[violation.severity.toLowerCase()] ?? violation.severity),
+            dataCell(getSeverityLabel(severityLabels[violation.severity.toLowerCase()] ?? violation.severity)),
         ]),
     ];
 

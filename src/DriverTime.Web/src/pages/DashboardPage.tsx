@@ -32,6 +32,8 @@ import {
     getDriverViolations,
     type DriverViolation,
 } from "../services/violationsService";
+import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/dashboard.css";
 
 const refreshIntervalMs = 30_000;
@@ -74,8 +76,8 @@ type OperationalAlert = {
 
 const violationSeverityDefinitions = [
     { severity: "info", label: "Info", color: "var(--chart-warning)" },
-    { severity: "warning", label: "Warning", color: "var(--chart-orange)" },
-    { severity: "critical", label: "Critical", color: "var(--chart-danger)" },
+    { severity: "warning", label: "Ostrzeżenie", color: "var(--chart-orange)" },
+    { severity: "critical", label: "Krytyczne", color: "var(--chart-danger)" },
 ] as const;
 
 function formatDate(value: string | null) {
@@ -119,7 +121,11 @@ function displayValue(value: string) {
 }
 
 function getDriverName(firstName: string, lastName: string) {
-    return [firstName, lastName].filter(Boolean).join(" ") || "Brak danych";
+    return formatDriverNameOrFallback(firstName, lastName);
+}
+
+function getViolationType(violation: DriverViolation) {
+    return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
 function normalizeSeverity(severity: string) {
@@ -221,9 +227,9 @@ function getPriorityTone(priority: OperationalAlertPriority) {
 }
 
 function getPriorityLabel(priority: OperationalAlertPriority) {
-    if (priority === "High") return "High";
-    if (priority === "Medium") return "Medium";
-    return "Low";
+    if (priority === "High") return "Wysoki";
+    if (priority === "Medium") return "Średni";
+    return "Niski";
 }
 
 function priorityRank(priority: OperationalAlertPriority) {
@@ -518,8 +524,8 @@ export default function DashboardPage() {
                 alerts.push({
                     id: `high-violation-${violation.id}`,
                     type: "Naruszenie",
-                    title: `Naruszenie High: ${driverName}`,
-                    description: violation.violationType || violation.description || "Wysokie naruszenie compliance wymaga sprawdzenia.",
+                    title: `Naruszenie krytyczne: ${driverName}`,
+                    description: getViolationType(violation) || violation.description || "Wysokie naruszenie zgodności wymaga sprawdzenia.",
                     priority: "High",
                     dueDateUtc: violation.occurredAtUtc,
                     actionUrl: violation.driverId
@@ -654,7 +660,7 @@ export default function DashboardPage() {
                     <div>
                         <span>Alerty operacyjne</span>
                         <h3>Pilne sprawy do sprawdzenia</h3>
-                        <p>Najważniejsze sygnały z odczytów, kart kierowców i naruszeń High.</p>
+                        <p>Najważniejsze sygnały z odczytów, kart kierowców i naruszeń krytycznych.</p>
                     </div>
                     <Link to="/alerts">Zobacz wszystkie alerty</Link>
                 </div>
@@ -662,7 +668,7 @@ export default function DashboardPage() {
                 {operationalAlerts.length === 0 ? (
                     <EmptyState
                         title="Brak pilnych alertów operacyjnych."
-                        description="Nie znaleziono przeterminowanych odczytów, wygasających kart ani naruszeń High."
+                        description="Nie znaleziono przeterminowanych odczytów, wygasających kart ani naruszeń krytycznych."
                     />
                 ) : (
                     <div className="operational-alerts-list">
@@ -752,13 +758,13 @@ export default function DashboardPage() {
                         description="Nadchodzące pobrania tachografów"
                     />
                     <MetricCard
-                        label="High compliance"
+                        label="Krytyczne zgodności"
                         value={dashboard.alerts.driversWithHighViolations}
                         tone={dashboard.alerts.driversWithHighViolations > 0 ? "red" : "green"}
                         description="Kierowcy z wysokimi naruszeniami"
                     />
                     <MetricCard
-                        label="Medium compliance"
+                        label="Ostrzeżenia zgodności"
                         value={dashboard.alerts.driversWithMediumViolations}
                         tone={dashboard.alerts.driversWithMediumViolations > 0 ? "amber" : "green"}
                         description="Kierowcy ze średnimi naruszeniami"
@@ -769,7 +775,7 @@ export default function DashboardPage() {
             <section className="dashboard-widget latest-imports-widget">
                 <div className="dashboard-widget-heading">
                     <div>
-                        <span>Download Compliance</span>
+                        <span>Terminy odczytów</span>
                         <h3>Terminy pobrań z kart i tachografów</h3>
                         <p>Karty kierowców: 28 dni. Tachografy i pojazdy: 90 dni.</p>
                     </div>
@@ -822,19 +828,19 @@ export default function DashboardPage() {
                         </div>
                         <div className="activity-metrics">
                             <article className="activity-metric driving">
-                                <span>High</span>
+                                <span>Krytyczne</span>
                                 <strong>{complianceStats.highViolationsCount}</strong>
                                 <small>Naruszenia wysokiego priorytetu</small>
                             </article>
                             <article className="activity-metric work">
-                                <span>Medium</span>
+                                <span>Ostrzeżenia</span>
                                 <strong>{complianceStats.mediumViolationsCount}</strong>
                                 <small>Naruszenia średniego priorytetu</small>
                             </article>
                             <article className="activity-metric rest">
-                                <span>Low</span>
+                                <span>Niskie</span>
                                 <strong>{complianceStats.lowViolationsCount}</strong>
-                                <small>Informacyjne wyniki compliance</small>
+                                <small>Informacyjne wyniki zgodności</small>
                             </article>
                             <article className="activity-metric availability">
                                 <span>Scheduler</span>
@@ -888,7 +894,7 @@ export default function DashboardPage() {
                     <div className="violation-widget-summary">
                         <MetricCard label="Razem" value={violationSummary.total} tone="slate" description="W bieżących danych" />
                         <MetricCard label="Poważne" value={violationSummary.serious} tone="amber" description="Do sprawdzenia" />
-                        <MetricCard label="Very serious" value={violationSummary.severe} tone="red" description="Wysoki priorytet" />
+                        <MetricCard label="Krytyczne" value={violationSummary.severe} tone="red" description="Wysoki priorytet" />
                     </div>
                     {violationSummary.latest.length === 0 ? (
                         <EmptyState
@@ -901,10 +907,10 @@ export default function DashboardPage() {
                                 <article key={`${violation.driverCardNumber}-${violation.occurredAtUtc}-${index}`}>
                                     <div>
                                         <strong>{getDriverName(violation.driverFirstName, violation.driverLastName)}</strong>
-                                        <span>{violation.violationType}</span>
+                                        <span>{getViolationType(violation)}</span>
                                     </div>
                                     <StatusBadge
-                                        label={normalizeSeverity(violation.severity) === "critical" ? "Very serious" : "Serious"}
+                                        label={getSeverityLabel(violation.severity)}
                                         tone={normalizeSeverity(violation.severity)}
                                     />
                                 </article>
@@ -913,11 +919,11 @@ export default function DashboardPage() {
                     )}
                     {violationSummary.latestCritical.length > 0 && (
                         <div className="dashboard-critical-list">
-                            <strong>Ostatnie critical violations</strong>
+                            <strong>Ostatnie krytyczne naruszenia</strong>
                             {violationSummary.latestCritical.map((violation, index) => (
                                 <article key={`${violation.id}-${index}`}>
                                     <span>{getDriverName(violation.driverFirstName, violation.driverLastName)}</span>
-                                    <small>{violation.violationType}</small>
+                                    <small>{getViolationType(violation)}</small>
                                 </article>
                             ))}
                         </div>
@@ -960,9 +966,7 @@ export default function DashboardPage() {
                                         </td>
                                         <td>
                                             {displayValue(
-                                                [dddImport.driverFirstName, dddImport.driverLastName]
-                                                    .filter(Boolean)
-                                                    .join(" "),
+                                                getDriverName(dddImport.driverFirstName, dddImport.driverLastName),
                                             )}
                                         </td>
                                         <td>{formatDate(dddImport.uploadedAtUtc)}</td>

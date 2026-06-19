@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiClient";
 import type { DriverViolation } from "./violationsService";
+import { getComplianceRuleLabel } from "../utils/complianceLabels";
 
 export type ComplianceTimelineEntry = {
     sourceActivityId: string;
@@ -55,8 +56,13 @@ export async function getDrivers(): Promise<ComplianceDriver[]> {
     return response.json() as Promise<ComplianceDriver[]>;
 }
 
-export async function getCompliancePreview(driverId: string): Promise<CompliancePreview> {
-    const response = await apiFetch(`/api/compliance/drivers/${driverId}/preview`);
+export async function getCompliancePreview(
+    driverId: string,
+    includeTimeline = false,
+): Promise<CompliancePreview> {
+    const response = await apiFetch(
+        `/api/compliance/drivers/${driverId}/preview?includeTimeline=${includeTimeline}`,
+    );
 
     if (response.status === 404) {
         throw new Error("Nie znaleziono danych compliance dla kierowcy.");
@@ -81,7 +87,7 @@ export function mapComplianceViolation(
         driverFirstName: driver.firstName,
         driverLastName: driver.lastName,
         driverCardNumber: driver.cardNumber,
-        violationType: violation.ruleName || violation.code,
+        violationType: getComplianceRuleLabel(violation.ruleName, violation.code),
         occurredAtUtc: violation.periodStartUtc,
         periodEndUtc: violation.periodEndUtc,
         description: violation.description,

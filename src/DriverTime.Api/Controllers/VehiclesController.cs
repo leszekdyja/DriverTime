@@ -85,7 +85,7 @@ public class VehiclesController : ControllerBase
                     DriverId = x.DddFile.DriverId,
                     DriverName = x.DddFile.Driver == null
                         ? string.Empty
-                        : x.DddFile.Driver.FirstName + " " + x.DddFile.Driver.LastName,
+                        : FormatDriverName(x.DddFile.Driver.FirstName, x.DddFile.Driver.LastName),
                     RegistrationNumber = x.RegistrationNumber,
                     StartUtc = x.StartUtc,
                     EndUtc = x.EndUtc
@@ -228,7 +228,7 @@ public class VehiclesController : ControllerBase
                 .Select(group => new VehicleDriverUsageDto
                 {
                     DriverId = group.Key.DriverId,
-                    DriverName = $"{group.Key.DriverFirstName} {group.Key.DriverLastName}".Trim(),
+                    DriverName = FormatDriverName(group.Key.DriverFirstName, group.Key.DriverLastName),
                     CardNumber = group.Key.DriverCardNumber,
                     UsesCount = group.Count(),
                     UsageMinutes = group.Sum(x => GetUsageMinutes(x.StartUtc, x.EndUtc)),
@@ -292,7 +292,7 @@ public class VehiclesController : ControllerBase
                 DriverId = x.activity.DddFile.DriverId,
                 DriverName = x.activity.DddFile.Driver == null
                     ? string.Empty
-                    : x.activity.DddFile.Driver.FirstName + " " + x.activity.DddFile.Driver.LastName,
+                    : FormatDriverName(x.activity.DddFile.Driver.FirstName, x.activity.DddFile.Driver.LastName),
                 ActivityType = x.activity.ActivityType,
                 StartUtc = x.activity.StartUtc < x.vehicleUse.StartUtc
                     ? x.vehicleUse.StartUtc
@@ -332,6 +332,15 @@ public class VehiclesController : ControllerBase
         }
 
         return (int)Math.Round((endUtc - startUtc).TotalMinutes, MidpointRounding.AwayFromZero);
+    }
+
+    private static string FormatDriverName(string firstName, string lastName)
+    {
+        return string.Join(
+            " ",
+            new[] { lastName, firstName }
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim()));
     }
 
     private sealed class VehicleUseAnalyticsSource

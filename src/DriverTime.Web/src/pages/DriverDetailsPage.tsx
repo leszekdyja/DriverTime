@@ -17,6 +17,8 @@ import {
 } from "../services/driverActivitiesService";
 import { exportComplianceReportPdf } from "../services/pdfExportService";
 import type { DriverViolation } from "../services/violationsService";
+import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/driver-details.css";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -166,6 +168,10 @@ function getActivityLabel(activityType: string) {
 
 function getActivityIcon(activityType: string) {
     return activityIcons[activityType.toUpperCase()] || "•";
+}
+
+function displayViolationType(violation: DriverViolation) {
+    return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
 function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[] {
@@ -434,7 +440,7 @@ export default function DriverDetailsPage() {
                     <header className="driver-profile-card">
                         <div>
                             <span className="driver-profile-label">Kierowca</span>
-                            <h2>{details.firstName} {details.lastName}</h2>
+                            <h2>{formatDriverNameOrFallback(details.firstName, details.lastName)}</h2>
                             <p>{details.cardNumber || "Brak numeru karty"}</p>
                             <button
                                 className="driver-report-button"
@@ -564,7 +570,7 @@ export default function DriverDetailsPage() {
                             <div className="driver-details-table violations-table">
                                 <table>
                                     <thead><tr><th>Data i czas</th><th>Typ</th><th>Opis</th><th>Poziom</th><th>Czas / przekroczenie</th></tr></thead>
-                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{item.violationType}</td><td>{item.description}</td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{item.severity}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
+                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{displayViolationType(item)}</td><td>{item.description}</td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{getSeverityLabel(item.severity)}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
                                 </table>
                             </div>
                         )}

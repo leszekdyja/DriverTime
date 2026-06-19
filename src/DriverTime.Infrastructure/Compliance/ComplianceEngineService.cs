@@ -26,6 +26,7 @@ public class ComplianceEngineService : IComplianceEngineService
     public async Task<CompliancePreviewResponseDto?> PreviewForDriverAsync(
         Guid companyId,
         Guid driverId,
+        bool includeTimeline = false,
         CancellationToken cancellationToken = default)
     {
         var timeline = await _timelineBuilder.BuildForDriverAsync(
@@ -76,21 +77,23 @@ public class ComplianceEngineService : IComplianceEngineService
             })
             .ToList();
 
-        var timelineEntries = timeline
-            .Select(x => new ComplianceTimelineEntryDto
-            {
-                SourceActivityId = x.SourceActivityId,
-                ActivityType = x.ActivityType,
-                StartUtc = x.StartUtc,
-                EndUtc = x.EndUtc,
-                DurationMinutes = (long)Math.Round(x.Duration.TotalMinutes)
-            })
-            .ToList();
+        var timelineEntries = includeTimeline
+            ? timeline
+                .Select(x => new ComplianceTimelineEntryDto
+                {
+                    SourceActivityId = x.SourceActivityId,
+                    ActivityType = x.ActivityType,
+                    StartUtc = x.StartUtc,
+                    EndUtc = x.EndUtc,
+                    DurationMinutes = (long)Math.Round(x.Duration.TotalMinutes)
+                })
+                .ToList()
+            : [];
 
         return new CompliancePreviewResponseDto
         {
             DriverId = driverId,
-            TimelineCount = timelineEntries.Count,
+            TimelineCount = timeline.Count,
             ViolationsCount = violations.Count,
             Timeline = timelineEntries,
             Violations = violations,

@@ -83,7 +83,7 @@ public class AlertsController : ControllerBase
                 x.CalculatedAt,
                 DriverName = x.Driver == null
                     ? string.Empty
-                    : x.Driver.FirstName + " " + x.Driver.LastName
+                    : FormatDriverName(x.Driver.FirstName, x.Driver.LastName)
             })
             .ToListAsync(cancellationToken);
 
@@ -101,7 +101,7 @@ public class AlertsController : ControllerBase
                 RelatedEntityType = "Driver",
                 RelatedEntityId = x.DriverId,
                 RelatedEntityName = x.DriverName.Trim(),
-                DueDateUtc = x.ViolationStart,
+                DueDateUtc = null,
                 CreatedAtUtc = x.CalculatedAt,
                 Status = "Open",
                 ActionUrl = $"/violations?driverId={x.DriverId}&violationId={x.Id}"
@@ -121,7 +121,7 @@ public class AlertsController : ControllerBase
             .Select(x =>
             {
                 var isOverdue = x.Status == DownloadStatus.Overdue;
-                var driverName = $"{x.FirstName} {x.LastName}".Trim();
+                var driverName = FormatDriverName(x.FirstName, x.LastName);
 
                 return new AlertDto
                 {
@@ -271,5 +271,14 @@ public class AlertsController : ControllerBase
             "Warning" => 1,
             _ => 2
         };
+    }
+
+    private static string FormatDriverName(string firstName, string lastName)
+    {
+        return string.Join(
+            " ",
+            new[] { lastName, firstName }
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim()));
     }
 }

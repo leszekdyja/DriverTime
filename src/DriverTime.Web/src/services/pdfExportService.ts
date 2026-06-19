@@ -2,6 +2,8 @@
 
 import type { ReportActivity, ReportDriver } from "./reportsService";
 import type { DriverViolation } from "./violationsService";
+import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 
 type ReportTotals = {
     driving: number;
@@ -23,9 +25,9 @@ const severityLabels: Record<string, string> = {
     low: "Niski",
     medium: "Średni",
     high: "Wysoki",
-    minor: "Minor",
-    serious: "Serious",
-    "very serious": "Very serious",
+    minor: "Niskie",
+    serious: "Ostrzeżenie",
+    "very serious": "Krytyczne",
 };
 
 async function loadFontAsBase64(path: string) {
@@ -86,7 +88,7 @@ function formatDuration(seconds: number) {
 }
 
 function getDriverName(firstName: string, lastName: string) {
-    return [firstName, lastName].filter(Boolean).join(" ") || "Brak danych";
+    return formatDriverNameOrFallback(firstName, lastName);
 }
 
 function addHeader(document: PdfDocument, title: string, subtitle: string) {
@@ -211,10 +213,10 @@ export async function exportViolationsPdf(violations: DriverViolation[]) {
         body: violations.map((violation) => [
             getDriverName(violation.driverFirstName, violation.driverLastName),
             violation.driverCardNumber || "Brak danych",
-            violation.violationType,
+            getComplianceRuleLabel(violation.violationType, violation.code),
             formatDate(violation.occurredAtUtc),
             violation.description,
-            severityLabels[violation.severity.toLowerCase()] ?? violation.severity,
+            getSeverityLabel(severityLabels[violation.severity.toLowerCase()] ?? violation.severity),
         ]),
         columnStyles: {
             0: { cellWidth: 38 },
@@ -325,8 +327,8 @@ export async function exportComplianceReportPdf(options: ComplianceReportPdfOpti
         head: [["Kod", "Reguła", "Severity", "Opis", "Okres"]],
         body: options.violations.map((violation) => [
             violation.code || "Brak kodu",
-            violation.violationType || "Brak nazwy",
-            severityLabels[violation.severity.toLowerCase()] ?? violation.severity,
+            getComplianceRuleLabel(violation.violationType, violation.code),
+            getSeverityLabel(severityLabels[violation.severity.toLowerCase()] ?? violation.severity),
             violation.description || "Brak opisu",
             `${formatDate(violation.occurredAtUtc)} - ${formatDate(violation.periodEndUtc)}`,
         ]),
