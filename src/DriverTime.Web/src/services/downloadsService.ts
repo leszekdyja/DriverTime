@@ -1,6 +1,6 @@
 import { apiFetch } from "./apiClient";
 
-export type DownloadStatus = "OK" | "Warning" | "Overdue";
+export type DownloadStatus = "OK" | "Warning" | "Overdue" | "NoTachographData";
 
 export type DriverDownload = {
     driverId: string;

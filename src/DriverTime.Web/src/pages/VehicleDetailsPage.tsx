@@ -114,6 +114,10 @@ function formatMinutes(minutes: number) {
 }
 
 function getDownloadStatus(download: VehicleDownload | null): EffectiveDownloadStatus {
+    if (download?.status === "NoTachographData") {
+        return "NoTachographData";
+    }
+
     return download?.lastDownloadUtc ? download.status : "NoData";
 }
 
@@ -121,6 +125,7 @@ function getStatusLabel(status: EffectiveDownloadStatus) {
     if (status === "OK") return "OK";
     if (status === "Warning") return "Zbliża się termin";
     if (status === "Overdue") return "Przeterminowany";
+    if (status === "NoTachographData") return "Brak danych z tachografu";
     return "Brak danych";
 }
 
@@ -128,6 +133,7 @@ function getStatusTone(status: EffectiveDownloadStatus) {
     if (status === "OK") return "success";
     if (status === "Warning") return "warning";
     if (status === "Overdue") return "danger";
+    if (status === "NoTachographData") return "info";
     return "neutral";
 }
 
@@ -587,15 +593,15 @@ function VehicleDownloadSection({
             <div className="daily-activity-heading">
                 <div>
                     <h3>Odczyty tachografu</h3>
-                    <p>Pojazd powinien mieć odczyt tachografu co maksymalnie 90 dni.</p>
+                    <p>Termin 90 dni będzie liczony dopiero po realnym odczycie danych tachografu.</p>
                 </div>
                 <StatusBadge label={getStatusLabel(status)} tone={getStatusTone(status)} />
             </div>
 
-            {status === "NoData" ? (
+            {status === "NoData" || status === "NoTachographData" ? (
                 <EmptyState
-                    title="Brak odczytów"
-                    description="Termin pojawi się po imporcie danych tachografu lub użycia pojazdu."
+                    title="Brak danych z tachografu"
+                    description="Pojazd wykryto z karty kierowcy, ale nie ma jeszcze realnego odczytu tachografu."
                 />
             ) : (
                 <dl className="driver-profile-data" style={{ marginTop: 18 }}>

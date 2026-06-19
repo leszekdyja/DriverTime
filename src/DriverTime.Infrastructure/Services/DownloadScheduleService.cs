@@ -68,7 +68,6 @@ public class DownloadScheduleService : IDownloadScheduleService
         Guid companyId,
         CancellationToken cancellationToken = default)
     {
-        var nowUtc = DateTime.UtcNow;
         var vehicles = await _dbContext.Set<Vehicle>()
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId && x.Active)
@@ -88,8 +87,7 @@ public class DownloadScheduleService : IDownloadScheduleService
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5)
             .Select(x => new VehicleUseDownloadSource
             {
-                RegistrationNumber = x.RegistrationNumber,
-                EndUtc = x.EndUtc
+                RegistrationNumber = x.RegistrationNumber
             })
             .ToListAsync(cancellationToken);
 
@@ -97,8 +95,7 @@ public class DownloadScheduleService : IDownloadScheduleService
             .Select(x => new NormalizedVehicleUseDownloadSource
             {
                 RegistrationNumber = NormalizeVehicleRegistration(x.RegistrationNumber),
-                CompactRegistrationNumber = GetVehicleRegistrationCompactValue(x.RegistrationNumber),
-                EndUtc = x.EndUtc
+                CompactRegistrationNumber = GetVehicleRegistrationCompactValue(x.RegistrationNumber)
             })
             .Where(x => x.CompactRegistrationNumber.Length >= 5)
             .ToList();
@@ -112,27 +109,18 @@ public class DownloadScheduleService : IDownloadScheduleService
                         compactRegistrationNumber,
                         vehicleUse.CompactRegistrationNumber))
                     .ToList();
-                var lastActivityUtc = matchingUses
-                    .Select(vehicleUse => (DateTime?)vehicleUse.EndUtc)
-                    .Max();
                 var registrationNumber = GetBestVehicleRegistration(
                     x.RegistrationNumber,
                     matchingUses.Select(vehicleUse => vehicleUse.RegistrationNumber));
-                var nextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                    lastActivityUtc,
-                    DownloadScheduleCalculator.VehicleDownloadIntervalDays);
-                var daysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
-                    nextRequiredDownloadUtc,
-                    nowUtc);
 
                 return new VehicleDownloadDto
                 {
                     VehicleId = x.Id,
                     RegistrationNumber = registrationNumber,
-                    LastDownloadUtc = lastActivityUtc,
-                    NextRequiredDownloadUtc = nextRequiredDownloadUtc,
-                    DaysUntilDue = daysUntilDue,
-                    Status = DownloadScheduleCalculator.GetStatus(daysUntilDue)
+                    LastDownloadUtc = null,
+                    NextRequiredDownloadUtc = null,
+                    DaysUntilDue = null,
+                    Status = DownloadStatus.NoTachographData
                 };
             })
             .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
@@ -158,6 +146,7 @@ public class DownloadScheduleService : IDownloadScheduleService
                 .Take(5)
                 .ToList(),
             NextVehiclesDue = vehicles
+                .Where(x => x.Status != DownloadStatus.NoTachographData)
                 .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
                 .Take(5)
                 .ToList()
@@ -215,8 +204,6 @@ public class DownloadScheduleService : IDownloadScheduleService
     private sealed class VehicleUseDownloadSource
     {
         public string RegistrationNumber { get; set; } = string.Empty;
-
-        public DateTime EndUtc { get; set; }
     }
 
     private sealed class NormalizedVehicleUseDownloadSource
@@ -224,8 +211,6 @@ public class DownloadScheduleService : IDownloadScheduleService
         public string RegistrationNumber { get; set; } = string.Empty;
 
         public string CompactRegistrationNumber { get; set; } = string.Empty;
-
-        public DateTime EndUtc { get; set; }
     }
 
 }

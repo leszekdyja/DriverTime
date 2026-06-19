@@ -23,6 +23,7 @@ const filters: Array<{ value: Filter; label: string }> = [
     { value: "OK", label: "OK" },
     { value: "Warning", label: "Zbliża się termin" },
     { value: "Overdue", label: "Przeterminowane" },
+    { value: "NoTachographData", label: "Brak danych z tachografu" },
     { value: "NoData", label: "Brak danych" },
 ];
 
@@ -58,6 +59,10 @@ function formatDays(daysUntilDue: number | null) {
 }
 
 function getEffectiveStatus(item: { lastDownloadUtc: string | null; status: DownloadStatus }): Filter {
+    if (item.status === "NoTachographData") {
+        return "NoTachographData";
+    }
+
     return item.lastDownloadUtc ? item.status : "NoData";
 }
 
@@ -65,6 +70,7 @@ function statusLabel(status: Filter) {
     if (status === "OK") return "OK";
     if (status === "Warning") return "Zbliża się termin";
     if (status === "Overdue") return "Przeterminowany";
+    if (status === "NoTachographData") return "Brak danych z tachografu";
     if (status === "NoData") return "Brak danych";
     return "Wszystkie";
 }
@@ -73,6 +79,7 @@ function statusTone(status: Filter) {
     if (status === "OK") return "success";
     if (status === "Warning") return "warning";
     if (status === "Overdue") return "danger";
+    if (status === "NoTachographData") return "info";
     if (status === "NoData") return "info";
     return "neutral";
 }
@@ -149,7 +156,9 @@ export default function DownloadsPage() {
         (dashboard?.warningVehicles ?? countByStatus(vehicles, "Warning"));
     const overdueDownloads = (dashboard?.overdueDrivers ?? countByStatus(drivers, "Overdue")) +
         (dashboard?.overdueVehicles ?? countByStatus(vehicles, "Overdue"));
-    const noDataDownloads = countByStatus(drivers, "NoData") + countByStatus(vehicles, "NoData");
+    const noDataDownloads = countByStatus(drivers, "NoData") +
+        countByStatus(vehicles, "NoData") +
+        countByStatus(vehicles, "NoTachographData");
 
     return (
         <div className="downloads-page">
@@ -158,8 +167,8 @@ export default function DownloadsPage() {
                     <span>Odczyty</span>
                     <h2>Terminy pobrań kart i tachografów</h2>
                     <p>
-                        Karta kierowcy powinna być pobierana maksymalnie co 28 dni,
-                        a tachograf lub pojazd maksymalnie co 90 dni.
+                        Karta kierowcy powinna być pobierana maksymalnie co 28 dni.
+                        Termin tachografu pojawi się po realnym odczycie danych z pojazdu.
                     </p>
                 </div>
                 <strong>{filteredDrivers.length + filteredVehicles.length} rekordów po filtrze</strong>
@@ -169,7 +178,7 @@ export default function DownloadsPage() {
                 <SummaryCard label="OK" value={okDownloads} tone="green" description="Więcej niż 7 dni do terminu" />
                 <SummaryCard label="Zbliża się termin" value={dueSoonDownloads} tone="amber" description="7 dni lub mniej" />
                 <SummaryCard label="Przeterminowane" value={overdueDownloads} tone="red" description="Termin odczytu minął" />
-                <SummaryCard label="Brak danych" value={noDataDownloads} tone="blue" description="Brak daty ostatniego odczytu" />
+                <SummaryCard label="Brak danych" value={noDataDownloads} tone="blue" description="Brak realnego odczytu lub daty źródłowej" />
             </section>
 
             <section className="downloads-rules" aria-label="Zasady terminów">
@@ -181,7 +190,7 @@ export default function DownloadsPage() {
                 <article>
                     <span>90 dni</span>
                     <strong>Tachograf / pojazd</strong>
-                    <p>Następny wymagany odczyt jest liczony jako ostatni odczyt + 90 dni.</p>
+                    <p>Termin 90 dni będzie liczony dopiero z realnego odczytu tachografu, a nie z użycia pojazdu na karcie kierowcy.</p>
                 </article>
             </section>
 
@@ -222,7 +231,7 @@ export default function DownloadsPage() {
                     <section className="downloads-section">
                         <SectionHeading
                             title="Pojazdy i tachografy"
-                            description="Terminy pobrań tachografów i pojazdów na podstawie danych DDD."
+                            description="Pojazdy wykryte z kart kierowców. Termin tachografu wymaga realnego odczytu danych z pojazdu."
                             count={filteredVehicles.length}
                         />
                         <VehiclesTable vehicles={filteredVehicles} />
