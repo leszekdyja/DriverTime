@@ -121,11 +121,26 @@ public class DriverService : IDriverService
 
         foreach (var activity in activities)
         {
-            activity.DurationSeconds = GetDurationSeconds(
+            activity.DurationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
                 activity.StartUtc,
                 activity.EndUtc);
+        }
 
-            AddDuration(driver, activity.ActivityType, activity.DurationSeconds);
+        var mergedActivities = ActivityIntervalAggregationHelper.ClipAndMergeByType(
+            activities.Select(activity => new ActivityInterval(
+                activity.Id,
+                activity.ActivityType,
+                activity.StartUtc,
+                activity.EndUtc)));
+
+        foreach (var activity in mergedActivities)
+        {
+            AddDuration(
+                driver,
+                activity.ActivityType,
+                ActivityIntervalAggregationHelper.GetDurationSeconds(
+                    activity.StartUtc,
+                    activity.EndUtc));
         }
 
         driver.ImportsCount = imports.Count;
@@ -155,9 +170,6 @@ public class DriverService : IDriverService
 
         return driver;
     }
-
-    private static long GetDurationSeconds(DateTime start, DateTime end) =>
-        end > start ? (long)(end - start).TotalSeconds : 0;
 
     private static void AddDuration(
         DriverDetailsDto driver,

@@ -30,26 +30,13 @@ public class DailyDrivingLimitRule : IComplianceRule
             RuleName = Name
         };
 
-        var dailyDriving = timeline
-            .Where(IsDriving)
-            .GroupBy(x => x.StartUtc.Date)
-            .OrderBy(x => x.Key)
-            .Select(day =>
+        var dailyDriving = WeeklyDrivingTimelineHelper.GetDrivingByUtcDay(timeline)
+            .Select(x => new
             {
-                var activities = day
-                    .OrderBy(x => x.StartUtc)
-                    .ToList();
-                var totalDriving = activities.Aggregate(
-                    TimeSpan.Zero,
-                    (sum, activity) => sum + activity.Duration);
-
-                return new
-                {
-                    Day = day.Key,
-                    Activities = activities,
-                    TotalDriving = totalDriving
-                };
+                Day = x.Key,
+                TotalDriving = x.Value
             })
+            .OrderBy(x => x.Day)
             .ToList();
 
         foreach (var day in dailyDriving)
@@ -75,8 +62,8 @@ public class DailyDrivingLimitRule : IComplianceRule
                 RuleName = Name,
                 Severity = severity,
                 Description = BuildMessage(day.TotalDriving, severity),
-                PeriodStartUtc = day.Activities[0].StartUtc,
-                PeriodEndUtc = day.Activities[^1].EndUtc,
+                PeriodStartUtc = day.Day,
+                PeriodEndUtc = day.Day.AddDays(1),
                 ActualMinutes = (long)Math.Round(day.TotalDriving.TotalMinutes),
                 LimitMinutes = (long)limit.TotalMinutes,
                 Metadata = new Dictionary<string, long>
@@ -99,9 +86,6 @@ public class DailyDrivingLimitRule : IComplianceRule
 
         return result;
     }
-
-    private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static string BuildMessage(TimeSpan totalDriving, string severity)
     {

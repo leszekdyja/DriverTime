@@ -9,8 +9,54 @@ namespace DriverTime.Infrastructure.Tests.Compliance;
 [TestClass]
 public class DrivingLimitRuleTests
 {
+    private readonly DailyDrivingLimitRule _dailyRule = new(NullLogger<DailyDrivingLimitRule>.Instance);
     private readonly WeeklyDrivingLimitRule _weeklyRule = new(NullLogger<WeeklyDrivingLimitRule>.Instance);
     private readonly BiWeeklyDrivingLimitRule _biWeeklyRule = new(NullLogger<BiWeeklyDrivingLimitRule>.Instance);
+
+    [TestMethod]
+    public void DailyDrivingLimit_SplitsActivityCrossingMidnight()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T22:00:00Z", "2026-06-09T02:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-09T08:00:00Z", "2026-06-09T15:00:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void DailyDrivingLimit_MergesOverlappingDrivingRecords()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T14:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:00:00Z", "2026-06-08T16:00:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void DailyDrivingLimit_IgnoresDuplicatedDrivingPeriodFromSecondImport()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T15:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T15:00:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
 
     [TestMethod]
     public void WeeklyDrivingLimit_WithExactlyFiftySixHours_ReturnsNoViolation()
@@ -76,6 +122,21 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
+    public void WeeklyDrivingLimit_DoesNotDoubleCountDuplicatedWeek()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-09T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-09T16:00:00Z")
+        };
+
+        var result = _weeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
     public void BiWeeklyDrivingLimit_WithExactlyNinetyHours_ReturnsNoViolation()
     {
         var driverId = Guid.NewGuid();
@@ -132,6 +193,23 @@ public class DrivingLimitRuleTests
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-14T12:00:00Z", "2026-06-15T12:00:00Z"),
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-15T12:00:00Z", "2026-06-17T00:00:00Z"),
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-22T00:00:00Z", "2026-06-23T18:00:00Z")
+        };
+
+        var result = _biWeeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void BiWeeklyDrivingLimit_DoesNotDoubleCountDuplicatedTwoWeekPeriod()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-09T21:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-09T21:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-15T00:00:00Z", "2026-06-16T21:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-15T00:00:00Z", "2026-06-16T21:00:00Z")
         };
 
         var result = _biWeeklyRule.Evaluate(driverId, timeline);

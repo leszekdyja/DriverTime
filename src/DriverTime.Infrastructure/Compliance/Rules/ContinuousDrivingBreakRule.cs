@@ -38,7 +38,14 @@ public class ContinuousDrivingBreakRule : IComplianceRule
         var resettingBreaks = 0;
         DateTime? continuousStartUtc = null;
 
-        foreach (var activity in timeline.OrderBy(x => x.StartUtc))
+        var normalizedTimeline = WeeklyDrivingTimelineHelper.GetMergedDrivingTimeline(timeline)
+            .Concat(timeline.Where(activity => !IsDriving(activity)))
+            .Where(x => x.StartUtc < x.EndUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+
+        foreach (var activity in normalizedTimeline)
         {
             if (IsDriving(activity))
             {

@@ -73,12 +73,22 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
             var dayEnd = ToUtc(date.AddDays(1));
             var day = new DriverActivityCalendarDayDto { Date = date };
 
-            foreach (var activity in activities.Where(x =>
-                         x.StartUtc < dayEnd && x.EndUtc > dayStart))
+            var dayActivities = ActivityIntervalAggregationHelper.ClipAndMergeByType(
+                activities
+                    .Where(x => x.StartUtc < dayEnd && x.EndUtc > dayStart)
+                    .Select(x => new ActivityInterval(
+                        x.Id,
+                        x.ActivityType,
+                        x.StartUtc,
+                        x.EndUtc)),
+                dayStart,
+                dayEnd);
+
+            foreach (var activity in dayActivities)
             {
-                var start = activity.StartUtc < dayStart ? dayStart : activity.StartUtc;
-                var end = activity.EndUtc > dayEnd ? dayEnd : activity.EndUtc;
-                var seconds = end > start ? (long)(end - start).TotalSeconds : 0;
+                var seconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
+                    activity.StartUtc,
+                    activity.EndUtc);
 
                 if (seconds <= 0)
                 {
@@ -88,8 +98,8 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
                 day.Activities.Add(new DriverActivityCalendarItemDto
                 {
                     Id = activity.Id,
-                    StartUtc = start,
-                    EndUtc = end,
+                    StartUtc = activity.StartUtc,
+                    EndUtc = activity.EndUtc,
                     ActivityType = activity.ActivityType,
                     DurationSeconds = seconds
                 });

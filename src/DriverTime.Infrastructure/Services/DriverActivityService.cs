@@ -40,7 +40,7 @@ public class DriverActivityService : IDriverActivityService
                 from.Value,
                 DateTimeKind.Utc);
 
-            query = query.Where(x => x.StartUtc >= fromUtc);
+            query = query.Where(x => x.EndUtc > fromUtc);
         }
 
         if (to.HasValue)
@@ -49,7 +49,7 @@ public class DriverActivityService : IDriverActivityService
                 to.Value,
                 DateTimeKind.Utc);
 
-            query = query.Where(x => x.StartUtc <= toUtc);
+            query = query.Where(x => x.StartUtc < toUtc);
         }
 
         return await query
