@@ -12,6 +12,7 @@ public class DrivingLimitRuleTests
     private readonly DailyDrivingLimitRule _dailyRule = new(NullLogger<DailyDrivingLimitRule>.Instance);
     private readonly WeeklyDrivingLimitRule _weeklyRule = new(NullLogger<WeeklyDrivingLimitRule>.Instance);
     private readonly BiWeeklyDrivingLimitRule _biWeeklyRule = new(NullLogger<BiWeeklyDrivingLimitRule>.Instance);
+    private readonly ContinuousDrivingBreakRule _continuousRule = new(NullLogger<ContinuousDrivingBreakRule>.Instance);
 
     [TestMethod]
     public void DailyDrivingLimit_SplitsActivityCrossingMidnight()
@@ -52,6 +53,17 @@ public class DrivingLimitRuleTests
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T15:00:00Z"),
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T15:00:00Z")
         };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void DailyDrivingLimit_DoesNotCountDrivingCoveredByNonDrivingActivities()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildCoveredLongDrivingTimeline(driverId);
 
         var result = _dailyRule.Evaluate(driverId, timeline);
 
@@ -137,6 +149,17 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
+    public void WeeklyDrivingLimit_DoesNotCountDrivingCoveredByNonDrivingActivities()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildCoveredLongDrivingTimeline(driverId);
+
+        var result = _weeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
     public void BiWeeklyDrivingLimit_WithExactlyNinetyHours_ReturnsNoViolation()
     {
         var driverId = Guid.NewGuid();
@@ -215,6 +238,40 @@ public class DrivingLimitRuleTests
         var result = _biWeeklyRule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void BiWeeklyDrivingLimit_DoesNotCountDrivingCoveredByNonDrivingActivities()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildCoveredLongDrivingTimeline(driverId);
+
+        var result = _biWeeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_DoesNotCountDrivingCoveredByNonDrivingActivities()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildCoveredLongDrivingTimeline(driverId);
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    private static TimelineActivity[] BuildCoveredLongDrivingTimeline(Guid driverId)
+    {
+        return
+        [
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-08T22:56:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T00:00:00Z", "2026-06-08T10:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T10:00:00Z", "2026-06-08T10:07:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:07:00Z", "2026-06-08T10:39:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T10:39:00Z", "2026-06-09T00:00:00Z")
+        ];
     }
 
     private static TimelineActivity Activity(

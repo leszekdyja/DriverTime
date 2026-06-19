@@ -23,10 +23,7 @@ internal static class WeeklyDrivingTimelineHelper
     public static IReadOnlyList<TimelineActivity> GetMergedDrivingTimeline(
         IReadOnlyList<TimelineActivity> timeline)
     {
-        return MergeDrivingSegments(timeline
-                .Where(IsDriving)
-                .Where(x => x.StartUtc < x.EndUtc)
-                .Select(x => new DrivingSegment(x.StartUtc, x.EndUtc, x.SourceActivityId, x.DriverId)))
+        return GetEffectiveDrivingSegments(timeline)
             .Select(x => new TimelineActivity
             {
                 SourceActivityId = x.SourceActivityId,
@@ -45,11 +42,7 @@ internal static class WeeklyDrivingTimelineHelper
     {
         var segmentsByPeriod = new Dictionary<DateTime, List<DrivingSegment>>();
 
-        foreach (var activity in timeline
-                     .Where(IsDriving)
-                     .Where(x => x.StartUtc < x.EndUtc)
-                     .OrderBy(x => x.StartUtc)
-                     .ThenBy(x => x.EndUtc))
+        foreach (var activity in GetEffectiveDrivingSegments(timeline))
         {
             var segmentStart = activity.StartUtc;
 
@@ -84,6 +77,37 @@ internal static class WeeklyDrivingTimelineHelper
 
     private static bool IsDriving(TimelineActivity activity) =>
         activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<DrivingSegment> GetEffectiveDrivingSegments(
+        IReadOnlyList<TimelineActivity> timeline)
+    {
+        var drivingSegments = timeline
+            .Where(IsDriving)
+            .Where(x => x.StartUtc < x.EndUtc)
+            .Select(x => new DrivingSegment(x.StartUtc, x.EndUtc, x.SourceActivityId, x.DriverId))
+            .ToList();
+
+        if (drivingSegments.Count == 0)
+        {
+            return Array.Empty<DrivingSegment>();
+        }
+
+        var nonDrivingSegments = MergeDrivingSegments(timeline
+            .Where(x => !IsDriving(x))
+            .Where(x => x.StartUtc < x.EndUtc)
+            .Select(x => new DrivingSegment(x.StartUtc, x.EndUtc, Guid.Empty, x.DriverId)));
+
+        if (nonDrivingSegments.Count == 0)
+        {
+            return MergeDrivingSegments(drivingSegments);
+        }
+
+        var effectiveDriving = drivingSegments
+            .SelectMany(x => SubtractOverlaps(x, nonDrivingSegments))
+            .ToList();
+
+        return MergeDrivingSegments(effectiveDriving);
+    }
 
     private static DateTime GetIsoWeekStart(DateTime value)
     {
@@ -132,6 +156,63 @@ internal static class WeeklyDrivingTimelineHelper
         merged.Add(current);
 
         return merged;
+    }
+
+    private static IEnumerable<DrivingSegment> SubtractOverlaps(
+        DrivingSegment driving,
+        IReadOnlyList<DrivingSegment> blockers)
+    {
+        var remaining = new List<DrivingSegment> { driving };
+
+        foreach (var blocker in blockers)
+        {
+            if (blocker.EndUtc <= driving.StartUtc)
+            {
+                continue;
+            }
+
+            if (blocker.StartUtc >= driving.EndUtc)
+            {
+                break;
+            }
+
+            var next = new List<DrivingSegment>();
+
+            foreach (var segment in remaining)
+            {
+                if (blocker.EndUtc <= segment.StartUtc ||
+                    blocker.StartUtc >= segment.EndUtc)
+                {
+                    next.Add(segment);
+                    continue;
+                }
+
+                if (blocker.StartUtc > segment.StartUtc)
+                {
+                    next.Add(segment with
+                    {
+                        EndUtc = blocker.StartUtc
+                    });
+                }
+
+                if (blocker.EndUtc < segment.EndUtc)
+                {
+                    next.Add(segment with
+                    {
+                        StartUtc = blocker.EndUtc
+                    });
+                }
+            }
+
+            remaining = next;
+
+            if (remaining.Count == 0)
+            {
+                break;
+            }
+        }
+
+        return remaining;
     }
 
     private sealed record DrivingSegment(

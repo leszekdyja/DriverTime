@@ -1,6 +1,7 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Domain.Compliance;
+using DriverTime.Infrastructure.Compliance.Rules;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
 
@@ -100,8 +101,7 @@ public class ComplianceEngineService : IComplianceEngineService
     private ComplianceDebugSummaryDto BuildDebugSummary(
         IReadOnlyList<TimelineActivity> timeline)
     {
-        var drivingActivities = timeline
-            .Where(x => x.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase))
+        var drivingActivities = WeeklyDrivingTimelineHelper.GetMergedDrivingTimeline(timeline)
             .ToList();
 
         return new ComplianceDebugSummaryDto
