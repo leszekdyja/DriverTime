@@ -254,6 +254,7 @@ export default function ViolationsPage() {
     const [dateFrom, setDateFrom] = useState("");
     const [dateTo, setDateTo] = useState("");
     const [selectedViolation, setSelectedViolation] = useState<DriverViolation | null>(null);
+    const [dismissedViolationIdFromQuery, setDismissedViolationIdFromQuery] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
@@ -310,7 +311,11 @@ export default function ViolationsPage() {
     }, [driverIdFromQuery]);
 
     useEffect(() => {
-        if (!violationIdFromQuery || selectedViolation) {
+        if (
+            !violationIdFromQuery
+            || selectedViolation
+            || dismissedViolationIdFromQuery === violationIdFromQuery
+        ) {
             return;
         }
 
@@ -321,7 +326,23 @@ export default function ViolationsPage() {
         if (matchingViolation) {
             setSelectedViolation(matchingViolation);
         }
-    }, [selectedViolation, violationIdFromQuery, violations]);
+    }, [dismissedViolationIdFromQuery, selectedViolation, violationIdFromQuery, violations]);
+
+    useEffect(() => {
+        if (!selectedViolation) {
+            return;
+        }
+
+        function handleEscape(event: globalThis.KeyboardEvent) {
+            if (event.key === "Escape") {
+                closeSelectedViolation();
+            }
+        }
+
+        window.addEventListener("keydown", handleEscape);
+
+        return () => window.removeEventListener("keydown", handleEscape);
+    }, [selectedViolation]);
 
     const driverOptions = useMemo(() => {
         return drivers
@@ -487,8 +508,21 @@ export default function ViolationsPage() {
     function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, violation: DriverViolation) {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            setSelectedViolation(violation);
+            openViolationDetails(violation);
         }
+    }
+
+    function openViolationDetails(violation: DriverViolation) {
+        setDismissedViolationIdFromQuery("");
+        setSelectedViolation(violation);
+    }
+
+    function closeSelectedViolation() {
+        if (violationIdFromQuery) {
+            setDismissedViolationIdFromQuery(violationIdFromQuery);
+        }
+
+        setSelectedViolation(null);
     }
 
     function markAlertAsRead(violation: DriverViolation) {
@@ -712,7 +746,7 @@ export default function ViolationsPage() {
                                             className="violation-clickable-row"
                                             key={`${violation.driverCardNumber}-${violation.occurredAtUtc}-${violation.violationType}-${index}`}
                                             tabIndex={0}
-                                            onClick={() => setSelectedViolation(violation)}
+                                            onClick={() => openViolationDetails(violation)}
                                             onKeyDown={(event) => handleRowKeyDown(event, violation)}
                                         >
                                             <td data-label="Kierowca">
@@ -738,7 +772,7 @@ export default function ViolationsPage() {
                                                     type="button"
                                                     onClick={(event) => {
                                                         event.stopPropagation();
-                                                        setSelectedViolation(violation);
+                                                        openViolationDetails(violation);
                                                     }}
                                                 >
                                                     Otwórz
@@ -756,7 +790,7 @@ export default function ViolationsPage() {
             {selectedViolation && (
                 <ViolationDetailsModal
                     violation={selectedViolation}
-                    onClose={() => setSelectedViolation(null)}
+                    onClose={closeSelectedViolation}
                 />
             )}
         </div>
@@ -804,7 +838,14 @@ function ViolationDetailsModal({
                         <span>Szczegóły naruszenia</span>
                         <h3 id="violation-details-title">{displayViolationType(violation)}</h3>
                     </div>
-                    <button type="button" onClick={onClose} aria-label="Zamknij szczegóły">
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onClose();
+                        }}
+                        aria-label="Zamknij szczegóły"
+                    >
                         ×
                     </button>
                 </div>
