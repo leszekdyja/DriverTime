@@ -101,6 +101,8 @@ export type ComplianceRunDashboardStats = {
     lastSchedulerViolationsCount: number;
 };
 
+const dashboardActivityLookbackDays = 60;
+
 async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     const response = await apiFetch(path);
 
@@ -109,6 +111,17 @@ async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     }
 
     return response.json() as Promise<T>;
+}
+
+function getDashboardActivitiesPath() {
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - dashboardActivityLookbackDays);
+
+    const parameters = new URLSearchParams({
+        from: from.toISOString(),
+    });
+
+    return `/api/driver-activities?${parameters.toString()}`;
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -120,7 +133,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         getDashboardDrivers(),
         getDddImports(),
         getJson<DriverActivity[]>(
-            "/api/driver-activities",
+            getDashboardActivitiesPath(),
             "Nie udało się pobrać statystyk aktywności.",
         ),
     ]);
