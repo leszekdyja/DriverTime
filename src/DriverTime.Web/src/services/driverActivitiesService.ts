@@ -16,10 +16,13 @@ export async function getDriverActivitiesByCard(
     driverCardNumber: string,
 ): Promise<DriverActivity[]> {
     const parameters = new URLSearchParams();
+    const safeDriverCardNumber = driverCardNumber.trim();
 
-    if (driverCardNumber) {
-        parameters.set("driverCardNumber", driverCardNumber);
+    if (!safeDriverCardNumber) {
+        return [];
     }
+
+    parameters.set("driverCardNumber", safeDriverCardNumber);
 
     const response = await apiFetch(`/api/driver-activities?${parameters.toString()}`);
 

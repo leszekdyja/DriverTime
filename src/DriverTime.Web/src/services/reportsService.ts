@@ -24,7 +24,6 @@ export type ReportActivity = {
 };
 
 type ReportFormat = "pdf" | "excel";
-const defaultReportRangeDays = 60;
 
 const reportFiles: Record<ReportFormat, { contentType: string; fallbackName: string }> = {
     pdf: {
@@ -61,38 +60,30 @@ export function getReportActivities(
     driverCardNumber?: string,
 ): Promise<ReportActivity[]> {
     const parameters = new URLSearchParams();
-    const range = getEffectiveDateRange(dateFrom, dateTo);
+    const safeDriverId = driverId.trim();
+    const safeDriverCardNumber = driverCardNumber?.trim() ?? "";
+    const safeDateFrom = dateFrom.trim();
+    const safeDateTo = dateTo.trim();
 
-    if (driverId) {
-        parameters.set("driverId", driverId);
+    if ((!safeDriverId && !safeDriverCardNumber) || !safeDateFrom || !safeDateTo) {
+        throw new Error("Wybierz kierowcę i pełny zakres dat przed pobraniem aktywności.");
     }
 
-    if (driverCardNumber) {
-        parameters.set("driverCardNumber", driverCardNumber);
+    if (safeDriverId) {
+        parameters.set("driverId", safeDriverId);
     }
 
-    parameters.set("from", `${range.from}T00:00:00Z`);
-    parameters.set("to", `${range.to}T23:59:59Z`);
+    if (safeDriverCardNumber) {
+        parameters.set("driverCardNumber", safeDriverCardNumber);
+    }
+
+    parameters.set("from", `${safeDateFrom}T00:00:00Z`);
+    parameters.set("to", `${safeDateTo}T23:59:59Z`);
 
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
         "Nie udało się pobrać danych raportu.",
     );
-}
-
-function getEffectiveDateRange(dateFrom: string, dateTo: string) {
-    if (dateFrom && dateTo) {
-        return { from: dateFrom, to: dateTo };
-    }
-
-    const today = new Date();
-    const from = new Date(today);
-    from.setUTCDate(today.getUTCDate() - defaultReportRangeDays);
-
-    return {
-        from: dateFrom || from.toISOString().slice(0, 10),
-        to: dateTo || today.toISOString().slice(0, 10),
-    };
 }
 
 export async function downloadDriverReport(
