@@ -20,6 +20,16 @@ const navigationItems = [
     { to: "/account", label: "Moje konto", icon: "account" },
 ];
 
+const roleLabels: Record<string, string> = {
+    Admin: "Administrator",
+    Dispatcher: "Dyspozytor",
+    Driver: "Kierowca",
+};
+
+function formatRole(role?: string) {
+    return role ? roleLabels[role] ?? role : "";
+}
+
 const currentDateFormatter = new Intl.DateTimeFormat("pl-PL", {
     weekday: "long",
     day: "numeric",
@@ -96,7 +106,7 @@ export default function AppLayout() {
                             <span className="profile-avatar">{initials}</span>
                             <div>
                                 <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
-                                <span>{user?.companyName} / {user?.role}</span>
+                                <span>{user?.companyName} / {formatRole(user?.role)}</span>
                             </div>
                         </Link>
                         <button className="logout-button" type="button" onClick={logout}>

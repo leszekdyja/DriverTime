@@ -52,6 +52,7 @@ export default function DriversPage() {
 
         return drivers.filter((driver) =>
             driver.lastName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
+            || driver.firstName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
             || driver.cardNumber.toLocaleLowerCase("pl-PL").includes(deferredSearch),
         );
     }, [deferredSearch, drivers]);
@@ -195,7 +196,7 @@ export default function DriversPage() {
                         <input
                             id="drivers-search"
                             type="search"
-                            placeholder="Nazwisko lub numer karty"
+                            placeholder="Nazwisko, imię lub numer karty"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                         />
@@ -234,8 +235,8 @@ export default function DriversPage() {
                                 <table className="drivers-table">
                                 <thead>
                                     <tr>
-                                        <th>Imie</th>
                                         <th>Nazwisko</th>
+                                        <th>Imie</th>
                                         <th>Numer karty</th>
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
@@ -245,8 +246,8 @@ export default function DriversPage() {
                                 <tbody>
                                     {visibleDrivers.map((driver) => (
                                         <tr key={driver.id}>
-                                            <td>{driver.firstName}</td>
                                             <td>{driver.lastName}</td>
+                                            <td>{driver.firstName}</td>
                                             <td>{driver.cardNumber}</td>
                                             <td>
                                                 {driver.cardExpiryDate

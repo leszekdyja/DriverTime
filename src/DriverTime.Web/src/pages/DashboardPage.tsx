@@ -759,12 +759,13 @@ export default function DashboardPage() {
                 )}
             </section>
 
+            {(isComplianceStatsLoading || complianceStatsError || (complianceStats && complianceStats.recentRunsCount > 0)) && (
             <section className="dashboard-widget latest-imports-widget">
                 <div className="dashboard-widget-heading">
                     <div>
-                        <span>ComplianceRun</span>
+                        <span>Ocena zgodności</span>
                         <h3>Historia automatycznej oceny zgodności</h3>
-                        <p>Dane pochodzą z zapisanych runów compliance, bez ponownego liczenia preview na dashboardzie.</p>
+                        <p>Dane pochodzą z zapisanych wyników oceny zgodności, bez ponownego liczenia podglądu na dashboardzie.</p>
                     </div>
                 </div>
 
@@ -772,17 +773,12 @@ export default function DashboardPage() {
                     <TableSkeleton rows={3} columns={4} />
                 ) : complianceStatsError ? (
                     <p className="driver-risk-error" role="alert">{complianceStatsError}</p>
-                ) : !complianceStats || complianceStats.recentRunsCount === 0 ? (
-                    <EmptyState
-                        title="Brak historii ComplianceRun"
-                        description="Uruchom ocenę compliance ręcznie albo włącz scheduler, aby pojawiły się zapisane wyniki."
-                    />
-                ) : (
+                ) : complianceStats ? (
                     <>
                         <div className="violation-widget-summary">
-                            <MetricCard label="Ostatnie runy" value={complianceStats.recentRunsCount} tone="slate" description="Ostatnie zapisane wyniki" />
+                            <MetricCard label="Ostatnie oceny" value={complianceStats.recentRunsCount} tone="slate" description="Ostatnie zapisane wyniki" />
                             <MetricCard label="Status" value={formatRunStatus(complianceStats.lastStatus)} tone={complianceStats.lastStatus === "Completed" ? "green" : "amber"} description={formatOptionalDate(complianceStats.lastRunAtUtc)} />
-                            <MetricCard label="Naruszenia" value={complianceStats.lastRunViolationsCount} tone={complianceStats.lastRunViolationsCount > 0 ? "red" : "green"} description="Z ostatniego runu" />
+                            <MetricCard label="Naruszenia" value={complianceStats.lastRunViolationsCount} tone={complianceStats.lastRunViolationsCount > 0 ? "red" : "green"} description="Z ostatniej oceny" />
                         </div>
                         <div className="activity-metrics">
                             <article className="activity-metric driving">
@@ -801,19 +797,20 @@ export default function DashboardPage() {
                                 <small>Informacyjne wyniki zgodności</small>
                             </article>
                             <article className="activity-metric availability">
-                                <span>Scheduler</span>
+                                <span>Automat</span>
                                 <strong>{complianceStats.schedulerEnabled ? "Włączony" : "Wyłączony"}</strong>
-                                <small>Ostatni auto run: {formatOptionalDate(complianceStats.lastSchedulerRunAtUtc)}</small>
+                                <small>Ostatnie automatyczne uruchomienie: {formatOptionalDate(complianceStats.lastSchedulerRunAtUtc)}</small>
                             </article>
                         </div>
                         <div className="risk-quick-stats">
                             <span><strong>{complianceStats.driversInLastRunCount}</strong> kierowców w ostatnim cyklu</span>
-                            <span>Status schedulera: <strong>{formatRunStatus(complianceStats.lastSchedulerStatus)}</strong></span>
-                            <span>Auto naruszenia: <strong>{complianceStats.lastSchedulerViolationsCount}</strong></span>
+                            <span>Status automatu: <strong>{formatRunStatus(complianceStats.lastSchedulerStatus)}</strong></span>
+                            <span>Automatyczne naruszenia: <strong>{complianceStats.lastSchedulerViolationsCount}</strong></span>
                         </div>
                     </>
-                )}
+                ) : null}
             </section>
+            )}
 
             <DashboardCharts
                 activityData={activityStatistics}

@@ -17,6 +17,16 @@ const emptyProfile: AccountProfile = {
     companyName: "",
 };
 
+const roleLabels: Record<string, string> = {
+    Admin: "Administrator",
+    Dispatcher: "Dyspozytor",
+    Driver: "Kierowca",
+};
+
+function formatRole(role?: string) {
+    return role ? roleLabels[role] ?? role : "";
+}
+
 export default function AccountPage() {
     const [profile, setProfile] = useState<AccountProfile>(emptyProfile);
     const [currentPassword, setCurrentPassword] = useState("");
@@ -135,7 +145,7 @@ export default function AccountPage() {
                 <form className="account-card" onSubmit={handleProfileSubmit}>
                     <div className="account-card-heading">
                         <h3>Dane profilu</h3>
-                        <p>{profile.companyName} / {profile.role}</p>
+                        <p>{profile.companyName} / {formatRole(profile.role)}</p>
                     </div>
 
                     <label>
