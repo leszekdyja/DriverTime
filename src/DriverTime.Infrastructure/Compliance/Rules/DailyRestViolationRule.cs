@@ -65,8 +65,7 @@ public class DailyRestViolationRule : IComplianceRule
         {
             dutyPeriods++;
             var windowEnd = currentPeriodStart.AddHours(24);
-            var allowBoundaryRest = currentPeriodStart == dutyActivities[0].StartUtc;
-            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd, allowBoundaryRest);
+            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd);
             var splitRegularRest = FindSplitRegularDailyRestInWindow(restPeriods, currentPeriodStart, windowEnd);
             var restMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
             maxLongestRest = Max(maxLongestRest, longestRest.Duration);
@@ -90,6 +89,18 @@ public class DailyRestViolationRule : IComplianceRule
 
             if (longestRest.Duration >= ReducedDailyRest)
             {
+                if (longestRest.EndUtc <= currentPeriodStart)
+                {
+                    var nextDutyAfterBoundaryRest = GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart);
+                    if (nextDutyAfterBoundaryRest is null)
+                    {
+                        break;
+                    }
+
+                    currentPeriodStart = nextDutyAfterBoundaryRest.StartUtc;
+                    continue;
+                }
+
                 result.Violations.Add(CreateViolation(
                     severity: "MEDIUM",
                     description: $"Wykryto skrócony odpoczynek dzienny: {FormatDuration(longestRest.Duration)} zamiast regularnych 11 godzin.",
@@ -263,19 +274,16 @@ public class DailyRestViolationRule : IComplianceRule
     private static RestPeriod FindLongestRestInWindow(
         IReadOnlyList<RestPeriod> restPeriods,
         DateTime windowStart,
-        DateTime windowEnd,
-        bool allowBoundaryRest)
+        DateTime windowEnd)
     {
-        var boundaryRest = allowBoundaryRest
-            ? restPeriods
-                .Where(x =>
-                    x.StartUtc < windowStart &&
-                    x.EndUtc >= windowStart.Subtract(BoundaryRestTolerance) &&
-                    x.Duration >= ReducedDailyRest)
-                .OrderByDescending(x => x.Duration)
-                .ThenBy(x => x.StartUtc)
-                .FirstOrDefault()
-            : null;
+        var boundaryRest = restPeriods
+            .Where(x =>
+                x.StartUtc < windowStart &&
+                x.EndUtc >= windowStart.Subtract(BoundaryRestTolerance) &&
+                x.Duration >= ReducedDailyRest)
+            .OrderByDescending(x => x.Duration)
+            .ThenBy(x => x.StartUtc)
+            .FirstOrDefault();
 
         var longestRestInWindow = restPeriods
             .Where(x => x.StartUtc < windowEnd && x.EndUtc > windowStart)

@@ -292,6 +292,57 @@ public class DailyRestViolationRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithRealJuneTwentiethBoundaryRest_DoesNotReturnDailyRestViolation()
+    {
+        var driverId = Guid.Parse("d27eaace-5563-48cc-a4a5-f9eb07ac9b22");
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-19T16:00:00Z", "2026-06-19T19:08:13Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-19T19:08:13Z", "2026-06-20T06:08:12Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-20T06:09:00Z", "2026-06-20T10:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-20T10:00:00Z", "2026-06-20T11:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-20T11:00:00Z", "2026-06-20T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-20T12:56:00Z", "2026-06-20T14:10:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-20T14:10:00Z", "2026-06-20T18:28:22Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-20T18:28:22Z", "2026-06-21T00:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.IsFalse(result.Violations.Any(x =>
+            x.Severity == "HIGH" &&
+            x.Metadata.TryGetValue("analysisWindowStartUtc", out var value) &&
+            value?.ToString() == "2026-06-20T06:09:00.0000000Z"));
+    }
+
+    [TestMethod]
+    public void Evaluate_WithOnlyFiveHoursThirtyTwoMinutesInsideWindow_UsesPreviousBoundaryRest()
+    {
+        var driverId = Guid.Parse("d27eaace-5563-48cc-a4a5-f9eb07ac9b22");
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-19T16:00:00Z", "2026-06-19T19:08:13Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-19T19:08:13Z", "2026-06-20T06:08:12Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-20T06:09:00Z", "2026-06-20T08:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-20T08:00:00Z", "2026-06-20T18:28:22Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-20T18:28:22Z", "2026-06-21T00:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-21T00:00:00Z", "2026-06-21T01:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.IsFalse(result.Violations.Any(x =>
+            x.Severity == "HIGH" &&
+            x.Metadata.TryGetValue("analysisWindowStartUtc", out var value) &&
+            value?.ToString() == "2026-06-20T06:09:00.0000000Z"));
+        Assert.IsFalse(result.Violations.Any(x =>
+            x.Metadata.TryGetValue("analysisWindowStartUtc", out var start) &&
+            start?.ToString() == "2026-06-20T06:09:00.0000000Z" &&
+            x.Metadata.TryGetValue("longestRestMinutes", out var value) &&
+            value is 332L));
+    }
+
+    [TestMethod]
     public void Evaluate_WithRestCrossingMidnightAndDuplicatedWorkOverlay_KeepsContinuousRest()
     {
         var driverId = Guid.NewGuid();
