@@ -72,7 +72,13 @@ export async function getCompliancePreview(
         throw new Error("Nie udało się pobrać podglądu compliance.");
     }
 
-    return response.json() as Promise<CompliancePreview>;
+    const preview = await response.json() as CompliancePreview;
+
+    return {
+        ...preview,
+        timeline: Array.isArray(preview.timeline) ? preview.timeline : [],
+        violations: Array.isArray(preview.violations) ? preview.violations : [],
+    };
 }
 
 export function mapComplianceViolation(
@@ -114,9 +120,11 @@ export async function getComplianceViolationsForDriver(
 export async function getComplianceViolationsForDrivers(
     drivers: ComplianceDriver[],
 ): Promise<DriverViolation[]> {
-    const violationsByDriver = await Promise.all(
+    const results = await Promise.allSettled(
         drivers.map((driver) => getComplianceViolationsForDriver(driver)),
     );
 
-    return violationsByDriver.flat();
+    return results.flatMap((result) =>
+        result.status === "fulfilled" ? result.value : [],
+    );
 }
