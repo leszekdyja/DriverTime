@@ -330,9 +330,9 @@ public class TimelineBuilderService : ITimelineBuilderService
     {
         return activityType switch
         {
-            ActivityTypeNormalizer.Work => 40,
-            ActivityTypeNormalizer.Rest => 30,
-            ActivityTypeNormalizer.Availability => 20,
+            ActivityTypeNormalizer.Rest => 50,
+            ActivityTypeNormalizer.Availability => 40,
+            ActivityTypeNormalizer.Work => 30,
             ActivityTypeNormalizer.Driving => 10,
             _ => 0
         };
