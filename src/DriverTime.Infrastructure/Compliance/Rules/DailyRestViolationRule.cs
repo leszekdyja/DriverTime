@@ -73,6 +73,11 @@ public class DailyRestViolationRule : IComplianceRule
             if (longestRest.Duration >= RegularDailyRest || splitRegularRest is not null)
             {
                 var restEndUtc = splitRegularRest?.SecondRest.EndUtc ?? longestRest.EndUtc;
+                if (restEndUtc <= currentPeriodStart)
+                {
+                    break;
+                }
+
                 var nextDuty = restEndUtc <= currentPeriodStart
                     ? GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart)
                     : GetNextDutyAfterRest(dutyActivities, restEndUtc);
@@ -91,14 +96,7 @@ public class DailyRestViolationRule : IComplianceRule
             {
                 if (longestRest.EndUtc <= currentPeriodStart)
                 {
-                    var nextDutyAfterBoundaryRest = GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart);
-                    if (nextDutyAfterBoundaryRest is null)
-                    {
-                        break;
-                    }
-
-                    currentPeriodStart = nextDutyAfterBoundaryRest.StartUtc;
-                    continue;
+                    break;
                 }
 
                 result.Violations.Add(CreateViolation(
