@@ -24,6 +24,7 @@ export type ReportActivity = {
 };
 
 type ReportFormat = "pdf" | "excel";
+const defaultReportRangeDays = 60;
 
 const reportFiles: Record<ReportFormat, { contentType: string; fallbackName: string }> = {
     pdf: {
@@ -54,28 +55,44 @@ export function getReportDrivers(): Promise<ReportDriver[]> {
 }
 
 export function getReportActivities(
-    driverCardNumber: string,
+    driverId: string,
     dateFrom: string,
     dateTo: string,
+    driverCardNumber?: string,
 ): Promise<ReportActivity[]> {
     const parameters = new URLSearchParams();
+    const range = getEffectiveDateRange(dateFrom, dateTo);
+
+    if (driverId) {
+        parameters.set("driverId", driverId);
+    }
 
     if (driverCardNumber) {
         parameters.set("driverCardNumber", driverCardNumber);
     }
 
-    if (dateFrom) {
-        parameters.set("from", `${dateFrom}T00:00:00Z`);
-    }
-
-    if (dateTo) {
-        parameters.set("to", `${dateTo}T23:59:59Z`);
-    }
+    parameters.set("from", `${range.from}T00:00:00Z`);
+    parameters.set("to", `${range.to}T23:59:59Z`);
 
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
         "Nie udało się pobrać danych raportu.",
     );
+}
+
+function getEffectiveDateRange(dateFrom: string, dateTo: string) {
+    if (dateFrom && dateTo) {
+        return { from: dateFrom, to: dateTo };
+    }
+
+    const today = new Date();
+    const from = new Date(today);
+    from.setUTCDate(today.getUTCDate() - defaultReportRangeDays);
+
+    return {
+        from: dateFrom || from.toISOString().slice(0, 10),
+        to: dateTo || today.toISOString().slice(0, 10),
+    };
 }
 
 export async function downloadDriverReport(

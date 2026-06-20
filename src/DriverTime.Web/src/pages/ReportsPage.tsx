@@ -14,6 +14,7 @@ import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/reports.css";
 
 const pageSize = 12;
+const defaultReportRangeDays = 60;
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
@@ -84,12 +85,28 @@ function escapeCsv(value: string | number) {
     return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+function toDateInputValue(date: Date) {
+    return date.toISOString().slice(0, 10);
+}
+
+function getDefaultDateRange() {
+    const today = new Date();
+    const from = new Date(today);
+    from.setUTCDate(today.getUTCDate() - defaultReportRangeDays);
+
+    return {
+        from: toDateInputValue(from),
+        to: toDateInputValue(today),
+    };
+}
+
 export default function ReportsPage() {
+    const defaultDateRange = useMemo(() => getDefaultDateRange(), []);
     const [drivers, setDrivers] = useState<ReportDriver[]>([]);
     const [activities, setActivities] = useState<ReportActivity[]>([]);
-    const [driverCardNumber, setDriverCardNumber] = useState("");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const [selectedDriverId, setSelectedDriverId] = useState("");
+    const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
+    const [dateTo, setDateTo] = useState(defaultDateRange.to);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
@@ -97,7 +114,7 @@ export default function ReportsPage() {
     const [currentPage, setCurrentPage] = useState(1);
 
     async function loadActivities(
-        cardNumber = driverCardNumber,
+        driverId = selectedDriverId,
         from = dateFrom,
         to = dateTo,
     ) {
@@ -105,7 +122,15 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            const loadedActivities = await getReportActivities(cardNumber, from, to);
+            const driver = drivers.find((item) => item.id === driverId);
+
+            if (!driver) {
+                setError("Wybierz kierowcę przed wygenerowaniem raportu.");
+                setActivities([]);
+                return;
+            }
+
+            const loadedActivities = await getReportActivities(driver.id, from, to, driver.cardNumber);
             setCurrentPage(1);
             setActivities(loadedActivities);
         } catch (loadError) {
@@ -124,14 +149,11 @@ export default function ReportsPage() {
             setIsLoading(true);
 
             try {
-                const [loadedDrivers, loadedActivities] = await Promise.all([
-                    getReportDrivers(),
-                    getReportActivities("", "", ""),
-                ]);
+                const loadedDrivers = await getReportDrivers();
 
                 setCurrentPage(1);
                 setDrivers(loadedDrivers);
-                setActivities(loadedActivities);
+                setActivities([]);
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
@@ -147,8 +169,8 @@ export default function ReportsPage() {
     }, []);
 
     const selectedDriver = useMemo(
-        () => drivers.find((item) => item.cardNumber === driverCardNumber),
-        [driverCardNumber, drivers],
+        () => drivers.find((item) => item.id === selectedDriverId),
+        [selectedDriverId, drivers],
     );
 
     const dateRangeLabel = useMemo(() => {
@@ -197,6 +219,11 @@ export default function ReportsPage() {
             return;
         }
 
+        if (!selectedDriverId) {
+            setError("Wybierz kierowcę przed wygenerowaniem raportu.");
+            return;
+        }
+
         void loadActivities();
     }
 
@@ -237,9 +264,7 @@ export default function ReportsPage() {
     }
 
     async function handlePdfExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
+        const driver = selectedDriver;
 
         if (!driver || !dateFrom || !dateTo) {
             setError("Wybierz kierowcę oraz pełny zakres dat przed eksportem.");
@@ -317,7 +342,7 @@ export default function ReportsPage() {
                     <dl>
                         <div>
                             <dt>Numer karty</dt>
-                            <dd>{selectedDriver?.cardNumber || driverCardNumber || "Wszyscy kierowcy"}</dd>
+                            <dd>{selectedDriver?.cardNumber || "Nie wybrano"}</dd>
                         </div>
                         <div>
                             <dt>Zakres dat</dt>
@@ -331,12 +356,12 @@ export default function ReportsPage() {
                 <label>
                     Kierowca
                     <select
-                        value={driverCardNumber}
-                        onChange={(event) => setDriverCardNumber(event.target.value)}
+                        value={selectedDriverId}
+                        onChange={(event) => setSelectedDriverId(event.target.value)}
                     >
                         <option value="">Wszyscy kierowcy</option>
                         {drivers.map((driver) => (
-                            <option key={driver.id} value={driver.cardNumber}>
+                            <option key={driver.id} value={driver.id}>
                                 {formatDriverNameOrFallback(driver.firstName, driver.lastName)} ({driver.cardNumber})
                             </option>
                         ))}
@@ -409,7 +434,7 @@ export default function ReportsPage() {
                             type="button"
                             onClick={() => void handlePdfExport()}
                             disabled={
-                                !driverCardNumber
+                                !selectedDriverId
                                 || !dateFrom
                                 || !dateTo
                                 || isGeneratingPdf
@@ -423,7 +448,7 @@ export default function ReportsPage() {
                             type="button"
                             onClick={() => void handleExcelExport()}
                             disabled={
-                                !driverCardNumber
+                                !selectedDriverId
                                 || !dateFrom
                                 || !dateTo
                                 || activities.length === 0

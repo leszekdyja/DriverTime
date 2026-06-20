@@ -30,7 +30,7 @@ const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 const severityLabels: Record<SeverityLevel, string> = {
-    info: "Info",
+    info: "Informacyjne",
     warning: "Ostrzeżenie",
     critical: "Krytyczne",
 };
@@ -54,7 +54,7 @@ const severityTones: Record<SeverityLevel, "info" | "warning" | "critical"> = {
 };
 
 const alertSeverityLabels: Record<AlertSeverity, string> = {
-    info: "Info",
+    info: "Informacyjne",
     warning: "Ostrzeżenie",
     serious: "Ostrzeżenie",
     critical: "Krytyczne",
@@ -510,7 +510,7 @@ export default function ViolationsPage() {
         <div className="violations-page">
             <section className="violations-hero">
                 <div>
-                    <span className="violations-eyebrow">Compliance</span>
+                    <span className="violations-eyebrow">Zgodność</span>
                     <h2>Naruszenia czasu pracy kierowców</h2>
                     <p>
                         Monitoruj naruszenia wykryte na podstawie aktywności DDD,
@@ -621,9 +621,9 @@ export default function ViolationsPage() {
                     Waga naruszenia
                     <select value={selectedSeverity} onChange={(event) => setSelectedSeverity(event.target.value)}>
                         <option value="">Wszystkie wagi</option>
-                        <option value="info">Info</option>
-                        <option value="warning">Warning</option>
-                        <option value="critical">Critical</option>
+                        <option value="info">Informacyjne</option>
+                        <option value="warning">Ostrzeżenie</option>
+                        <option value="critical">Krytyczne</option>
                     </select>
                 </label>
                 <label>

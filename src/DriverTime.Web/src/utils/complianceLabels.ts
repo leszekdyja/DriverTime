@@ -37,20 +37,20 @@ const severityLabels: Record<string, string> = {
     medium: "Ostrzeżenie",
     serious: "Ostrzeżenie",
     low: "Niskie",
-    info: "Info",
+    info: "Informacyjne",
 };
 
 export function getComplianceRuleLabel(ruleName?: string | null, code?: string | null) {
     const normalizedRule = ruleName?.trim().toLowerCase() ?? "";
     const normalizedCode = code?.trim().toUpperCase() ?? "";
 
-    return ruleLabels[normalizedRule] || codeLabels[normalizedCode] || ruleName || code || "Brak nazwy";
+    return ruleLabels[normalizedRule] || codeLabels[normalizedCode] || "Inne naruszenie";
 }
 
 export function getSeverityLabel(severity?: string | null) {
     const normalized = severity?.trim().toLowerCase().replaceAll("_", " ") ?? "";
 
-    return severityLabels[normalized] || severity || "Info";
+    return severityLabels[normalized] || "Informacyjne";
 }
 
 export function getAlertCategoryLabel(category?: string | null) {
