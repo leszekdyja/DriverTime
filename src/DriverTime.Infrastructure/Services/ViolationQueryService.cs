@@ -4,6 +4,7 @@ using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -130,8 +131,216 @@ public class ViolationQueryService : IViolationQueryService
             DetectedAtUtc = violation.CalculatedAt,
             ActualDurationMinutes = violation.DurationMinutes,
             LimitDurationMinutes = GetLimitMinutes(violation.RegulationReference),
-            MetadataJson = violation.MetadataJson
+            MetadataJson = violation.MetadataJson,
+            BusinessDetails = BuildBusinessDetails(violation)
         };
+    }
+
+    private static ViolationBusinessDetailsDto? BuildBusinessDetails(Violation violation)
+    {
+        var metadata = ParseMetadata(violation.MetadataJson);
+        if (metadata.Count == 0)
+        {
+            return null;
+        }
+
+        var code = violation.RegulationReference.ToUpperInvariant();
+        if (code.Contains("DAILY_REST", StringComparison.Ordinal))
+        {
+            return BuildDailyRestDetails(metadata);
+        }
+
+        if (code.Contains("WEEKLY_REST_COMPENSATION", StringComparison.Ordinal))
+        {
+            return BuildWeeklyRestCompensationDetails(metadata);
+        }
+
+        if (code.Contains("COUNTRY", StringComparison.Ordinal))
+        {
+            return BuildCountryEntryDetails(metadata, BuildDescription(violation));
+        }
+
+        return null;
+    }
+
+    private static ViolationBusinessDetailsDto? BuildDailyRestDetails(
+        IReadOnlyDictionary<string, JsonElement> metadata)
+    {
+        var actualRestMinutes = GetLong(metadata, "longestRestMinutes")
+            ?? GetLong(metadata, "restMinutes");
+        var reason = GetString(metadata, "reason");
+        var requiredRestMinutes = string.Equals(
+                reason,
+                "MissingContinuousReducedDailyRest",
+                StringComparison.OrdinalIgnoreCase)
+            ? GetLong(metadata, "requiredReducedRestMinutes")
+            : GetLong(metadata, "requiredRegularRestMinutes");
+
+        requiredRestMinutes ??= GetLong(metadata, "requiredRegularRestMinutes")
+            ?? GetLong(metadata, "requiredReducedRestMinutes");
+
+        if (!actualRestMinutes.HasValue || !requiredRestMinutes.HasValue)
+        {
+            return null;
+        }
+
+        var missingRestMinutes = Math.Max(requiredRestMinutes.Value - actualRestMinutes.Value, 0);
+
+        return new ViolationBusinessDetailsDto
+        {
+            ActualRestMinutes = actualRestMinutes,
+            RequiredRestMinutes = requiredRestMinutes,
+            MissingRestMinutes = missingRestMinutes,
+            Summary = missingRestMinutes > 0
+                ? $"Odpoczynek wyniósł {FormatMinutes(actualRestMinutes.Value)}, wymagane minimum {FormatMinutes(requiredRestMinutes.Value)}. Brakowało {FormatMinutes(missingRestMinutes)}."
+                : $"Odpoczynek wyniósł {FormatMinutes(actualRestMinutes.Value)}, wymagane minimum {FormatMinutes(requiredRestMinutes.Value)}."
+        };
+    }
+
+    private static ViolationBusinessDetailsDto? BuildWeeklyRestCompensationDetails(
+        IReadOnlyDictionary<string, JsonElement> metadata)
+    {
+        var reducedRestMinutes = GetLong(metadata, "reducedRestMinutes");
+        var compensationDebtMinutes = GetLong(metadata, "compensationDebtMinutes")
+            ?? GetLong(metadata, "missingCompensationMinutes");
+        var compensationDeadlineUtc = GetDateTime(metadata, "compensationDeadlineUtc");
+
+        if (!reducedRestMinutes.HasValue &&
+            !compensationDebtMinutes.HasValue &&
+            !compensationDeadlineUtc.HasValue)
+        {
+            return null;
+        }
+
+        var summaryParts = new List<string>();
+        if (reducedRestMinutes.HasValue)
+        {
+            summaryParts.Add($"Skrócony odpoczynek tygodniowy wyniósł {FormatMinutes(reducedRestMinutes.Value)}.");
+        }
+
+        if (compensationDebtMinutes.HasValue)
+        {
+            summaryParts.Add($"Rekompensata do odebrania: {FormatMinutes(compensationDebtMinutes.Value)}.");
+        }
+
+        if (compensationDeadlineUtc.HasValue)
+        {
+            summaryParts.Add($"Rekompensatę należy odebrać do {compensationDeadlineUtc.Value:yyyy-MM-dd}.");
+        }
+
+        return new ViolationBusinessDetailsDto
+        {
+            ReducedWeeklyRestMinutes = reducedRestMinutes,
+            CompensationDebtMinutes = compensationDebtMinutes,
+            CompensationDeadlineUtc = compensationDeadlineUtc,
+            Summary = string.Join(" ", summaryParts)
+        };
+    }
+
+    private static ViolationBusinessDetailsDto? BuildCountryEntryDetails(
+        IReadOnlyDictionary<string, JsonElement> metadata,
+        string description)
+    {
+        var message = GetString(metadata, "message");
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            message = description;
+        }
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        return new ViolationBusinessDetailsDto
+        {
+            CountryIssueMessage = message,
+            Summary = message
+        };
+    }
+
+    private static IReadOnlyDictionary<string, JsonElement> ParseMetadata(string metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return new Dictionary<string, JsonElement>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(metadataJson)
+                ?? new Dictionary<string, JsonElement>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, JsonElement>();
+        }
+    }
+
+    private static long? GetLong(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt64(out var number) => number,
+            JsonValueKind.String when long.TryParse(value.GetString(), out var number) => number,
+            _ => null
+        };
+    }
+
+    private static string? GetString(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        return metadata.TryGetValue(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+    }
+
+    private static DateTime? GetDateTime(IReadOnlyDictionary<string, JsonElement> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.String &&
+            DateTime.TryParse(value.GetString(), out var parsed))
+        {
+            return parsed.Kind == DateTimeKind.Utc
+                ? parsed
+                : DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+        }
+
+        if (value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt64(out var ticks) &&
+            ticks > 0)
+        {
+            return new DateTime(ticks, DateTimeKind.Utc);
+        }
+
+        return null;
+    }
+
+    private static string FormatMinutes(long minutes)
+    {
+        var safeMinutes = Math.Max(minutes, 0);
+        var hours = safeMinutes / 60;
+        var remainingMinutes = safeMinutes % 60;
+
+        if (hours == 0)
+        {
+            return $"{remainingMinutes} min";
+        }
+
+        if (remainingMinutes == 0)
+        {
+            return $"{hours} godz.";
+        }
+
+        return $"{hours} godz. {remainingMinutes} min";
     }
 
     private static string BuildDescription(Violation violation)
@@ -156,6 +365,14 @@ public class ViolationQueryService : IViolationQueryService
                 "Tygodniowy czas jazdy przekroczył limit 56 godzin.",
             "EU561_BIWEEKLY_DRIVING_90H" or "BI_WEEKLY_DRIVING_LIMIT" =>
                 "Czas jazdy w dwóch kolejnych tygodniach przekroczył limit 90 godzin.",
+            "MISSING_START_COUNTRY" =>
+                "Brakuje wpisu kraju rozpoczęcia dnia pracy.",
+            "MISSING_END_COUNTRY" =>
+                "Brakuje wpisu kraju zakończenia dnia pracy.",
+            "INVALID_COUNTRY_CODE" =>
+                "Kod kraju jest pusty albo nierozpoznany.",
+            "INCOMPLETE_COUNTRY_DATA" =>
+                "Dane kraju rozpoczęcia lub zakończenia są niepełne.",
             _ => violation.ViolationType
         };
     }
@@ -175,6 +392,10 @@ public class ViolationQueryService : IViolationQueryService
             "DAILY_DRIVING_LIMIT" or
             "CONTINUOUS_DRIVING_BREAK" or
             "DAILY_REST" or
+            "MISSING_START_COUNTRY" or
+            "MISSING_END_COUNTRY" or
+            "INVALID_COUNTRY_CODE" or
+            "INCOMPLETE_COUNTRY_DATA" or
             "EU561_WEEKLY_DRIVING_56H" or
             "WEEKLY_DRIVING_LIMIT" or
             "EU561_BIWEEKLY_DRIVING_90H" or

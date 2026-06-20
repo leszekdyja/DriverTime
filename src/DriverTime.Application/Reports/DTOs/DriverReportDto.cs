@@ -37,11 +37,15 @@ public class DriverReportDto
 
 public class DriverReportActivityDto
 {
+    public Guid DddFileId { get; set; }
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;
+
+    public string VehicleRegistration { get; set; } = string.Empty;
 
     public long DurationSeconds { get; set; }
 }

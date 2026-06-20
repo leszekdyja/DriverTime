@@ -155,6 +155,10 @@ public class DailyRestViolationRule : IComplianceRule
         string reason)
     {
         var longestRestMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
+        var requiredRestMinutes = reason == "MissingContinuousReducedDailyRest"
+            ? ReducedDailyRestMinutes
+            : RegularDailyRestMinutes;
+        var missingRestMinutes = Math.Max(requiredRestMinutes - longestRestMinutes, 0);
         var finalDescription = BuildDescription(reason, startUtc, analysisWindowEndUtc, longestRest.Duration);
 
         return new ComplianceViolationCandidate
@@ -170,6 +174,9 @@ public class DailyRestViolationRule : IComplianceRule
             Metadata = new Dictionary<string, object>
             {
                 ["restMinutes"] = longestRestMinutes,
+                ["actualRestMinutes"] = longestRestMinutes,
+                ["requiredRestMinutes"] = requiredRestMinutes,
+                ["missingRestMinutes"] = missingRestMinutes,
                 ["longestRestMinutes"] = longestRestMinutes,
                 ["analysisWindowStartUtc"] = startUtc.ToString("O"),
                 ["analysisWindowEndUtc"] = analysisWindowEndUtc.ToString("O"),

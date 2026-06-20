@@ -106,7 +106,11 @@ function formatMinutes(minutes: number) {
         return `${restMinutes} min`;
     }
 
-    return `${hours} godz. ${restMinutes.toString().padStart(2, "0")} min`;
+    if (restMinutes === 0) {
+        return `${hours} godz.`;
+    }
+
+    return `${hours} godz. ${restMinutes} min`;
 }
 
 function displayDriver(violation: DriverViolation) {
@@ -198,6 +202,101 @@ function getViolationDuration(violation: DriverViolation) {
     return overrun > 0
         ? `+${formatMinutes(overrun)} ponad limit`
         : `${formatMinutes(violation.actualDurationMinutes)} / limit ${formatMinutes(violation.limitDurationMinutes)}`;
+}
+
+function getViolationMetadata(violation: DriverViolation) {
+    if (violation.metadata) {
+        return violation.metadata;
+    }
+
+    if (!violation.metadataJson) {
+        return {};
+    }
+
+    try {
+        return JSON.parse(violation.metadataJson) as Record<string, number | string | null>;
+    } catch {
+        return {};
+    }
+}
+
+function getMetadataNumber(
+    metadata: Record<string, number | string | null>,
+    key: string,
+) {
+    const value = metadata[key];
+
+    if (typeof value === "number") {
+        return value;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    return null;
+}
+
+function getBusinessDetailsRows(violation: DriverViolation) {
+    const metadata = getViolationMetadata(violation);
+    const details = violation.businessDetails;
+    const actualRestMinutes =
+        details?.actualRestMinutes
+        ?? getMetadataNumber(metadata, "actualRestMinutes")
+        ?? getMetadataNumber(metadata, "longestRestMinutes")
+        ?? getMetadataNumber(metadata, "restMinutes");
+    const requiredRestMinutes =
+        details?.requiredRestMinutes
+        ?? getMetadataNumber(metadata, "requiredRestMinutes");
+    const missingRestMinutes =
+        details?.missingRestMinutes
+        ?? getMetadataNumber(metadata, "missingRestMinutes");
+    const reducedWeeklyRestMinutes =
+        details?.reducedWeeklyRestMinutes
+        ?? getMetadataNumber(metadata, "reducedRestMinutes");
+    const compensationDebtMinutes =
+        details?.compensationDebtMinutes
+        ?? getMetadataNumber(metadata, "compensationDebtMinutes");
+    const compensationDeadlineUtc = details?.compensationDeadlineUtc;
+    const countryIssueMessage =
+        details?.countryIssueMessage?.trim()
+        || (typeof metadata.message === "string" ? metadata.message : "");
+    const rows: Array<[string, string]> = [];
+
+    if (actualRestMinutes !== null && actualRestMinutes !== undefined) {
+        rows.push(["Rzeczywisty odpoczynek", formatMinutes(actualRestMinutes)]);
+    }
+
+    if (requiredRestMinutes !== null && requiredRestMinutes !== undefined) {
+        rows.push(["Wymagane minimum", formatMinutes(requiredRestMinutes)]);
+    }
+
+    if (missingRestMinutes !== null && missingRestMinutes !== undefined && missingRestMinutes > 0) {
+        rows.push(["Brakujący odpoczynek", formatMinutes(missingRestMinutes)]);
+    }
+
+    if (reducedWeeklyRestMinutes !== null && reducedWeeklyRestMinutes !== undefined) {
+        rows.push(["Skrócony odpoczynek tygodniowy", formatMinutes(reducedWeeklyRestMinutes)]);
+    }
+
+    if (compensationDebtMinutes !== null && compensationDebtMinutes !== undefined) {
+        rows.push(["Rekompensata do odebrania", formatMinutes(compensationDebtMinutes)]);
+    }
+
+    if (compensationDeadlineUtc) {
+        rows.push(["Termin rekompensaty", formatDate(compensationDeadlineUtc)]);
+    }
+
+    if (countryIssueMessage) {
+        rows.push(["Dane kraju", countryIssueMessage]);
+    }
+
+    return {
+        summary: details?.summary?.trim() || countryIssueMessage,
+        rows,
+    };
 }
 
 function getLegalExplanation(violation: DriverViolation) {
@@ -823,6 +922,9 @@ function ViolationDetailsModal({
 }) {
     const severity = normalizeSeverity(violation.severity);
     const status = normalizeStatus(violation.status);
+    const businessDetails = getBusinessDetailsRows(violation);
+    const hasBusinessDetails =
+        businessDetails.summary.length > 0 || businessDetails.rows.length > 0;
 
     return (
         <div className="violation-modal-backdrop" role="presentation" onClick={onClose}>
@@ -861,8 +963,24 @@ function ViolationDetailsModal({
                     <div><dt>Start</dt><dd>{formatDate(violation.occurredAtUtc)}</dd></div>
                     <div><dt>Koniec</dt><dd>{formatDate(violation.periodEndUtc || violation.occurredAtUtc)}</dd></div>
                     <div><dt>Czas / przekroczenie</dt><dd>{getViolationDuration(violation)}</dd></div>
-                    <div><dt>Kod</dt><dd>{violation.code || "Brak kodu"}</dd></div>
                 </dl>
+
+                {hasBusinessDetails && (
+                    <section className="violation-details-section">
+                        <h4>Szczegóły</h4>
+                        {businessDetails.summary && <p>{businessDetails.summary}</p>}
+                        {businessDetails.rows.length > 0 && (
+                            <dl className="violation-business-details">
+                                {businessDetails.rows.map(([label, value]) => (
+                                    <div key={label}>
+                                        <dt>{label}</dt>
+                                        <dd>{value}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        )}
+                    </section>
+                )}
 
                 <section className="violation-details-section">
                     <h4>Opis</h4>

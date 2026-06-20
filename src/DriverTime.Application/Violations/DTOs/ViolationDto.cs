@@ -33,4 +33,25 @@ public class ViolationDto
     public long LimitDurationMinutes { get; set; }
 
     public string MetadataJson { get; set; } = string.Empty;
+
+    public ViolationBusinessDetailsDto? BusinessDetails { get; set; }
+}
+
+public class ViolationBusinessDetailsDto
+{
+    public long? ActualRestMinutes { get; set; }
+
+    public long? RequiredRestMinutes { get; set; }
+
+    public long? MissingRestMinutes { get; set; }
+
+    public long? ReducedWeeklyRestMinutes { get; set; }
+
+    public long? CompensationDebtMinutes { get; set; }
+
+    public DateTime? CompensationDeadlineUtc { get; set; }
+
+    public string CountryIssueMessage { get; set; } = string.Empty;
+
+    public string Summary { get; set; } = string.Empty;
 }

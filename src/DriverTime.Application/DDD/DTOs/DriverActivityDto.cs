@@ -12,6 +12,12 @@ public class DriverActivityDto
 
     public string DriverCardNumber { get; set; } = string.Empty;
 
+    public string VehicleRegistration { get; set; } = string.Empty;
+
+    public string VehicleRegistrationNumber { get; set; } = string.Empty;
+
+    public string Vehicle { get; set; } = string.Empty;
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }

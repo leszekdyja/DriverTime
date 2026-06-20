@@ -81,6 +81,13 @@ function getActivityClass(activityType: string) {
     return "other";
 }
 
+function getVehicle(activity: ReportActivity) {
+    return activity.vehicleRegistration
+        || activity.vehicleRegistrationNumber
+        || activity.vehicle
+        || "Brak danych";
+}
+
 function escapeCsv(value: string | number) {
     return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -237,6 +244,7 @@ export default function ReportsPage() {
                 "Typ aktywności",
                 "Czas trwania",
                 "Czas trwania (sekundy)",
+                "Pojazd",
             ],
             ...activities.map((activity) => [
                 formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName),
@@ -246,6 +254,7 @@ export default function ReportsPage() {
                 getActivityLabel(activity.activityType),
                 formatDuration(activity.durationSeconds),
                 activity.durationSeconds,
+                getVehicle(activity),
             ]),
         ];
         const csv = rows
@@ -480,6 +489,7 @@ export default function ReportsPage() {
                                         <th>Koniec</th>
                                         <th>Aktywność</th>
                                         <th>Czas</th>
+                                        <th>Pojazd</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -501,6 +511,7 @@ export default function ReportsPage() {
                                             <td data-label="Czas">
                                                 <strong>{formatDuration(activity.durationSeconds)}</strong>
                                             </td>
+                                            <td data-label="Pojazd">{getVehicle(activity)}</td>
                                         </tr>
                                     ))}
                                 </tbody>

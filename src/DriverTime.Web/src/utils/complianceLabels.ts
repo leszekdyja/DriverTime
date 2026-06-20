@@ -11,6 +11,10 @@ const ruleLabels: Record<string, string> = {
     "weekly rest compensation": "Kompensacja odpoczynku tygodniowego",
     "reduced weekly rest compensation": "Kompensacja skróconego odpoczynku tygodniowego",
     "reduced daily rest counter": "Limit skróconych odpoczynków dziennych",
+    "brak kraju rozpoczęcia": "Brak kraju rozpoczęcia",
+    "brak kraju zakończenia": "Brak kraju zakończenia",
+    "nieprawidłowy kod kraju": "Nieprawidłowy kod kraju",
+    "niepełne dane kraju": "Niepełne dane kraju",
 };
 
 const codeLabels: Record<string, string> = {
@@ -25,6 +29,10 @@ const codeLabels: Record<string, string> = {
     WEEKLY_REST_COMPENSATION: "Kompensacja odpoczynku tygodniowego",
     REDUCED_WEEKLY_REST_COMPENSATION: "Kompensacja skróconego odpoczynku tygodniowego",
     REDUCED_DAILY_REST_COUNTER: "Limit skróconych odpoczynków dziennych",
+    MISSING_START_COUNTRY: "Brak kraju rozpoczęcia",
+    MISSING_END_COUNTRY: "Brak kraju zakończenia",
+    INVALID_COUNTRY_CODE: "Nieprawidłowy kod kraju",
+    INCOMPLETE_COUNTRY_DATA: "Niepełne dane kraju",
 };
 
 const severityLabels: Record<string, string> = {

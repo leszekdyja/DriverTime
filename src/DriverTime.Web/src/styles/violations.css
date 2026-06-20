@@ -595,6 +595,39 @@
     line-height: 1.68;
 }
 
+.violation-business-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0 0;
+}
+
+.violation-business-details div {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.violation-business-details dt,
+.violation-business-details dd {
+    margin: 0;
+}
+
+.violation-business-details dt {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.violation-business-details dd {
+    margin-top: 6px;
+    color: var(--text);
+    font-weight: 760;
+}
+
 .violation-details-section.recommendation {
     border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
     background: var(--primary-soft);
@@ -720,6 +753,10 @@
     }
 
     .violation-details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .violation-business-details {
         grid-template-columns: 1fr;
     }
 }

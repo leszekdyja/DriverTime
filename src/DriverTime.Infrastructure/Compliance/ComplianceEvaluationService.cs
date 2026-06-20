@@ -18,7 +18,11 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         "WEEKLY_DRIVING_LIMIT",
         "BI_WEEKLY_DRIVING_LIMIT",
         "EU561_WEEKLY_DRIVING_56H",
-        "EU561_BIWEEKLY_DRIVING_90H"
+        "EU561_BIWEEKLY_DRIVING_90H",
+        "MISSING_START_COUNTRY",
+        "MISSING_END_COUNTRY",
+        "INVALID_COUNTRY_CODE",
+        "INCOMPLETE_COUNTRY_DATA"
     ];
 
     private readonly DriverTimeDbContext _dbContext;

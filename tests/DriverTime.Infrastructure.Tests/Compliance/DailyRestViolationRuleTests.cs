@@ -100,6 +100,9 @@ public class DailyRestViolationRuleTests
         Assert.AreEqual("2026-06-17T00:00:00.0000000Z", result.Violations[0].Metadata["analysisWindowStartUtc"]);
         Assert.AreEqual("2026-06-18T00:00:00.0000000Z", result.Violations[0].Metadata["analysisWindowEndUtc"]);
         Assert.AreEqual(300L, result.Violations[0].Metadata["longestRestMinutes"]);
+        Assert.AreEqual(300L, result.Violations[0].Metadata["actualRestMinutes"]);
+        Assert.AreEqual(540L, result.Violations[0].Metadata["requiredRestMinutes"]);
+        Assert.AreEqual(240L, result.Violations[0].Metadata["missingRestMinutes"]);
         Assert.AreEqual(540L, result.Violations[0].Metadata["requiredReducedRestMinutes"]);
         Assert.AreEqual("MissingContinuousReducedDailyRest", result.Violations[0].Metadata["reason"]);
     }

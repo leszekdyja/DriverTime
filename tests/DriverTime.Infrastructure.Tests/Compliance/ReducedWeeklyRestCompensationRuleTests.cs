@@ -66,6 +66,7 @@ public class ReducedWeeklyRestCompensationRuleTests
         Assert.AreEqual(24L * 60, result.Violations[0].Metadata["reducedRestMinutes"]);
         Assert.AreEqual(45L * 60, result.Violations[0].Metadata["requiredRegularWeeklyRestMinutes"]);
         Assert.AreEqual(21L * 60, result.Violations[0].Metadata["compensationDebtMinutes"]);
+        Assert.IsTrue(result.Violations[0].Metadata.ContainsKey("compensationDeadlineUtc"));
     }
 
     [TestMethod]

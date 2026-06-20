@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<IComplianceRule, ReducedWeeklyRestRule>();
         services.AddScoped<IComplianceRule, ReducedWeeklyRestCompensationRule>();
         services.AddScoped<IComplianceRule, SixTwentyFourHourPeriodsRule>();
+        services.AddScoped<ICountryEntryComplianceRule, CountryEntryCompletenessRule>();
 
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
 

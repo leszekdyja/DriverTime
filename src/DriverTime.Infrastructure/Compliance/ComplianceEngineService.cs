@@ -2,6 +2,8 @@ using DriverTime.Application.Compliance;
 using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
+using DriverTime.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
 
@@ -9,17 +11,23 @@ namespace DriverTime.Infrastructure.Compliance;
 
 public class ComplianceEngineService : IComplianceEngineService
 {
+    private readonly DriverTimeDbContext _dbContext;
     private readonly ITimelineBuilderService _timelineBuilder;
     private readonly IEnumerable<IComplianceRule> _rules;
+    private readonly IEnumerable<ICountryEntryComplianceRule> _countryEntryRules;
     private readonly ILogger<ComplianceEngineService> _logger;
 
     public ComplianceEngineService(
+        DriverTimeDbContext dbContext,
         ITimelineBuilderService timelineBuilder,
         IEnumerable<IComplianceRule> rules,
+        IEnumerable<ICountryEntryComplianceRule> countryEntryRules,
         ILogger<ComplianceEngineService> logger)
     {
+        _dbContext = dbContext;
         _timelineBuilder = timelineBuilder;
         _rules = rules;
+        _countryEntryRules = countryEntryRules;
         _logger = logger;
     }
 
@@ -48,6 +56,13 @@ public class ComplianceEngineService : IComplianceEngineService
             return null;
         }
 
+        var countryEntries = await BuildCountryEntriesForDriverAsync(
+            companyId,
+            driverId,
+            analysisRange.QueryStartUtc,
+            analysisRange.QueryEndUtc,
+            cancellationToken);
+
         _logger.LogInformation(
             "Compliance preview timeline built for driver {DriverId}. Activities count={Count}.",
             driverId,
@@ -62,6 +77,20 @@ public class ComplianceEngineService : IComplianceEngineService
 
             _logger.LogInformation(
                 "Compliance rule {Rule} returned {Count} violations for driver {DriverId}.",
+                rule.Code,
+                ruleViolations.Count,
+                driverId);
+
+            violationCandidates.AddRange(ruleViolations);
+        }
+
+        foreach (var rule in _countryEntryRules)
+        {
+            var ruleResult = rule.Evaluate(driverId, timeline, countryEntries);
+            var ruleViolations = ruleResult.Violations;
+
+            _logger.LogInformation(
+                "Compliance country-entry rule {Rule} returned {Count} violations for driver {DriverId}.",
                 rule.Code,
                 ruleViolations.Count,
                 driverId);
@@ -120,6 +149,32 @@ public class ComplianceEngineService : IComplianceEngineService
         };
     }
 
+    private async Task<IReadOnlyList<ComplianceCountryEntry>> BuildCountryEntriesForDriverAsync(
+        Guid companyId,
+        Guid driverId,
+        DateTime queryStartUtc,
+        DateTime queryEndUtc,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.CountryEntries
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == companyId &&
+                x.DddFile.DriverId == driverId &&
+                x.EntryTimeUtc >= queryStartUtc &&
+                x.EntryTimeUtc <= queryEndUtc)
+            .OrderBy(x => x.EntryTimeUtc)
+            .Select(x => new ComplianceCountryEntry
+            {
+                SourceCountryEntryId = x.Id,
+                DriverId = driverId,
+                DddFileId = x.DddFileId,
+                CountryCode = x.CountryCode,
+                EntryTimeUtc = x.EntryTimeUtc
+            })
+            .ToListAsync(cancellationToken);
+    }
+
     private static DateTime Min(DateTime left, DateTime right) =>
         left <= right ? left : right;
 
@@ -156,6 +211,7 @@ public class ComplianceEngineService : IComplianceEngineService
             BiWeeklyDrivingMinutes = BuildBiWeeklyDrivingMinutes(drivingActivities),
             RegisteredRuleCodes = _rules
                 .Select(x => x.Code)
+                .Concat(_countryEntryRules.Select(x => x.Code))
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct()
                 .OrderBy(x => x)
