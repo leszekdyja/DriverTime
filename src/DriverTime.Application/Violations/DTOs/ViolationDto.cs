@@ -53,5 +53,17 @@ public class ViolationBusinessDetailsDto
 
     public string CountryIssueMessage { get; set; } = string.Empty;
 
+    public long? ContinuousDrivingMinutes { get; set; }
+
+    public long? RequiredBreakMinutes { get; set; }
+
+    public long? ReceivedBreakMinutes { get; set; }
+
+    public long? DrivingLimitMinutes { get; set; }
+
+    public long? DrivingExceededMinutes { get; set; }
+
+    public string BreakType { get; set; } = string.Empty;
+
     public string Summary { get; set; } = string.Empty;
 }

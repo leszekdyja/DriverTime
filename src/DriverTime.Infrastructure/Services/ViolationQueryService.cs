@@ -150,6 +150,17 @@ public class ViolationQueryService : IViolationQueryService
             return BuildDailyRestDetails(metadata);
         }
 
+        if (code.Contains("CONTINUOUS_DRIVING_BREAK", StringComparison.Ordinal))
+        {
+            return BuildContinuousDrivingBreakDetails(metadata);
+        }
+
+        if (code.Contains("DAILY_DRIVING", StringComparison.Ordinal) ||
+            code.Contains("DAILY_DRIVING_LIMIT", StringComparison.Ordinal))
+        {
+            return BuildDailyDrivingDetails(metadata);
+        }
+
         if (code.Contains("WEEKLY_REST_COMPENSATION", StringComparison.Ordinal))
         {
             return BuildWeeklyRestCompensationDetails(metadata);
@@ -194,6 +205,79 @@ public class ViolationQueryService : IViolationQueryService
             Summary = missingRestMinutes > 0
                 ? $"Odpoczynek wyniósł {FormatMinutes(actualRestMinutes.Value)}, wymagane minimum {FormatMinutes(requiredRestMinutes.Value)}. Brakowało {FormatMinutes(missingRestMinutes)}."
                 : $"Odpoczynek wyniósł {FormatMinutes(actualRestMinutes.Value)}, wymagane minimum {FormatMinutes(requiredRestMinutes.Value)}."
+        };
+    }
+
+    private static ViolationBusinessDetailsDto? BuildContinuousDrivingBreakDetails(
+        IReadOnlyDictionary<string, JsonElement> metadata)
+    {
+        var continuousDrivingMinutes = GetLong(metadata, "continuousDrivingMinutes");
+        var requiredBreakMinutes = GetLong(metadata, "requiredBreakMinutes");
+        var receivedBreakMinutes = GetLong(metadata, "receivedBreakMinutes");
+        var exceededMinutes = GetLong(metadata, "exceededMinutes");
+        var breakType = GetString(metadata, "breakType") ?? string.Empty;
+
+        if (!continuousDrivingMinutes.HasValue)
+        {
+            return null;
+        }
+
+        var summary = $"Ciągła jazda wyniosła {FormatMinutes(continuousDrivingMinutes.Value)}.";
+        if (requiredBreakMinutes.HasValue)
+        {
+            summary += $" Wymagana przerwa: {FormatMinutes(requiredBreakMinutes.Value)} albo 15 + 30 min.";
+        }
+
+        if (receivedBreakMinutes.HasValue && receivedBreakMinutes.Value > 0)
+        {
+            summary += $" Odebrana przerwa przed naruszeniem: {FormatMinutes(receivedBreakMinutes.Value)}.";
+        }
+
+        if (exceededMinutes.HasValue && exceededMinutes.Value > 0)
+        {
+            summary += $" Przekroczenie limitu: {FormatMinutes(exceededMinutes.Value)}.";
+        }
+
+        return new ViolationBusinessDetailsDto
+        {
+            ContinuousDrivingMinutes = continuousDrivingMinutes,
+            RequiredBreakMinutes = requiredBreakMinutes,
+            ReceivedBreakMinutes = receivedBreakMinutes,
+            DrivingExceededMinutes = exceededMinutes,
+            BreakType = breakType,
+            Summary = summary
+        };
+    }
+
+    private static ViolationBusinessDetailsDto? BuildDailyDrivingDetails(
+        IReadOnlyDictionary<string, JsonElement> metadata)
+    {
+        var totalDrivingMinutes = GetLong(metadata, "totalDrivingMinutes");
+        var limitMinutes = GetLong(metadata, "limitMinutes");
+        var exceededMinutes = GetLong(metadata, "exceededMinutes");
+
+        if (!totalDrivingMinutes.HasValue)
+        {
+            return null;
+        }
+
+        var summary = $"Dzienny czas jazdy wyniósł {FormatMinutes(totalDrivingMinutes.Value)}.";
+        if (limitMinutes.HasValue)
+        {
+            summary += $" Limit dla tego naruszenia: {FormatMinutes(limitMinutes.Value)}.";
+        }
+
+        if (exceededMinutes.HasValue && exceededMinutes.Value > 0)
+        {
+            summary += $" Przekroczenie limitu: {FormatMinutes(exceededMinutes.Value)}.";
+        }
+
+        return new ViolationBusinessDetailsDto
+        {
+            ContinuousDrivingMinutes = totalDrivingMinutes,
+            DrivingLimitMinutes = limitMinutes,
+            DrivingExceededMinutes = exceededMinutes,
+            Summary = summary
         };
     }
 

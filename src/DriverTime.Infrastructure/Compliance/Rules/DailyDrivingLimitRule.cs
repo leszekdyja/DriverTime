@@ -54,7 +54,7 @@ public class DailyDrivingLimitRule : IComplianceRule
                 : StandardDailyLimit;
             var exceededMinutes = Math.Max(
                 0,
-                (long)Math.Round((day.TotalDriving - StandardDailyLimit).TotalMinutes));
+                (long)Math.Round((day.TotalDriving - limit).TotalMinutes));
 
             result.Violations.Add(new ComplianceViolationCandidate
             {
@@ -69,6 +69,9 @@ public class DailyDrivingLimitRule : IComplianceRule
                 Metadata = new Dictionary<string, object>
                 {
                     ["totalDrivingMinutes"] = (long)Math.Round(day.TotalDriving.TotalMinutes),
+                    ["limitMinutes"] = (long)Math.Round(limit.TotalMinutes),
+                    ["standardDailyLimitMinutes"] = (long)Math.Round(StandardDailyLimit.TotalMinutes),
+                    ["extendedDailyLimitMinutes"] = (long)Math.Round(ExtendedDailyLimit.TotalMinutes),
                     ["exceededMinutes"] = exceededMinutes
                 }
             });

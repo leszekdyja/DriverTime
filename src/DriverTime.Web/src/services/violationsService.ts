@@ -30,6 +30,12 @@ export type ViolationBusinessDetails = {
     compensationDebtMinutes?: number | null;
     compensationDeadlineUtc?: string | null;
     countryIssueMessage?: string;
+    continuousDrivingMinutes?: number | null;
+    requiredBreakMinutes?: number | null;
+    receivedBreakMinutes?: number | null;
+    drivingLimitMinutes?: number | null;
+    drivingExceededMinutes?: number | null;
+    breakType?: string;
     summary?: string;
 };
 

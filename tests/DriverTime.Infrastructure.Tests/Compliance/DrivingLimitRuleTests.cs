@@ -263,6 +263,140 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
+    public void ContinuousDrivingBreak_WithFourHoursThirtyOneMinutesWithoutBreak_ReturnsViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:31:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(271, result.Violations[0].ActualMinutes);
+        Assert.AreEqual(270, result.Violations[0].LimitMinutes);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithFortyFiveMinuteRest_ResetsCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:30:00Z", "2026-06-08T13:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:00Z", "2026-06-08T17:00:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithSplitFifteenAndThirtyMinutes_ResetsCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:30:00Z", "2026-06-08T12:45:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T12:45:00Z", "2026-06-08T13:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T13:15:00Z", "2026-06-08T13:45:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:45:00Z", "2026-06-08T17:00:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithSplitThirtyAndFifteenMinutes_ReturnsViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:30:00Z", "2026-06-08T13:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T13:00:00Z", "2026-06-08T13:15:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(270, result.Violations[0].ActualMinutes);
+        Assert.AreEqual(30L, result.Violations[0].Metadata["receivedBreakMinutes"]);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithWorkBetweenDriving_DoesNotResetCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T12:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T12:30:00Z", "2026-06-08T13:01:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(271, result.Violations[0].ActualMinutes);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithFortyFiveMinuteAvailability_ResetsCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-08T12:30:00Z", "2026-06-08T13:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:00Z", "2026-06-08T17:00:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void DailyDrivingLimit_WithNineHoursDrivingOnly_ReturnsNoViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T17:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T17:00:00Z", "2026-06-08T19:00:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void DailyDrivingLimit_WithMoreThanTenHoursDrivingOnly_ReturnsHighViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T16:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T16:30:00Z", "2026-06-08T18:30:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("HIGH", result.Violations[0].Severity);
+        Assert.AreEqual(10 * 60 + 30, result.Violations[0].ActualMinutes);
+        Assert.AreEqual(10 * 60, result.Violations[0].LimitMinutes);
+    }
+
+    [TestMethod]
     public void ComplianceTimelineNormalization_RemovesLongDrivingCoveredByRestAndWork()
     {
         var driverId = Guid.NewGuid();

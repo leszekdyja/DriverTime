@@ -263,6 +263,25 @@ function getBusinessDetailsRows(violation: DriverViolation) {
     const countryIssueMessage =
         details?.countryIssueMessage?.trim()
         || (typeof metadata.message === "string" ? metadata.message : "");
+    const continuousDrivingMinutes =
+        details?.continuousDrivingMinutes
+        ?? getMetadataNumber(metadata, "continuousDrivingMinutes")
+        ?? getMetadataNumber(metadata, "totalDrivingMinutes");
+    const requiredBreakMinutes =
+        details?.requiredBreakMinutes
+        ?? getMetadataNumber(metadata, "requiredBreakMinutes");
+    const receivedBreakMinutes =
+        details?.receivedBreakMinutes
+        ?? getMetadataNumber(metadata, "receivedBreakMinutes");
+    const drivingLimitMinutes =
+        details?.drivingLimitMinutes
+        ?? getMetadataNumber(metadata, "limitMinutes");
+    const drivingExceededMinutes =
+        details?.drivingExceededMinutes
+        ?? getMetadataNumber(metadata, "exceededMinutes");
+    const breakType =
+        details?.breakType?.trim()
+        || (typeof metadata.breakType === "string" ? metadata.breakType : "");
     const rows: Array<[string, string]> = [];
 
     if (actualRestMinutes !== null && actualRestMinutes !== undefined) {
@@ -291,6 +310,30 @@ function getBusinessDetailsRows(violation: DriverViolation) {
 
     if (countryIssueMessage) {
         rows.push(["Dane kraju", countryIssueMessage]);
+    }
+
+    if (continuousDrivingMinutes !== null && continuousDrivingMinutes !== undefined) {
+        rows.push(["Rzeczywisty czas jazdy", formatMinutes(continuousDrivingMinutes)]);
+    }
+
+    if (drivingLimitMinutes !== null && drivingLimitMinutes !== undefined && drivingLimitMinutes > 0) {
+        rows.push(["Limit jazdy", formatMinutes(drivingLimitMinutes)]);
+    }
+
+    if (drivingExceededMinutes !== null && drivingExceededMinutes !== undefined && drivingExceededMinutes > 0) {
+        rows.push(["Przekroczenie limitu", formatMinutes(drivingExceededMinutes)]);
+    }
+
+    if (requiredBreakMinutes !== null && requiredBreakMinutes !== undefined && requiredBreakMinutes > 0) {
+        rows.push(["Wymagana przerwa", `${formatMinutes(requiredBreakMinutes)} albo 15 + 30 min`]);
+    }
+
+    if (receivedBreakMinutes !== null && receivedBreakMinutes !== undefined && receivedBreakMinutes > 0) {
+        rows.push(["Odebrana przerwa", formatMinutes(receivedBreakMinutes)]);
+    }
+
+    if (breakType) {
+        rows.push(["Rodzaj problemu z przerwą", breakType]);
     }
 
     return {
