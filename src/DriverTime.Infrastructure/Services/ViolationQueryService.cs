@@ -9,6 +9,8 @@ namespace DriverTime.Infrastructure.Services;
 
 public class ViolationQueryService : IViolationQueryService
 {
+    private const int DefaultQueryRangeDays = 60;
+
     private readonly DriverTimeDbContext _dbContext;
     private readonly ILogger<ViolationQueryService> _logger;
 
@@ -30,6 +32,16 @@ public class ViolationQueryService : IViolationQueryService
         CancellationToken cancellationToken = default)
     {
         var query = BuildCompanyQuery(companyId);
+        var hasCustomRange = fromDate.HasValue || toDate.HasValue;
+
+        if (!hasCustomRange)
+        {
+            var toUtc = DateTime.UtcNow;
+            var fromUtc = toUtc.AddDays(-DefaultQueryRangeDays);
+            query = query.Where(x =>
+                x.ViolationEnd >= fromUtc &&
+                x.ViolationStart <= toUtc);
+        }
 
         if (driverId.HasValue)
         {

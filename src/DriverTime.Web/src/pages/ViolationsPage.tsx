@@ -4,13 +4,16 @@ import { useSearchParams } from "react-router-dom";
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
-    getComplianceViolationsForDrivers,
     getDrivers,
     type ComplianceDriver,
 } from "../services/complianceService";
 import { exportViolationsExcel } from "../services/excelExportService";
 import { exportViolationsPdf } from "../services/pdfExportService";
-import type { DriverViolation } from "../services/violationsService";
+import {
+    getDriverViolations,
+    type DriverViolation,
+    type ViolationFilters,
+} from "../services/violationsService";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/violations.css";
@@ -257,15 +260,35 @@ export default function ViolationsPage() {
     const [error, setError] = useState("");
     const [filterError, setFilterError] = useState("");
 
+    async function loadViolationData(filters?: ViolationFilters) {
+        setIsLoading(true);
+        setError("");
+
+        try {
+            setViolations(await getDriverViolations(filters));
+        } catch (loadError) {
+            setError(
+                loadError instanceof Error
+                    ? loadError.message
+                    : "Wystąpił błąd podczas pobierania naruszeń.",
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
     useEffect(() => {
         async function loadViolations() {
             setIsLoading(true);
             setError("");
 
             try {
-                const loadedDrivers = await getDrivers();
+                const [loadedDrivers, loadedViolations] = await Promise.all([
+                    getDrivers(),
+                    getDriverViolations(),
+                ]);
                 setDrivers(loadedDrivers);
-                setViolations(await getComplianceViolationsForDrivers(loadedDrivers));
+                setViolations(loadedViolations);
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
@@ -441,9 +464,16 @@ export default function ViolationsPage() {
         }
 
         setFilterError("");
+        void loadViolationData({
+            driverId: selectedDriver,
+            fromDate: dateFrom,
+            toDate: dateTo,
+            severity: selectedSeverity,
+            type: violationTypeFilter,
+        });
     }
 
-    function clearFilters() {
+    async function clearFilters() {
         setSelectedDriver("");
         setSelectedSeverity("");
         setSelectedStatus("");
@@ -451,6 +481,7 @@ export default function ViolationsPage() {
         setDateFrom("");
         setDateTo("");
         setFilterError("");
+        await loadViolationData();
     }
 
     function handleRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, violation: DriverViolation) {
