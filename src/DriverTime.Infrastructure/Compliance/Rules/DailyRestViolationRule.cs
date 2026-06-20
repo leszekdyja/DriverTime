@@ -10,6 +10,7 @@ public class DailyRestViolationRule : IComplianceRule
     private const long RegularDailyRestMinutes = 660;
     private const long ReducedDailyRestMinutes = 540;
     private const long FirstSplitDailyRestMinutes = 180;
+    private static readonly TimeSpan BoundaryRestTolerance = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan RegularDailyRest = TimeSpan.FromMinutes(RegularDailyRestMinutes);
     private static readonly TimeSpan ReducedDailyRest = TimeSpan.FromMinutes(ReducedDailyRestMinutes);
     private static readonly TimeSpan FirstSplitDailyRest = TimeSpan.FromMinutes(FirstSplitDailyRestMinutes);
@@ -64,7 +65,8 @@ public class DailyRestViolationRule : IComplianceRule
         {
             dutyPeriods++;
             var windowEnd = currentPeriodStart.AddHours(24);
-            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd);
+            var allowBoundaryRest = currentPeriodStart == dutyActivities[0].StartUtc;
+            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd, allowBoundaryRest);
             var splitRegularRest = FindSplitRegularDailyRestInWindow(restPeriods, currentPeriodStart, windowEnd);
             var restMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
             maxLongestRest = Max(maxLongestRest, longestRest.Duration);
@@ -72,7 +74,9 @@ public class DailyRestViolationRule : IComplianceRule
             if (longestRest.Duration >= RegularDailyRest || splitRegularRest is not null)
             {
                 var restEndUtc = splitRegularRest?.SecondRest.EndUtc ?? longestRest.EndUtc;
-                var nextDuty = GetNextDutyAfterRest(dutyActivities, restEndUtc);
+                var nextDuty = restEndUtc <= currentPeriodStart
+                    ? GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart)
+                    : GetNextDutyAfterRest(dutyActivities, restEndUtc);
                 if (nextDuty is null)
                 {
                     break;
@@ -95,7 +99,9 @@ public class DailyRestViolationRule : IComplianceRule
                     longestRest: longestRest,
                     reason: "ReducedDailyRest"));
 
-                var nextDuty = GetNextDutyAfterRest(dutyActivities, longestRest.EndUtc);
+                var nextDuty = longestRest.EndUtc <= currentPeriodStart
+                    ? GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart)
+                    : GetNextDutyAfterRest(dutyActivities, longestRest.EndUtc);
                 if (nextDuty is null)
                 {
                     break;
@@ -257,15 +263,35 @@ public class DailyRestViolationRule : IComplianceRule
     private static RestPeriod FindLongestRestInWindow(
         IReadOnlyList<RestPeriod> restPeriods,
         DateTime windowStart,
-        DateTime windowEnd)
+        DateTime windowEnd,
+        bool allowBoundaryRest)
     {
-        return restPeriods
+        var boundaryRest = allowBoundaryRest
+            ? restPeriods
+                .Where(x =>
+                    x.StartUtc < windowStart &&
+                    x.EndUtc >= windowStart.Subtract(BoundaryRestTolerance) &&
+                    x.Duration >= ReducedDailyRest)
+                .OrderByDescending(x => x.Duration)
+                .ThenBy(x => x.StartUtc)
+                .FirstOrDefault()
+            : null;
+
+        var longestRestInWindow = restPeriods
             .Where(x => x.StartUtc < windowEnd && x.EndUtc > windowStart)
             .Select(x => new RestPeriod(Max(x.StartUtc, windowStart), Min(x.EndUtc, windowEnd)))
             .Where(x => x.StartUtc < x.EndUtc)
             .OrderByDescending(x => x.Duration)
             .ThenBy(x => x.StartUtc)
-            .FirstOrDefault() ?? new RestPeriod(windowStart, windowStart);
+            .FirstOrDefault();
+
+        if (boundaryRest is not null &&
+            (longestRestInWindow is null || boundaryRest.Duration >= longestRestInWindow.Duration))
+        {
+            return boundaryRest;
+        }
+
+        return longestRestInWindow ?? new RestPeriod(windowStart, windowStart);
     }
 
     private static SplitRegularRest? FindSplitRegularDailyRestInWindow(
@@ -307,6 +333,13 @@ public class DailyRestViolationRule : IComplianceRule
         DateTime restEndUtc)
     {
         return dutyActivities.FirstOrDefault(x => x.StartUtc >= restEndUtc);
+    }
+
+    private static TimelineActivity? GetNextDutyAfterPeriodStart(
+        IReadOnlyList<TimelineActivity> dutyActivities,
+        DateTime currentPeriodStart)
+    {
+        return dutyActivities.FirstOrDefault(x => x.StartUtc > currentPeriodStart);
     }
 
     private static bool ShouldReportMissingReducedRest(
