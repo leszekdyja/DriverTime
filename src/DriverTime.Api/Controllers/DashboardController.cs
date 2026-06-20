@@ -18,9 +18,11 @@ public class DashboardController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<DashboardDto>> GetDashboard(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
-        var dashboard = await _dashboardService.GetDashboardAsync(cancellationToken);
+        var dashboard = await _dashboardService.GetDashboardAsync(from, to, cancellationToken);
         return Ok(dashboard);
     }
 

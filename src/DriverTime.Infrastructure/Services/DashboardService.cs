@@ -13,6 +13,8 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DashboardService : IDashboardService
 {
+    private const int DefaultDashboardRangeDays = 60;
+
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
     private readonly IDownloadScheduleService _downloadScheduleService;
@@ -31,45 +33,167 @@ public class DashboardService : IDashboardService
     }
 
     public async Task<DashboardDto> GetDashboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
         CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
+        var (rangeStartUtc, rangeEndUtc) = ResolveDashboardRange(now, fromUtc, toUtc);
+        var importTrendStartUtc = rangeEndUtc.Date.AddDays(-6);
         var companyId = _currentUser.CompanyId;
         var driverDownloads = await _downloadScheduleService.GetDriverDownloadsAsync(companyId, cancellationToken);
         var vehicleDownloads = await _downloadScheduleService.GetVehicleDownloadsAsync(companyId, cancellationToken);
 
-        var highSeverityDrivers = await _dbContext.Violations
+        var violationsQuery = _dbContext.Violations
             .AsNoTracking()
             .Where(x =>
                 x.Driver != null
                 && x.Driver.CompanyId == companyId
-                && (x.Severity.ToLower() == "critical"
-                    || x.Severity.ToLower() == "high"
-                    || x.Severity.ToLower() == "severe"
-                    || x.Severity.ToLower() == "very serious"
-                    || x.Severity.ToLower() == "very-serious"))
+                && x.ViolationEnd >= rangeStartUtc
+                && x.ViolationStart <= rangeEndUtc);
+
+        var highSeverityDrivers = await violationsQuery
+            .Where(x =>
+                x.Severity.ToLower() == "critical"
+                || x.Severity.ToLower() == "high"
+                || x.Severity.ToLower() == "severe"
+                || x.Severity.ToLower() == "very serious"
+                || x.Severity.ToLower() == "very-serious")
             .Select(x => x.DriverId)
             .Distinct()
             .CountAsync(cancellationToken);
 
-        var mediumSeverityDrivers = await _dbContext.Violations
-            .AsNoTracking()
+        var mediumSeverityDrivers = await violationsQuery
             .Where(x =>
-                x.Driver != null
-                && x.Driver.CompanyId == companyId
-                && (x.Severity.ToLower() == "warning"
-                    || x.Severity.ToLower() == "medium"
-                    || x.Severity.ToLower() == "serious"))
+                x.Severity.ToLower() == "warning"
+                || x.Severity.ToLower() == "medium"
+                || x.Severity.ToLower() == "serious")
             .Select(x => x.DriverId)
             .Distinct()
             .CountAsync(cancellationToken);
+
+        var activityRows = await _dbContext.DriverActivities
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == companyId
+                && x.EndUtc >= rangeStartUtc
+                && x.StartUtc <= rangeEndUtc)
+            .Select(x => new ActivityInterval(
+                x.Id,
+                x.ActivityType,
+                x.StartUtc,
+                x.EndUtc))
+            .ToListAsync(cancellationToken);
+
+        var mergedActivities = ActivityIntervalAggregationHelper.ClipAndMergeByType(
+            activityRows,
+            rangeStartUtc,
+            rangeEndUtc);
+
+        var activityCounts = activityRows
+            .GroupBy(x => ActivityIntervalAggregationHelper.NormalizeActivityType(x.ActivityType))
+            .ToDictionary(x => x.Key, x => x.Count());
+
+        var activitySummaries = mergedActivities
+            .GroupBy(x => ActivityIntervalAggregationHelper.NormalizeActivityType(x.ActivityType))
+            .Select(x => new DashboardActivitySummaryDto
+            {
+                ActivityType = x.Key,
+                Count = activityCounts.GetValueOrDefault(x.Key),
+                DurationSeconds = x.Sum(activity => ActivityIntervalAggregationHelper.GetDurationSeconds(
+                    activity.StartUtc,
+                    activity.EndUtc))
+            })
+            .ToList();
+
+        var importTrendRows = await _dbContext.DddFiles
+            .AsNoTracking()
+            .Where(x =>
+                x.CompanyId == companyId
+                && x.UploadedAtUtc >= importTrendStartUtc
+                && x.UploadedAtUtc <= rangeEndUtc)
+            .Select(x => x.UploadedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var importCountsByDay = importTrendRows
+            .GroupBy(x => x.Date)
+            .ToDictionary(x => x.Key, x => x.Count());
+
+        var importTrend = Enumerable.Range(0, 7)
+            .Select(index =>
+            {
+                var day = importTrendStartUtc.AddDays(index);
+
+                return new DashboardImportTrendDto
+                {
+                    DayUtc = day,
+                    ImportsCount = importCountsByDay.GetValueOrDefault(day)
+                };
+            })
+            .ToList();
+
+        var latestImports = await _dbContext.DddFiles
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId)
+            .OrderByDescending(x => x.UploadedAtUtc)
+            .Take(5)
+            .Select(x => new DashboardLatestImportDto
+            {
+                Id = x.Id,
+                FileName = x.FileName,
+                DriverFirstName = x.DriverFirstName,
+                DriverLastName = x.DriverLastName,
+                DriverCardNumber = x.DriverCardNumber,
+                DriverStatus = x.DriverCreatedDuringImport ? "new" : "existing",
+                UploadedAtUtc = x.UploadedAtUtc,
+                ActivitiesCount = x.DriverActivities.Count
+            })
+            .ToListAsync(cancellationToken);
+
+        var violationSummaries = await violationsQuery
+            .GroupBy(x => x.Severity)
+            .Select(x => new
+            {
+                Severity = x.Key,
+                Count = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var latestViolations = await violationsQuery
+            .OrderByDescending(x => x.ViolationStart)
+            .Take(8)
+            .Select(x => new DashboardLatestViolationDto
+            {
+                Id = x.Id,
+                DriverId = x.DriverId,
+                Code = x.RegulationReference,
+                DriverFirstName = x.Driver != null ? x.Driver.FirstName : string.Empty,
+                DriverLastName = x.Driver != null ? x.Driver.LastName : string.Empty,
+                DriverCardNumber = x.Driver != null ? x.Driver.CardNumber : string.Empty,
+                ViolationType = x.ViolationType,
+                OccurredAtUtc = x.ViolationStart,
+                PeriodEndUtc = x.ViolationEnd,
+                Description = x.ViolationType,
+                Severity = x.Severity
+            })
+            .ToListAsync(cancellationToken);
 
         return new DashboardDto
         {
             DddFilesCount = await _dbContext.DddFiles
                 .CountAsync(x => x.CompanyId == companyId, cancellationToken),
+            DriversCount = await _dbContext.Drivers
+                .CountAsync(x => x.CompanyId == companyId, cancellationToken),
+            VehiclesCount = await _dbContext.Vehicles
+                .CountAsync(x => x.CompanyId == companyId && x.Active, cancellationToken),
+            ViolationsCount = await violationsQuery
+                .CountAsync(cancellationToken),
             DriverActivitiesCount = await _dbContext.DriverActivities
-                .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
+                .CountAsync(
+                    x => x.DddFile.CompanyId == companyId
+                         && x.EndUtc >= rangeStartUtc
+                         && x.StartUtc <= rangeEndUtc,
+                    cancellationToken),
             VehicleUsesCount = await _dbContext.VehicleUses
                 .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
             CountryEntriesCount = await _dbContext.CountryEntries
@@ -83,8 +207,54 @@ public class DashboardService : IDashboardService
             VehicleDownloadsDueIn14Days = CountDownloadsDueInDays(vehicleDownloads, 14),
             DriversWithHighViolations = highSeverityDrivers,
             DriversWithMediumViolations = mediumSeverityDrivers,
-            GeneratedAtUtc = now
+            GeneratedAtUtc = now,
+            RangeStartUtc = rangeStartUtc,
+            RangeEndUtc = rangeEndUtc,
+            ActivitySummaries = activitySummaries,
+            ImportTrend = importTrend,
+            LatestImports = latestImports,
+            ViolationSummaries = violationSummaries
+                .Select(x => new DashboardViolationSummaryDto
+                {
+                    Severity = GetSeverityGroup(x.Severity),
+                    Count = x.Count
+                })
+                .GroupBy(x => x.Severity)
+                .Select(x => new DashboardViolationSummaryDto
+                {
+                    Severity = x.Key,
+                    Count = x.Sum(item => item.Count)
+                })
+                .ToList(),
+            LatestViolations = latestViolations
         };
+    }
+
+    private static (DateTime RangeStartUtc, DateTime RangeEndUtc) ResolveDashboardRange(
+        DateTime nowUtc,
+        DateTime? fromUtc,
+        DateTime? toUtc)
+    {
+        var rangeEndUtc = toUtc.HasValue
+            ? EnsureUtc(toUtc.Value)
+            : nowUtc;
+        var rangeStartUtc = fromUtc.HasValue
+            ? EnsureUtc(fromUtc.Value)
+            : rangeEndUtc.AddDays(-DefaultDashboardRangeDays);
+
+        if (rangeEndUtc <= rangeStartUtc)
+        {
+            rangeEndUtc = rangeStartUtc.AddDays(1);
+        }
+
+        return (rangeStartUtc, rangeEndUtc);
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc);
     }
 
     public async Task<DriverRiskOverviewDto> GetRiskOverviewAsync(

@@ -1,9 +1,12 @@
 import { apiFetch } from "./apiClient";
-import { getDddImports, type DddImport } from "./dddImportsService";
+import type { DddImport } from "./dddImportsService";
 import type { DownloadDashboard } from "./downloadsService";
 
 type DashboardSummary = {
     dddFilesCount: number;
+    driversCount: number;
+    vehiclesCount: number;
+    violationsCount: number;
     driverActivitiesCount: number;
     countryEntriesCount: number;
     vehicleUsesCount: number;
@@ -17,6 +20,13 @@ type DashboardSummary = {
     driversWithHighViolations: number;
     driversWithMediumViolations: number;
     generatedAtUtc: string;
+    rangeStartUtc: string;
+    rangeEndUtc: string;
+    activitySummaries: DashboardActivitySummary[];
+    importTrend: DashboardImportTrend[];
+    latestImports: DddImport[];
+    violationSummaries: DashboardViolationSummary[];
+    latestViolations: DashboardViolation[];
 };
 
 export type DashboardDriver = {
@@ -37,15 +47,48 @@ export type DriverActivity = {
     durationSeconds: number;
 };
 
+export type DashboardActivitySummary = {
+    activityType: string;
+    count: number;
+    durationSeconds: number;
+};
+
+export type DashboardImportTrend = {
+    dayUtc: string;
+    importsCount: number;
+};
+
+export type DashboardViolationSummary = {
+    severity: string;
+    count: number;
+};
+
+export type DashboardViolation = {
+    id: string;
+    driverId: string;
+    code: string;
+    driverFirstName: string;
+    driverLastName: string;
+    driverCardNumber: string;
+    violationType: string;
+    occurredAtUtc: string;
+    periodEndUtc: string;
+    description: string;
+    severity: string;
+};
+
 export type DashboardData = {
     totalImports: number;
     totalDrivers: number;
     totalActivities: number;
     totalVehicles: number;
+    totalViolations: number;
     latestImportDate: string | null;
-    imports: DddImport[];
     latestImports: DddImport[];
-    activities: DriverActivity[];
+    activitySummaries: DashboardActivitySummary[];
+    importTrend: DashboardImportTrend[];
+    violationSummaries: DashboardViolationSummary[];
+    latestViolations: DashboardViolation[];
     alerts: DashboardAlerts;
 };
 
@@ -101,8 +144,6 @@ export type ComplianceRunDashboardStats = {
     lastSchedulerViolationsCount: number;
 };
 
-const dashboardActivityLookbackDays = 60;
-
 async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     const response = await apiFetch(path);
 
@@ -113,42 +154,24 @@ async function getJson<T>(path: string, errorMessage: string): Promise<T> {
     return response.json() as Promise<T>;
 }
 
-function getDashboardActivitiesPath() {
-    const from = new Date();
-    from.setUTCDate(from.getUTCDate() - dashboardActivityLookbackDays);
-
-    const parameters = new URLSearchParams({
-        from: from.toISOString(),
-    });
-
-    return `/api/driver-activities?${parameters.toString()}`;
-}
-
 export async function getDashboardData(): Promise<DashboardData> {
-    const [summary, drivers, imports, activities] = await Promise.all([
-        getJson<DashboardSummary>(
-            "/api/dashboard",
-            "Nie udało się pobrać podsumowania dashboardu.",
-        ),
-        getDashboardDrivers(),
-        getDddImports(),
-        getJson<DriverActivity[]>(
-            getDashboardActivitiesPath(),
-            "Nie udało się pobrać statystyk aktywności.",
-        ),
-    ]);
-
-    const latestImports = imports.slice(0, 5);
+    const summary = await getJson<DashboardSummary>(
+        "/api/dashboard",
+        "Nie udało się pobrać podsumowania dashboardu.",
+    );
 
     return {
         totalImports: summary.dddFilesCount,
-        totalDrivers: drivers.length,
+        totalDrivers: summary.driversCount,
         totalActivities: summary.driverActivitiesCount,
-        totalVehicles: summary.vehicleUsesCount,
-        latestImportDate: latestImports[0]?.uploadedAtUtc ?? null,
-        imports,
-        latestImports,
-        activities,
+        totalVehicles: summary.vehiclesCount,
+        totalViolations: summary.violationsCount,
+        latestImportDate: summary.latestImports[0]?.uploadedAtUtc ?? null,
+        latestImports: summary.latestImports,
+        activitySummaries: summary.activitySummaries,
+        importTrend: summary.importTrend,
+        violationSummaries: summary.violationSummaries,
+        latestViolations: summary.latestViolations,
         alerts: {
             overdueDriverDownloads: summary.overdueDriverDownloads,
             driverDownloadsDueIn7Days: summary.driverDownloadsDueIn7Days,

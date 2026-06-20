@@ -19,7 +19,7 @@ import {
     type ComplianceRunDashboardStats,
     type DashboardData,
     type DashboardDriver,
-    type DriverActivity,
+    type DashboardViolation,
 } from "../services/dashboardService";
 import {
     getDriverDownloads,
@@ -28,15 +28,10 @@ import {
     type DriverDownload,
     type VehicleDownload,
 } from "../services/downloadsService";
-import {
-    getDriverViolations,
-    type DriverViolation,
-} from "../services/violationsService";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/dashboard.css";
 
-const refreshIntervalMs = 30_000;
 const maxOperationalAlerts = 8;
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -124,7 +119,7 @@ function getDriverName(firstName: string, lastName: string) {
     return formatDriverNameOrFallback(firstName, lastName);
 }
 
-function getViolationType(violation: DriverViolation) {
+function getViolationType(violation: DashboardViolation) {
     return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
@@ -243,54 +238,20 @@ function getDriverDisplayName(driver: Pick<DashboardDriver, "firstName" | "lastN
 }
 
 function buildImportChartData(dashboard: DashboardData): ImportChartData[] {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const days = Array.from({ length: 7 }, (_, index) => {
-        const date = new Date(today);
-        date.setDate(today.getDate() - (6 - index));
+    return dashboard.importTrend.map((item) => {
+        const date = new Date(item.dayUtc);
 
         return {
-            day: toDayKey(date),
-            label: shortDateFormatter.format(date),
-            imports: 0,
+            day: Number.isNaN(date.getTime()) ? item.dayUtc : toDayKey(date),
+            label: Number.isNaN(date.getTime()) ? item.dayUtc : shortDateFormatter.format(date),
+            imports: item.importsCount,
         };
     });
-
-    const indexByDay = new Map(days.map((item, index) => [item.day, index]));
-
-    dashboard.imports.forEach((dddImport) => {
-        const date = new Date(dddImport.uploadedAtUtc);
-
-        if (Number.isNaN(date.getTime())) {
-            return;
-        }
-
-        date.setHours(0, 0, 0, 0);
-        const day = toDayKey(date);
-        const index = indexByDay.get(day);
-
-        if (index !== undefined) {
-            days[index] = {
-                ...days[index],
-                imports: days[index].imports + 1,
-            };
-        }
-    });
-
-    return days;
-}
-
-function sumActivitiesDuration(activities: DriverActivity[]) {
-    return activities.reduce(
-        (total, activity) => total + Math.max(activity.durationSeconds, 0),
-        0,
-    );
 }
 
 export default function DashboardPage() {
     const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-    const [violations, setViolations] = useState<DriverViolation[]>([]);
+    const [violations, setViolations] = useState<DashboardViolation[]>([]);
     const [complianceStats, setComplianceStats] = useState<ComplianceRunDashboardStats | null>(null);
     const [downloadStats, setDownloadStats] = useState<DownloadDashboard | null>(null);
     const [drivers, setDrivers] = useState<DashboardDriver[]>([]);
@@ -319,7 +280,6 @@ export default function DashboardPage() {
         try {
             const [
                 dashboardData,
-                violationData,
                 healthStatus,
                 complianceResult,
                 downloadResult,
@@ -328,7 +288,6 @@ export default function DashboardPage() {
                 vehicleDownloadsResult,
             ] = await Promise.all([
                 getDashboardData(),
-                getDriverViolations(),
                 checkApiHealth().catch(() => false),
                 getComplianceRunDashboardStats()
                     .then((data) => ({ data, error: "" }))
@@ -352,7 +311,7 @@ export default function DashboardPage() {
             ]);
 
             setDashboard(dashboardData);
-            setViolations(violationData);
+            setViolations(dashboardData.latestViolations);
             setApiOnline(healthStatus);
             setComplianceStats(complianceResult.data);
             setComplianceStatsError(complianceResult.error);
@@ -380,26 +339,18 @@ export default function DashboardPage() {
 
     useEffect(() => {
         void loadDashboard(true);
-
-        const intervalId = window.setInterval(() => {
-            void loadDashboard(false);
-        }, refreshIntervalMs);
-
-        return () => window.clearInterval(intervalId);
     }, [loadDashboard]);
 
     const activityStatistics = useMemo<ActivityChartData[]>((() => {
         return activityDefinitions.map((definition) => {
-            const matchingActivities =
-                dashboard?.activities.filter(
-                    (activity) =>
-                        activity.activityType.toUpperCase() === definition.type,
-                ) ?? [];
-            const duration = sumActivitiesDuration(matchingActivities);
+            const summary = dashboard?.activitySummaries.find(
+                (activity) => activity.activityType.toUpperCase() === definition.type,
+            );
+            const duration = Math.max(summary?.durationSeconds ?? 0, 0);
 
             return {
                 ...definition,
-                count: matchingActivities.length,
+                count: summary?.count ?? 0,
                 duration,
                 hours: Number((duration / 3600).toFixed(2)),
             };
@@ -413,22 +364,22 @@ export default function DashboardPage() {
     const violationChartData = useMemo<ViolationChartData[]>(() => {
         return violationSeverityDefinitions.map((definition) => ({
             ...definition,
-            count: violations.filter(
-                (violation) => normalizeViolationGroup(violation.severity) === definition.severity,
-            ).length,
+            count: dashboard?.violationSummaries
+                .filter((violation) => normalizeViolationGroup(violation.severity) === definition.severity)
+                .reduce((total, violation) => total + violation.count, 0) ?? 0,
         }));
-    }, [violations]);
+    }, [dashboard]);
 
     const violationSummary = useMemo(() => {
-        const severe = violations.filter((violation) =>
-            normalizeSeverity(violation.severity) === "critical",
-        ).length;
-        const serious = violations.filter((violation) =>
-            normalizeSeverity(violation.severity) === "danger",
-        ).length;
+        const severe = dashboard?.violationSummaries
+            .filter((violation) => normalizeSeverity(violation.severity) === "critical")
+            .reduce((total, violation) => total + violation.count, 0) ?? 0;
+        const serious = dashboard?.violationSummaries
+            .filter((violation) => normalizeSeverity(violation.severity) === "danger")
+            .reduce((total, violation) => total + violation.count, 0) ?? 0;
 
         return {
-            total: violations.length,
+            total: dashboard?.totalViolations ?? 0,
             severe,
             serious,
             today: violations.filter((violation) => isToday(violation.occurredAtUtc)).length,
@@ -437,7 +388,7 @@ export default function DashboardPage() {
                 .slice(0, 4),
             latest: violations.slice(0, 4),
         };
-    }, [violations]);
+    }, [dashboard, violations]);
 
     const operationalAlerts = useMemo<OperationalAlert[]>(() => {
         const alerts: OperationalAlert[] = [];
@@ -551,13 +502,20 @@ export default function DashboardPage() {
 
     const realtimeWidgets = useMemo(() => {
         const latestImport = dashboard?.latestImports[0] ?? null;
-        const todayActivities = dashboard?.activities.filter((activity) => isToday(activity.startUtc)) ?? [];
+        const activityCount = dashboard?.activitySummaries.reduce(
+            (total, activity) => total + Math.max(activity.count, 0),
+            0,
+        ) ?? 0;
+        const activityDuration = dashboard?.activitySummaries.reduce(
+            (total, activity) => total + Math.max(activity.durationSeconds, 0),
+            0,
+        ) ?? 0;
         const latestViolations = violations.filter((violation) => isWithinLastDay(violation.occurredAtUtc));
 
         return {
             latestImport,
-            todayActivities,
-            todayActivityDuration: sumActivitiesDuration(todayActivities),
+            activityCount,
+            activityDuration,
             latestViolations,
         };
     }, [dashboard, violations]);
@@ -642,8 +600,8 @@ export default function DashboardPage() {
 
                 <article className="dashboard-realtime-card success">
                     <span>Aktywność dzisiaj</span>
-                    <strong>{formatDuration(realtimeWidgets.todayActivityDuration)}</strong>
-                    <p>{realtimeWidgets.todayActivities.length} zdarzeń z dzisiejszą datą</p>
+                    <strong>{formatDuration(realtimeWidgets.activityDuration)}</strong>
+                    <p>{realtimeWidgets.activityCount} zdarzeń w zakresie dashboardu</p>
                     <small>Liczone z obecnych aktywności</small>
                 </article>
 

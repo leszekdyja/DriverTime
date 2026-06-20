@@ -6,6 +6,8 @@ namespace DriverTime.Application.Interfaces;
 public interface IDashboardService
 {
     Task<DashboardDto> GetDashboardAsync(
+        DateTime? fromUtc = null,
+        DateTime? toUtc = null,
         CancellationToken cancellationToken = default);
 
     Task<DriverRiskOverviewDto> GetRiskOverviewAsync(
