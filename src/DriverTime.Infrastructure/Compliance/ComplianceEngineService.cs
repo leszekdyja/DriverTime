@@ -27,11 +27,20 @@ public class ComplianceEngineService : IComplianceEngineService
         Guid companyId,
         Guid driverId,
         bool includeTimeline = false,
+        DateTime? rangeStartUtc = null,
+        DateTime? rangeEndUtc = null,
         CancellationToken cancellationToken = default)
     {
+        var analysisRange = ComplianceAnalysisRange.Resolve(
+            DateTime.UtcNow,
+            rangeStartUtc,
+            rangeEndUtc);
+
         var timeline = await _timelineBuilder.BuildForDriverAsync(
             companyId,
             driverId,
+            analysisRange.QueryStartUtc,
+            analysisRange.QueryEndUtc,
             cancellationToken);
 
         if (timeline is null)
@@ -61,6 +70,9 @@ public class ComplianceEngineService : IComplianceEngineService
         }
 
         var violations = violationCandidates
+            .Where(x => analysisRange.IntersectsVisibleRange(
+                x.PeriodStartUtc,
+                x.PeriodEndUtc))
             .OrderBy(x => x.PeriodStartUtc)
             .ThenBy(x => x.Code)
             .Select(x => new ComplianceViolationPreviewDto
@@ -77,29 +89,42 @@ public class ComplianceEngineService : IComplianceEngineService
             })
             .ToList();
 
+        var visibleTimeline = timeline
+            .Where(x => analysisRange.IntersectsVisibleRange(
+                x.StartUtc,
+                x.EndUtc))
+            .ToList();
+
         var timelineEntries = includeTimeline
-            ? timeline
+            ? visibleTimeline
                 .Select(x => new ComplianceTimelineEntryDto
                 {
                     SourceActivityId = x.SourceActivityId,
                     ActivityType = x.ActivityType,
-                    StartUtc = x.StartUtc,
-                    EndUtc = x.EndUtc,
-                    DurationMinutes = (long)Math.Round(x.Duration.TotalMinutes)
+                    StartUtc = Max(x.StartUtc, analysisRange.VisibleStartUtc),
+                    EndUtc = Min(x.EndUtc, analysisRange.VisibleEndUtc),
+                    DurationMinutes = (long)Math.Round((Min(x.EndUtc, analysisRange.VisibleEndUtc) - Max(x.StartUtc, analysisRange.VisibleStartUtc)).TotalMinutes)
                 })
+                .Where(x => x.EndUtc > x.StartUtc)
                 .ToList()
             : [];
 
         return new CompliancePreviewResponseDto
         {
             DriverId = driverId,
-            TimelineCount = timeline.Count,
+            TimelineCount = visibleTimeline.Count,
             ViolationsCount = violations.Count,
             Timeline = timelineEntries,
             Violations = violations,
-            DebugSummary = BuildDebugSummary(timeline)
+            DebugSummary = BuildDebugSummary(visibleTimeline)
         };
     }
+
+    private static DateTime Min(DateTime left, DateTime right) =>
+        left <= right ? left : right;
+
+    private static DateTime Max(DateTime left, DateTime right) =>
+        left >= right ? left : right;
 
     private ComplianceDebugSummaryDto BuildDebugSummary(
         IReadOnlyList<TimelineActivity> timeline)

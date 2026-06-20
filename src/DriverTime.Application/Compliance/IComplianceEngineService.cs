@@ -8,5 +8,7 @@ public interface IComplianceEngineService
         Guid companyId,
         Guid driverId,
         bool includeTimeline = false,
+        DateTime? rangeStartUtc = null,
+        DateTime? rangeEndUtc = null,
         CancellationToken cancellationToken = default);
 }

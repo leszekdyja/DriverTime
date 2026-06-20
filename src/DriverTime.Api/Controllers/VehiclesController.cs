@@ -2,6 +2,7 @@ using DriverTime.Application.Interfaces;
 using DriverTime.Application.Vehicles.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
+using DriverTime.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -255,10 +256,17 @@ public class VehiclesController : ControllerBase
 
     private IQueryable<VehicleUse> BuildVehicleUsesQuery(string normalizedRegistration)
     {
+        var nowUtc = DateTime.UtcNow;
+        var latestAllowedUtc = nowUtc.AddDays(1);
+
         return _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.StartUtc >= VehicleUseDateValidator.MinimumStartUtc
+                && x.EndUtc > x.StartUtc
+                && x.StartUtc <= latestAllowedUtc
+                && x.EndUtc <= latestAllowedUtc
                 && x.RegistrationNumber != null
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5
                 && EF.Functions.Like(
@@ -268,10 +276,17 @@ public class VehiclesController : ControllerBase
 
     private IQueryable<VehicleActivitySource> BuildVehicleActivitiesQuery(string normalizedRegistration)
     {
+        var nowUtc = DateTime.UtcNow;
+        var latestAllowedUtc = nowUtc.AddDays(1);
+
         return _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.StartUtc >= VehicleUseDateValidator.MinimumStartUtc
+                && x.EndUtc > x.StartUtc
+                && x.StartUtc <= latestAllowedUtc
+                && x.EndUtc <= latestAllowedUtc
                 && x.RegistrationNumber != null
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5
                 && EF.Functions.Like(

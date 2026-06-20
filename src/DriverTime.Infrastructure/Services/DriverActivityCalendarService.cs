@@ -68,6 +68,8 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
             _currentUser.CompanyId,
             driverId,
             includeTimeline: false,
+            rangeStartUtc: fromUtc,
+            rangeEndUtc: toUtcExclusive,
             cancellationToken);
         var violations = preview?.Violations
             .Select(x => MapViolation(x, driver.FirstName, driver.LastName, driver.CardNumber))

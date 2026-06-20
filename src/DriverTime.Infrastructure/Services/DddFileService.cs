@@ -308,8 +308,13 @@ public class DddFileService : IDddFileService
             DriverCreatedDuringImport = driverCreated
         };
 
+        var nowUtc = DateTime.UtcNow;
+        parseResult.VehicleUses = parseResult.VehicleUses
+            .Where(x => IsValidVehicleUse(x, nowUtc))
+            .ToList();
+
         AddActivities(dddFile, parseResult.Activities);
-        AddVehicleUses(dddFile, parseResult.VehicleUses);
+        AddVehicleUses(dddFile, parseResult.VehicleUses, nowUtc);
         AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
         await AddMissingVehiclesAsync(companyId, parseResult.VehicleUses);
         _dbContext.DddFiles.Add(dddFile);
@@ -544,14 +549,17 @@ public class DddFileService : IDddFileService
 
     private static void AddVehicleUses(
         DddFile dddFile,
-        IEnumerable<ParsedVehicleUseDto> vehicleUses)
+        IEnumerable<ParsedVehicleUseDto> vehicleUses,
+        DateTime nowUtc)
     {
         foreach (var vehicleUse in vehicleUses)
         {
             var start = ParseDateTime(vehicleUse.Start);
             var end = ParseDateTime(vehicleUse.End);
 
-            if (!start.HasValue || !end.HasValue || end <= start)
+            if (!start.HasValue
+                || !end.HasValue
+                || !VehicleUseDateValidator.IsValid(start.Value, end.Value, nowUtc))
             {
                 continue;
             }
@@ -650,6 +658,18 @@ public class DddFileService : IDddFileService
     private static bool IsUsableVehicleRegistration(string value)
     {
         return GetVehicleRegistrationCompactValue(value).Length >= 5;
+    }
+
+    private static bool IsValidVehicleUse(
+        ParsedVehicleUseDto vehicleUse,
+        DateTime nowUtc)
+    {
+        var start = ParseDateTime(vehicleUse.Start);
+        var end = ParseDateTime(vehicleUse.End);
+
+        return start.HasValue
+            && end.HasValue
+            && VehicleUseDateValidator.IsValid(start.Value, end.Value, nowUtc);
     }
 
     private static bool HasFullerVehicleRegistrationVariant(

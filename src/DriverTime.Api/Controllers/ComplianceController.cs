@@ -30,7 +30,9 @@ public class ComplianceController : ControllerBase
     public async Task<ActionResult<CompliancePreviewResponseDto>> PreviewForDriver(
         Guid driverId,
         CancellationToken cancellationToken,
-        [FromQuery] bool includeTimeline = false)
+        [FromQuery] bool includeTimeline = false,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null)
     {
         if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
         {
@@ -44,6 +46,8 @@ public class ComplianceController : ControllerBase
             _currentUser.CompanyId,
             driverId,
             includeTimeline,
+            fromUtc,
+            toUtc,
             cancellationToken);
 
         if (preview is null)

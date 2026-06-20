@@ -22,6 +22,8 @@ public class TimelineBuilderService : ITimelineBuilderService
     public async Task<IReadOnlyList<TimelineActivity>?> BuildForDriverAsync(
         Guid companyId,
         Guid driverId,
+        DateTime? queryStartUtc = null,
+        DateTime? queryEndUtc = null,
         CancellationToken cancellationToken = default)
     {
         var driverExists = await _dbContext.Drivers
@@ -35,11 +37,25 @@ public class TimelineBuilderService : ITimelineBuilderService
             return null;
         }
 
-        var rawActivities = await _dbContext.DriverActivities
+        var activitiesQuery = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId &&
-                x.DddFile.DriverId == driverId)
+                x.DddFile.DriverId == driverId);
+
+        if (queryStartUtc.HasValue)
+        {
+            var startUtc = EnsureUtc(queryStartUtc.Value);
+            activitiesQuery = activitiesQuery.Where(x => x.EndUtc >= startUtc);
+        }
+
+        if (queryEndUtc.HasValue)
+        {
+            var endUtc = EnsureUtc(queryEndUtc.Value);
+            activitiesQuery = activitiesQuery.Where(x => x.StartUtc <= endUtc);
+        }
+
+        var rawActivities = await activitiesQuery
             .OrderBy(x => x.StartUtc)
             .Select(x => new
             {
