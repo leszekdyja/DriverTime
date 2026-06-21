@@ -8,6 +8,7 @@ import {
     type CalendarActivity,
     type DriverViolation,
 } from "../services/driverActivityCalendarService";
+import { getComplianceRuleLabel } from "../utils/complianceLabels";
 
 const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     weekday: "long",
@@ -125,6 +126,10 @@ function getActivityClass(activityType: string) {
 
 function getActivityLabel(activityType: string) {
     return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
+}
+
+function displayViolationType(violation: DriverViolation) {
+    return getComplianceRuleLabel(violation.violationType, violation.code);
 }
 
 function getTimelineStyle(activity: CalendarActivity) {
@@ -249,7 +254,7 @@ const CalendarDayCard = memo(function CalendarDayCard({ day }: { day: ActivityCa
                     {day.violations.map((violation, index) => (
                         <li key={`${violation.code}-${violation.occurredAtUtc}-${index}`}>
                             <span className={`severity-dot ${violation.severity.toLowerCase()}`} />
-                            <div><strong>{violation.violationType}</strong><p>{violation.description}</p><DailyRestViolationDetails violation={violation} /></div>
+                            <div><strong>{displayViolationType(violation)}</strong><p>{violation.description}</p><DailyRestViolationDetails violation={violation} /></div>
                         </li>
                     ))}
                 </ul>

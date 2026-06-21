@@ -1,10 +1,9 @@
 using DriverTime.Application.Drivers.DTOs;
-using DriverTime.Application.Compliance;
-using DriverTime.Application.Compliance.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -12,16 +11,13 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
-    private readonly IComplianceEngineService _complianceEngineService;
 
     public DriverActivityCalendarService(
         DriverTimeDbContext dbContext,
-        ICurrentUserService currentUser,
-        IComplianceEngineService complianceEngineService)
+        ICurrentUserService currentUser)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
-        _complianceEngineService = complianceEngineService;
     }
 
     public async Task<DriverActivityCalendarDto?> GetAsync(
@@ -64,17 +60,39 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
                 x.ActivityType
             })
             .ToListAsync(cancellationToken);
-        var preview = await _complianceEngineService.PreviewForDriverAsync(
-            _currentUser.CompanyId,
-            driverId,
-            includeTimeline: false,
-            rangeStartUtc: fromUtc,
-            rangeEndUtc: toUtcExclusive,
-            cancellationToken);
-        var violations = preview?.Violations
-            .Select(x => MapViolation(x, driver.FirstName, driver.LastName, driver.CardNumber))
-            .ToList()
-            ?? [];
+        var violations = await _dbContext.Violations
+            .AsNoTracking()
+            .Where(x =>
+                x.DriverId == driverId
+                && x.Driver != null
+                && x.Driver.CompanyId == _currentUser.CompanyId
+                && x.ViolationEnd >= fromUtc
+                && x.ViolationStart < toUtcExclusive)
+            .OrderBy(x => x.ViolationStart)
+            .Select(x => new
+            {
+                x.RegulationReference,
+                x.ViolationType,
+                x.ViolationStart,
+                x.ViolationEnd,
+                x.Severity,
+                x.DurationMinutes,
+                x.MetadataJson
+            })
+            .ToListAsync(cancellationToken);
+        var violationDtos = violations
+            .Select(x => MapViolation(
+                x.RegulationReference,
+                x.ViolationType,
+                x.ViolationStart,
+                x.ViolationEnd,
+                x.Severity,
+                x.DurationMinutes,
+                x.MetadataJson,
+                driver.FirstName,
+                driver.LastName,
+                driver.CardNumber))
+            .ToList();
         var result = new DriverActivityCalendarDto
         {
             DriverId = driverId,
@@ -121,10 +139,19 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
                 AddDuration(day, activity.ActivityType, seconds);
             }
 
-            day.Violations = violations
-                .Where(x => GetViolationPresentationDate(x) == date)
-                .OrderBy(x => x.OccurredAtUtc)
-                .ToList();
+            var hasActivityMinutes =
+                day.DrivingSeconds
+                + day.WorkSeconds
+                + day.RestSeconds
+                + day.AvailabilitySeconds
+                + day.OtherSeconds > 0;
+
+            day.Violations = hasActivityMinutes
+                ? violationDtos
+                    .Where(x => GetViolationPresentationDate(x) == date)
+                    .OrderBy(x => x.OccurredAtUtc)
+                    .ToList()
+                : [];
             result.Days.Add(day);
         }
 
@@ -135,26 +162,50 @@ public class DriverActivityCalendarService : IDriverActivityCalendarService
         DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
     private static DriverViolationDto MapViolation(
-        ComplianceViolationPreviewDto violation,
+        string code,
+        string violationType,
+        DateTime occurredAtUtc,
+        DateTime periodEndUtc,
+        string severity,
+        int durationMinutes,
+        string metadataJson,
         string firstName,
         string lastName,
         string cardNumber)
     {
         return new DriverViolationDto
         {
-            Code = violation.Code,
+            Code = code,
             DriverFirstName = firstName,
             DriverLastName = lastName,
             DriverCardNumber = cardNumber,
-            ViolationType = violation.RuleName,
-            OccurredAtUtc = violation.PeriodStartUtc,
-            PeriodEndUtc = violation.PeriodEndUtc,
-            Description = violation.Description,
-            Severity = violation.Severity,
-            ActualDurationMinutes = violation.ActualMinutes,
-            LimitDurationMinutes = violation.LimitMinutes,
-            Metadata = violation.Metadata
+            ViolationType = violationType,
+            OccurredAtUtc = occurredAtUtc,
+            PeriodEndUtc = periodEndUtc,
+            Description = violationType,
+            Severity = severity,
+            ActualDurationMinutes = durationMinutes,
+            LimitDurationMinutes = 0,
+            Metadata = ParseMetadata(metadataJson)
         };
+    }
+
+    private static Dictionary<string, object> ParseMetadata(string metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return new Dictionary<string, object>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(metadataJson)
+                ?? new Dictionary<string, object>();
+        }
+        catch (JsonException)
+        {
+            return new Dictionary<string, object>();
+        }
     }
 
     private static DateOnly GetViolationPresentationDate(

@@ -386,8 +386,7 @@ public class DailyRestViolationRule : IComplianceRule
     }
 
     private static bool IsRestCompatible(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase) ||
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Availability, StringComparison.OrdinalIgnoreCase);
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsDutyActivity(TimelineActivity activity) =>
         activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase) ||

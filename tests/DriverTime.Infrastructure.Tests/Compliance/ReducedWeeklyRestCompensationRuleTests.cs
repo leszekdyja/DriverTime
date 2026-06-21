@@ -66,7 +66,32 @@ public class ReducedWeeklyRestCompensationRuleTests
         Assert.AreEqual(24L * 60, result.Violations[0].Metadata["reducedRestMinutes"]);
         Assert.AreEqual(45L * 60, result.Violations[0].Metadata["requiredRegularWeeklyRestMinutes"]);
         Assert.AreEqual(21L * 60, result.Violations[0].Metadata["compensationDebtMinutes"]);
+        Assert.AreEqual(24L * 60, result.Violations[0].Metadata["actualRestMinutes"]);
+        Assert.AreEqual(45L * 60, result.Violations[0].Metadata["requiredRestMinutes"]);
+        Assert.AreEqual(21L * 60, result.Violations[0].Metadata["missingRestMinutes"]);
+        Assert.IsTrue(result.Violations[0].Metadata.ContainsKey("compensationDueDate"));
         Assert.IsTrue(result.Violations[0].Metadata.ContainsKey("compensationDeadlineUtc"));
+        Assert.IsTrue(result.Violations[0].Metadata.ContainsKey("relatedWeeklyRestStartUtc"));
+        Assert.IsTrue(result.Violations[0].Metadata.ContainsKey("relatedWeeklyRestEndUtc"));
+    }
+
+    [TestMethod]
+    public void Evaluate_WithFortyFourHourReducedRestWithoutCompensation_ReturnsOneHourDebtViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildBusyTimelineAfterReducedRest(
+            driverId,
+            firstDutyEndUtc: DateTime.Parse("2026-06-08T16:00:00Z").ToUniversalTime(),
+            nextDutyStartUtc: DateTime.Parse("2026-06-10T12:00:00Z").ToUniversalTime(),
+            busyUntilUtc: DateTime.Parse("2026-07-07T08:00:00Z").ToUniversalTime());
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(60, result.Violations[0].LimitMinutes);
+        Assert.AreEqual(44L * 60, result.Violations[0].Metadata["actualRestMinutes"]);
+        Assert.AreEqual(45L * 60, result.Violations[0].Metadata["requiredRestMinutes"]);
+        Assert.AreEqual(60L, result.Violations[0].Metadata["missingRestMinutes"]);
     }
 
     [TestMethod]

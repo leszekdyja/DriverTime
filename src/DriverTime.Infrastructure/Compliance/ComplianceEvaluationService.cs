@@ -68,6 +68,7 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         var preview = await _complianceEngineService.PreviewForDriverAsync(
             companyId,
             driverId,
+            includeTimeline: true,
             cancellationToken: cancellationToken);
 
         if (preview is null)
@@ -90,22 +91,41 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct()
             .ToList();
+        var replacementRange = ResolveReplacementRange(preview);
+
+        if (replacementRange is null)
+        {
+            _logger.LogInformation(
+                "Compliance evaluation completed for driver {DriverId}. No replacement range was available. CompanyId={CompanyId}, Timeline={TimelineCount}, Violations={ViolationCount}.",
+                driverId,
+                companyId,
+                preview.Timeline.Count,
+                preview.Violations.Count);
+
+            return 0;
+        }
 
         var deletedCount = await _dbContext.Violations
             .Where(x =>
                 x.DriverId == driverId &&
-                replaceableCodes.Contains(x.RegulationReference))
+                x.Driver != null &&
+                x.Driver.CompanyId == companyId &&
+                replaceableCodes.Contains(x.RegulationReference) &&
+                x.ViolationStart < replacementRange.EndUtc &&
+                x.ViolationEnd > replacementRange.StartUtc)
             .ExecuteDeleteAsync(cancellationToken);
 
         if (preview.Violations.Count == 0)
         {
             _logger.LogInformation(
-                "Compliance evaluation completed for driver {DriverId}. No violations detected. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, ReplaceableCodes={ReplaceableCodes}.",
+                "Compliance evaluation completed for driver {DriverId}. No violations detected. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, ReplaceableCodes={ReplaceableCodes}, ReplacementRange={ReplacementStartUtc:o}..{ReplacementEndUtc:o}.",
                 driverId,
                 companyId,
                 preview.Timeline.Count,
                 deletedCount,
-                string.Join(", ", replaceableCodes));
+                string.Join(", ", replaceableCodes),
+                replacementRange.StartUtc,
+                replacementRange.EndUtc);
 
             return 0;
         }
@@ -119,14 +139,55 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Compliance evaluation completed for driver {DriverId}. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, Saved violations: {Count}.",
+            "Compliance evaluation completed for driver {DriverId}. CompanyId={CompanyId}, Timeline={TimelineCount}, DeletedExisting={DeletedCount}, Saved violations: {Count}, ReplacementRange={ReplacementStartUtc:o}..{ReplacementEndUtc:o}.",
             driverId,
             companyId,
             preview.Timeline.Count,
             deletedCount,
-            violations.Count);
+            violations.Count,
+            replacementRange.StartUtc,
+            replacementRange.EndUtc);
 
         return violations.Count;
+    }
+
+    internal static ReplacementRange? ResolveReplacementRange(
+        CompliancePreviewResponseDto preview)
+    {
+        var starts = preview.Timeline
+            .Select(x => x.StartUtc)
+            .Concat(preview.Violations.Select(x => x.PeriodStartUtc))
+            .ToList();
+        var ends = preview.Timeline
+            .Select(x => x.EndUtc)
+            .Concat(preview.Violations.Select(x => x.PeriodEndUtc))
+            .ToList();
+
+        if (starts.Count == 0 || ends.Count == 0)
+        {
+            return null;
+        }
+
+        var startUtc = EnsureUtc(starts.Min());
+        var endUtc = EnsureUtc(ends.Max());
+
+        return endUtc > startUtc
+            ? new ReplacementRange(startUtc, endUtc)
+            : null;
+    }
+
+    internal static bool ShouldDeleteExistingViolation(
+        Violation violation,
+        Guid companyId,
+        Guid driverId,
+        ReplacementRange replacementRange,
+        IReadOnlyCollection<string> replaceableCodes)
+    {
+        return violation.DriverId == driverId
+            && violation.Driver?.CompanyId == companyId
+            && replaceableCodes.Contains(violation.RegulationReference)
+            && violation.ViolationStart < replacementRange.EndUtc
+            && violation.ViolationEnd > replacementRange.StartUtc;
     }
 
     private static Violation MapViolation(
@@ -177,4 +238,8 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
             ? value
             : DateTime.SpecifyKind(value, DateTimeKind.Utc);
     }
+
+    internal sealed record ReplacementRange(
+        DateTime StartUtc,
+        DateTime EndUtc);
 }

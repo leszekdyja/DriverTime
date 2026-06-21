@@ -56,8 +56,7 @@ public class WeeklyRestRuleTests
         var regularResult = _regularRule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(0, reducedResult.Violations.Count);
-        Assert.AreEqual(1, regularResult.Violations.Count);
-        Assert.AreEqual(30 * 60, regularResult.Violations[0].ActualMinutes);
+        Assert.AreEqual(0, regularResult.Violations.Count);
     }
 
     [TestMethod]
@@ -127,7 +126,7 @@ public class WeeklyRestRuleTests
     }
 
     [TestMethod]
-    public void WeeklyRest_AvailabilitySegment_IsCountedAsRestCompatibleTime()
+    public void WeeklyRest_AvailabilitySegment_IsNotCountedAsRestCompatibleTime()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -141,7 +140,48 @@ public class WeeklyRestRuleTests
         var reducedResult = _reducedRule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(0, regularResult.Violations.Count);
+        Assert.AreEqual(1, reducedResult.Violations.Count);
+        Assert.AreEqual(0, reducedResult.Violations[0].ActualMinutes);
+        Assert.AreEqual(24 * 60, reducedResult.Violations[0].LimitMinutes);
+        Assert.AreEqual(24L * 60, reducedResult.Violations[0].Metadata["missingRestMinutes"]);
+    }
+
+    [TestMethod]
+    public void ReducedWeeklyRest_WithFortyFourHourRest_ReturnsNoMinimumViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T08:00:00Z", "2026-06-08T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-10T12:00:00Z", "2026-06-10T16:00:00Z")
+        };
+
+        var reducedResult = _reducedRule.Evaluate(driverId, timeline);
+        var regularResult = _regularRule.Evaluate(driverId, timeline);
+
         Assert.AreEqual(0, reducedResult.Violations.Count);
+        Assert.AreEqual(0, regularResult.Violations.Count);
+    }
+
+    [TestMethod]
+    public void WeeklyRest_WithSeveralConsecutiveWeeks_UsesEachContinuousWeeklyRest()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T08:00:00Z", "2026-06-08T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-10T13:00:00Z", "2026-06-10T17:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-15T08:00:00Z", "2026-06-15T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-16T16:00:00Z", "2026-06-16T20:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-22T08:00:00Z", "2026-06-22T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-24T13:00:00Z", "2026-06-24T17:00:00Z")
+        };
+
+        var reducedResult = _reducedRule.Evaluate(driverId, timeline);
+        var regularResult = _regularRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, reducedResult.Violations.Count);
+        Assert.AreEqual(0, regularResult.Violations.Count);
     }
 
     private static TimelineActivity Activity(

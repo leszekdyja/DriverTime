@@ -77,6 +77,8 @@ public class ViolationDetectionService : IViolationDetectionService
         var deletedCount = await _dbContext.Violations
             .Where(x =>
                 x.DriverId == driverId &&
+                x.Driver != null &&
+                x.Driver.CompanyId == companyId &&
                 AutomaticViolationReferences.Contains(x.RegulationReference) &&
                 x.ViolationStart < toUtc &&
                 x.ViolationEnd > fromUtc)

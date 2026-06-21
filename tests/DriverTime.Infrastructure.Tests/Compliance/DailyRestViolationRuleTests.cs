@@ -363,7 +363,37 @@ public class DailyRestViolationRuleTests
     }
 
     [TestMethod]
-    public void Evaluate_WithRestAndAvailabilitySegments_MergesThemIntoDailyRest()
+    public void Evaluate_WithNoDutyActivitiesInFetchedRange_ReturnsNoViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-17T00:00:00Z", "2026-06-17T08:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-17T08:00:00Z", "2026-06-17T10:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithRestEndingAfterFetchedRange_ReturnsNoViolationWhenIncludedInTimeline()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T08:00:00Z", "2026-06-17T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-17T16:00:00Z", "2026-06-18T04:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithRestAndAvailabilitySegments_DoesNotMergeAvailabilityIntoDailyRest()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -376,7 +406,29 @@ public class DailyRestViolationRuleTests
 
         var result = _rule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(0, result.Violations.Count);
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("HIGH", result.Violations[0].Severity);
+        Assert.AreEqual(360, result.Violations[0].ActualMinutes);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithWorkBetweenRestSegments_DoesNotMergeThemIntoDailyRest()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T08:00:00Z", "2026-06-17T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-17T16:00:00Z", "2026-06-17T22:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T22:00:00Z", "2026-06-17T23:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-17T23:00:00Z", "2026-06-18T04:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-18T04:00:00Z", "2026-06-18T08:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("HIGH", result.Violations[0].Severity);
+        Assert.AreEqual(360, result.Violations[0].ActualMinutes);
     }
 
     private static IReadOnlyList<TimelineActivity> NormalizeComplianceTimeline(

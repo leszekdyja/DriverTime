@@ -41,7 +41,6 @@ public class ContinuousDrivingBreakRule : IComplianceRule
         var drivingSegments = 0;
         var resettingBreaks = 0;
         var pendingFirstSplitBreak = TimeSpan.Zero;
-        var violationPendingAfterSplitStart = false;
         DateTime? continuousStartUtc = null;
 
         var normalizedTimeline = WeeklyDrivingTimelineHelper.GetMergedDrivingTimeline(timeline)
@@ -62,25 +61,20 @@ public class ContinuousDrivingBreakRule : IComplianceRule
 
                 if (continuousDriving > ContinuousDrivingLimit)
                 {
-                    if (pendingFirstSplitBreak >= FirstSplitBreak)
-                    {
-                        violationPendingAfterSplitStart = true;
-                        continue;
-                    }
-
                     AddViolation(
                         result,
                         continuousStartUtc.Value,
                         activity.EndUtc,
                         continuousDriving,
                         pendingFirstSplitBreak,
-                        "Brak wymaganej przerwy");
+                        pendingFirstSplitBreak >= FirstSplitBreak
+                            ? "Missing second split break of at least 30 minutes"
+                            : "Missing required break");
 
                     ResetDrivingPeriod(
                         ref continuousDriving,
                         ref continuousStartUtc,
-                        ref pendingFirstSplitBreak,
-                        ref violationPendingAfterSplitStart);
+                        ref pendingFirstSplitBreak);
                 }
 
                 continue;
@@ -88,6 +82,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
 
             if (!IsQualifyingBreakActivity(activity))
             {
+                pendingFirstSplitBreak = TimeSpan.Zero;
                 continue;
             }
 
@@ -97,8 +92,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                 ResetDrivingPeriod(
                     ref continuousDriving,
                     ref continuousStartUtc,
-                    ref pendingFirstSplitBreak,
-                    ref violationPendingAfterSplitStart);
+                    ref pendingFirstSplitBreak);
                 continue;
             }
 
@@ -108,8 +102,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                 ResetDrivingPeriod(
                     ref continuousDriving,
                     ref continuousStartUtc,
-                    ref pendingFirstSplitBreak,
-                    ref violationPendingAfterSplitStart);
+                    ref pendingFirstSplitBreak);
                 continue;
             }
 
@@ -117,29 +110,6 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             {
                 pendingFirstSplitBreak = activity.Duration;
             }
-        }
-
-        if (violationPendingAfterSplitStart && continuousStartUtc.HasValue)
-        {
-            AddViolation(
-                result,
-                continuousStartUtc.Value,
-                normalizedTimeline.Last(x => x.StartUtc < x.EndUtc).EndUtc,
-                continuousDriving,
-                pendingFirstSplitBreak,
-                "Brak drugiej części przerwy dzielonej minimum 30 minut");
-        }
-        else if (continuousDriving >= ContinuousDrivingLimit &&
-            pendingFirstSplitBreak >= FirstSplitBreak &&
-            continuousStartUtc.HasValue)
-        {
-            AddViolation(
-                result,
-                continuousStartUtc.Value,
-                normalizedTimeline.Last(x => x.StartUtc < x.EndUtc).EndUtc,
-                continuousDriving,
-                pendingFirstSplitBreak,
-                "Nieprawidłowa przerwa dzielona");
         }
 
         _logger.LogInformation(
@@ -155,11 +125,12 @@ public class ContinuousDrivingBreakRule : IComplianceRule
     }
 
     private static bool IsDriving(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
+        ActivityTypeNormalizer.Normalize(activity.ActivityType)
+            .Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsQualifyingBreakActivity(TimelineActivity activity) =>
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase) ||
-        activity.ActivityType.Equals(ActivityTypeNormalizer.Availability, StringComparison.OrdinalIgnoreCase);
+        ActivityTypeNormalizer.Normalize(activity.ActivityType)
+            .Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase);
 
     private static void AddViolation(
         ComplianceRuleResult result,
@@ -178,7 +149,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             Code = RuleCode,
             RuleName = "Continuous driving break",
             Severity = "HIGH",
-            Description = $"Ciągła jazda trwała {FormatDuration(continuousDriving)} bez wymaganej przerwy 45 minut albo prawidłowej przerwy dzielonej 15 + 30 minut.",
+            Description = $"Continuous driving lasted {FormatDuration(continuousDriving)} without the required 45 minute break or valid 15 + 30 split break.",
             PeriodStartUtc = periodStartUtc,
             PeriodEndUtc = periodEndUtc,
             ActualMinutes = continuousDrivingMinutes,
@@ -200,13 +171,11 @@ public class ContinuousDrivingBreakRule : IComplianceRule
     private static void ResetDrivingPeriod(
         ref TimeSpan continuousDriving,
         ref DateTime? continuousStartUtc,
-        ref TimeSpan pendingFirstSplitBreak,
-        ref bool violationPendingAfterSplitStart)
+        ref TimeSpan pendingFirstSplitBreak)
     {
         continuousDriving = TimeSpan.Zero;
         continuousStartUtc = null;
         pendingFirstSplitBreak = TimeSpan.Zero;
-        violationPendingAfterSplitStart = false;
     }
 
     private static string FormatDuration(TimeSpan duration) =>

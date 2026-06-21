@@ -7,9 +7,6 @@ namespace DriverTime.Infrastructure.Compliance.Rules;
 public class SixTwentyFourHourPeriodsRule : IComplianceRule
 {
     private const string RuleCode = "SIX_24H_PERIODS";
-    private const long WeeklyRestMinutes = 24 * 60;
-    private const long SixTwentyFourHourPeriodsMinutes = 6 * 24 * 60;
-    private static readonly TimeSpan WeeklyRest = TimeSpan.FromMinutes(WeeklyRestMinutes);
 
     private readonly ILogger<SixTwentyFourHourPeriodsRule> _logger;
 
@@ -37,10 +34,7 @@ public class SixTwentyFourHourPeriodsRule : IComplianceRule
             .ThenBy(x => x.EndUtc)
             .ToList();
 
-        var weeklyRests = WeeklyRestTimelineHelper.BuildContinuousRestPeriods(validTimeline)
-            .Where(x => x.Duration >= WeeklyRest)
-            .OrderBy(x => x.StartUtc)
-            .ToList();
+        var weeklyRests = WeeklyRestTimelineHelper.BuildWeeklyRestPeriods(validTimeline);
 
         if (weeklyRests.Count == 0)
         {
@@ -48,52 +42,13 @@ public class SixTwentyFourHourPeriodsRule : IComplianceRule
             return result;
         }
 
-        var timelineEndUtc = validTimeline
-            .Select(x => x.EndUtc)
-            .DefaultIfEmpty()
-            .Max();
-
-        var checkedPeriods = 0;
-
-        for (var index = 0; index < weeklyRests.Count; index++)
+        var sixPeriodViolations = WeeklyRestTimelineHelper.FindSixPeriodViolations(validTimeline);
+        foreach (var sixPeriodViolation in sixPeriodViolations)
         {
-            var previousWeeklyRest = weeklyRests[index];
-            var deadlineUtc = previousWeeklyRest.EndUtc.AddMinutes(SixTwentyFourHourPeriodsMinutes);
-            var nextWeeklyRest = weeklyRests
-                .Skip(index + 1)
-                .FirstOrDefault();
-
-            if (nextWeeklyRest is not null)
-            {
-                checkedPeriods++;
-
-                if (nextWeeklyRest.StartUtc <= deadlineUtc)
-                {
-                    continue;
-                }
-
-                result.Violations.Add(CreateViolation(
-                    previousWeeklyRest,
-                    nextWeeklyRest.StartUtc,
-                    deadlineUtc,
-                    comparisonUtc: nextWeeklyRest.StartUtc));
-
-                continue;
-            }
-
-            if (timelineEndUtc != default && timelineEndUtc > deadlineUtc)
-            {
-                checkedPeriods++;
-
-                result.Violations.Add(CreateViolation(
-                    previousWeeklyRest,
-                    nextWeeklyRestStartUtc: null,
-                    deadlineUtc,
-                    comparisonUtc: timelineEndUtc));
-            }
+            result.Violations.Add(CreateViolation(sixPeriodViolation));
         }
 
-        LogResult(driverId, weeklyRests.Count, checkedPeriods, result.Violations.Count);
+        LogResult(driverId, weeklyRests.Count, sixPeriodViolations.Count, result.Violations.Count);
 
         return result;
     }
@@ -114,11 +69,12 @@ public class SixTwentyFourHourPeriodsRule : IComplianceRule
     }
 
     private static ComplianceViolationCandidate CreateViolation(
-        WeeklyRestTimelineHelper.RestPeriod previousWeeklyRest,
-        DateTime? nextWeeklyRestStartUtc,
-        DateTime deadlineUtc,
-        DateTime comparisonUtc)
+        WeeklyRestTimelineHelper.SixPeriodViolation sixPeriodViolation)
     {
+        var previousWeeklyRest = sixPeriodViolation.PreviousWeeklyRest;
+        var nextWeeklyRestStartUtc = sixPeriodViolation.NextWeeklyRestStartUtc;
+        var deadlineUtc = sixPeriodViolation.DeadlineUtc;
+        var comparisonUtc = sixPeriodViolation.ComparisonUtc;
         var exceededMinutes = Math.Max(0, (long)Math.Ceiling((comparisonUtc - deadlineUtc).TotalMinutes));
         var actualMinutes = Math.Max(0, (long)Math.Ceiling((comparisonUtc - previousWeeklyRest.EndUtc).TotalMinutes));
 
@@ -133,9 +89,16 @@ public class SixTwentyFourHourPeriodsRule : IComplianceRule
             PeriodStartUtc = previousWeeklyRest.EndUtc,
             PeriodEndUtc = deadlineUtc,
             ActualMinutes = actualMinutes,
-            LimitMinutes = SixTwentyFourHourPeriodsMinutes,
+            LimitMinutes = WeeklyRestTimelineHelper.SixTwentyFourHourPeriodsMinutes,
             Metadata = new Dictionary<string, object>
             {
+                ["actualRestMinutes"] = nextWeeklyRestStartUtc.HasValue ? WeeklyRestTimelineHelper.MinimumReducedWeeklyRestMinutes : 0,
+                ["requiredRestMinutes"] = WeeklyRestTimelineHelper.MinimumReducedWeeklyRestMinutes,
+                ["missingRestMinutes"] = nextWeeklyRestStartUtc.HasValue ? 0 : WeeklyRestTimelineHelper.MinimumReducedWeeklyRestMinutes,
+                ["compensationDueDate"] = string.Empty,
+                ["compensationDeadlineUtc"] = deadlineUtc,
+                ["relatedWeeklyRestStartUtc"] = previousWeeklyRest.StartUtc,
+                ["relatedWeeklyRestEndUtc"] = previousWeeklyRest.EndUtc,
                 ["previousWeeklyRestEndUtc"] = previousWeeklyRest.EndUtc.Ticks,
                 ["nextWeeklyRestStartUtc"] = nextWeeklyRestStartUtc?.Ticks ?? 0,
                 ["deadlineUtc"] = deadlineUtc.Ticks,

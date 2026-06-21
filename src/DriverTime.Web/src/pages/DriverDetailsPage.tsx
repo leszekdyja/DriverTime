@@ -4,10 +4,6 @@ import { Link, useParams } from "react-router-dom";
 import DriverActivityCalendar from "../components/DriverActivityCalendar";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
-    getComplianceViolationsForDriver,
-    type ComplianceDriver,
-} from "../services/complianceService";
-import {
     getDriverDetails,
     type DriverDetails,
 } from "../services/driverDetailsService";
@@ -16,7 +12,10 @@ import {
     type DriverActivity as TimelineSourceActivity,
 } from "../services/driverActivitiesService";
 import { exportComplianceReportPdf } from "../services/pdfExportService";
-import type { DriverViolation } from "../services/violationsService";
+import {
+    getDriverViolations,
+    type DriverViolation,
+} from "../services/violationsService";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/driver-details.css";
@@ -407,18 +406,11 @@ export default function DriverDetailsPage() {
                 return;
             }
 
-            const driver: ComplianceDriver = {
-                id: details.id,
-                firstName: details.firstName,
-                lastName: details.lastName,
-                cardNumber: details.cardNumber,
-            };
-
             setAreViolationsLoading(true);
             setViolationsError("");
 
             try {
-                setViolations(await getComplianceViolationsForDriver(driver));
+                setViolations(await getDriverViolations({ driverId: details.id }));
             } catch (loadError) {
                 setViolationsError(
                     loadError instanceof Error
