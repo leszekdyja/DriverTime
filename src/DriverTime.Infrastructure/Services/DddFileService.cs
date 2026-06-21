@@ -309,11 +309,29 @@ public class DddFileService : IDddFileService
         };
 
         var nowUtc = DateTime.UtcNow;
+        var originalActivitiesCount = parseResult.Activities.Count;
+        var originalVehicleUsesCount = parseResult.VehicleUses.Count;
+
+        parseResult.Activities = parseResult.Activities
+            .Where(x => IsValidDriverActivity(x, nowUtc))
+            .ToList();
         parseResult.VehicleUses = parseResult.VehicleUses
             .Where(x => IsValidVehicleUse(x, nowUtc))
             .ToList();
 
-        AddActivities(dddFile, parseResult.Activities);
+        var rejectedActivitiesCount = originalActivitiesCount - parseResult.Activities.Count;
+        var rejectedVehicleUsesCount = originalVehicleUsesCount - parseResult.VehicleUses.Count;
+
+        if (rejectedActivitiesCount > 0 || rejectedVehicleUsesCount > 0)
+        {
+            _logger.LogWarning(
+                "DDD import skipped invalid records for file {FileName}. RejectedDriverActivities={RejectedDriverActivities}, RejectedVehicleUses={RejectedVehicleUses}.",
+                originalFileName,
+                rejectedActivitiesCount,
+                rejectedVehicleUsesCount);
+        }
+
+        AddActivities(dddFile, parseResult.Activities, nowUtc);
         AddVehicleUses(dddFile, parseResult.VehicleUses, nowUtc);
         AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
         await AddMissingVehiclesAsync(companyId, parseResult.VehicleUses);
@@ -521,16 +539,19 @@ public class DddFileService : IDddFileService
         }
     }
 
-    private static void AddActivities(
+    internal static void AddActivities(
         DddFile dddFile,
-        IEnumerable<ParsedDriverActivityDto> activities)
+        IEnumerable<ParsedDriverActivityDto> activities,
+        DateTime nowUtc)
     {
         foreach (var activity in activities)
         {
             var start = ParseDateTime(activity.Start);
             var end = ParseDateTime(activity.End);
 
-            if (!start.HasValue || !end.HasValue || end <= start)
+            if (!start.HasValue
+                || !end.HasValue
+                || !DriverActivityDateValidator.IsValid(start.Value, end.Value, nowUtc))
             {
                 continue;
             }
@@ -547,7 +568,7 @@ public class DddFileService : IDddFileService
         }
     }
 
-    private static void AddVehicleUses(
+    internal static void AddVehicleUses(
         DddFile dddFile,
         IEnumerable<ParsedVehicleUseDto> vehicleUses,
         DateTime nowUtc)
@@ -670,6 +691,18 @@ public class DddFileService : IDddFileService
         return start.HasValue
             && end.HasValue
             && VehicleUseDateValidator.IsValid(start.Value, end.Value, nowUtc);
+    }
+
+    private static bool IsValidDriverActivity(
+        ParsedDriverActivityDto activity,
+        DateTime nowUtc)
+    {
+        var start = ParseDateTime(activity.Start);
+        var end = ParseDateTime(activity.End);
+
+        return start.HasValue
+            && end.HasValue
+            && DriverActivityDateValidator.IsValid(start.Value, end.Value, nowUtc);
     }
 
     private static bool HasFullerVehicleRegistrationVariant(
