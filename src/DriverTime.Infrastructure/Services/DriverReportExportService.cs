@@ -169,15 +169,11 @@ public class DriverReportExportService : IDriverReportExportService
         }
 
         var dddFileIds = activities.Select(x => x.DddFileId).Distinct().ToList();
-        var fromUtc = activities.Min(x => x.StartUtc);
-        var toUtc = activities.Max(x => x.EndUtc);
-
         return await _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 dddFileIds.Contains(x.DddFileId)
-                && x.StartUtc < toUtc
-                && x.EndUtc > fromUtc)
+                && !string.IsNullOrWhiteSpace(x.RegistrationNumber))
             .Select(x => new VehicleUseReportSource
             {
                 DddFileId = x.DddFileId,
@@ -206,28 +202,54 @@ public class DriverReportExportService : IDriverReportExportService
             .ToList();
     }
 
-    private static string FindVehicleRegistration(
+    internal static string FindVehicleRegistration(
         DriverReportActivitySource activity,
         IReadOnlyCollection<VehicleUseReportSource> vehicleUses)
     {
-        return vehicleUses
+        var candidates = vehicleUses
             .Where(x =>
                 x.DddFileId == activity.DddFileId
-                && x.StartUtc < activity.EndUtc
-                && x.EndUtc > activity.StartUtc
                 && !string.IsNullOrWhiteSpace(x.RegistrationNumber))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return candidates
             .Select(x => new
             {
                 x.RegistrationNumber,
+                HasOverlap = x.StartUtc < activity.EndUtc && x.EndUtc > activity.StartUtc,
                 IsContaining = x.StartUtc <= activity.StartUtc && x.EndUtc >= activity.EndUtc,
                 OverlapSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
                     x.StartUtc > activity.StartUtc ? x.StartUtc : activity.StartUtc,
-                    x.EndUtc < activity.EndUtc ? x.EndUtc : activity.EndUtc)
+                    x.EndUtc < activity.EndUtc ? x.EndUtc : activity.EndUtc),
+                DistanceSeconds = GetDistanceSeconds(activity, x)
             })
-            .OrderByDescending(x => x.IsContaining)
+            .OrderByDescending(x => x.HasOverlap)
+            .ThenByDescending(x => x.IsContaining)
             .ThenByDescending(x => x.OverlapSeconds)
+            .ThenBy(x => x.DistanceSeconds)
             .Select(x => x.RegistrationNumber.Trim())
             .FirstOrDefault() ?? string.Empty;
+    }
+
+    private static long GetDistanceSeconds(
+        DriverReportActivitySource activity,
+        VehicleUseReportSource vehicleUse)
+    {
+        if (vehicleUse.StartUtc < activity.EndUtc && vehicleUse.EndUtc > activity.StartUtc)
+        {
+            return 0;
+        }
+
+        var distance = vehicleUse.EndUtc <= activity.StartUtc
+            ? activity.StartUtc - vehicleUse.EndUtc
+            : vehicleUse.StartUtc - activity.EndUtc;
+
+        return Math.Max(0, (long)Math.Ceiling(distance.TotalSeconds));
     }
 
     private static byte[] GeneratePdf(DriverReportDto report)
@@ -771,7 +793,7 @@ public class DriverReportExportService : IDriverReportExportService
         _ => '?'
     };
 
-    private sealed class DriverReportActivitySource
+    internal sealed class DriverReportActivitySource
     {
         public Guid Id { get; set; }
 
@@ -788,7 +810,7 @@ public class DriverReportExportService : IDriverReportExportService
         public string ActivityType { get; set; } = string.Empty;
     }
 
-    private sealed class VehicleUseReportSource
+    internal sealed class VehicleUseReportSource
     {
         public Guid DddFileId { get; set; }
 
