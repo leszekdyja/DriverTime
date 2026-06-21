@@ -87,4 +87,14 @@ public class DriversController : ControllerBase
 
         return Ok(createdDriver);
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await _driverService.DeleteAsync(id, cancellationToken);
+
+        return deleted ? NoContent() : NotFound();
+    }
 }

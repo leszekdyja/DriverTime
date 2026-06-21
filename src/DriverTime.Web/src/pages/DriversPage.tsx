@@ -45,6 +45,8 @@ export default function DriversPage() {
     const [isError, setIsError] = useState(false);
     const [search, setSearch] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
+    const [driverToDelete, setDriverToDelete] = useState<DriverDto | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     const filteredDrivers = useMemo(() => {
@@ -115,6 +117,41 @@ export default function DriversPage() {
             setMessage("błąd podczas dodawania kierowcy.");
         } finally {
             setIsSaving(false);
+        }
+    }
+
+    async function deleteDriver() {
+        if (!driverToDelete) return;
+
+        setIsDeleting(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driverToDelete.id}`, {
+                method: "DELETE",
+            });
+
+            if (response.status === 404) {
+                throw new Error("Nie znaleziono kierowcy w Twojej firmie.");
+            }
+
+            if (!response.ok) {
+                throw new Error("Nie udało się usunąć kierowcy.");
+            }
+
+            setDriverToDelete(null);
+            await loadDrivers();
+            setMessage("Kierowca został usunięty wraz z importami, aktywnościami i naruszeniami.");
+        } catch (deleteError) {
+            setIsError(true);
+            setMessage(
+                deleteError instanceof Error
+                    ? deleteError.message
+                    : "Wystąpił błąd podczas usuwania kierowcy.",
+            );
+        } finally {
+            setIsDeleting(false);
         }
     }
 
@@ -256,9 +293,18 @@ export default function DriversPage() {
                                             </td>
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
                                             <td>
+                                                <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
                                                     Szczegóły
                                                 </Link>
+                                                    <button
+                                                        className="driver-delete-button"
+                                                        type="button"
+                                                        onClick={() => setDriverToDelete(driver)}
+                                                    >
+                                                        Usuń
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -275,6 +321,40 @@ export default function DriversPage() {
                     )}
                 </section>
             </div>
+
+            {driverToDelete && (
+                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => !isDeleting && setDriverToDelete(null)}>
+                    <section
+                        className="driver-delete-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="driver-delete-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h3 id="driver-delete-title">Usuń kierowcę</h3>
+                        <p>
+                            Czy na pewno chcesz usunąć kierowcę {driverToDelete.lastName} {driverToDelete.firstName}? Usunięte zostaną również importy, aktywności i naruszenia tego kierowcy.
+                        </p>
+                        <div className="driver-delete-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => setDriverToDelete(null)}
+                                disabled={isDeleting}
+                            >
+                                Anuluj
+                            </button>
+                            <button
+                                className="danger"
+                                type="button"
+                                onClick={() => void deleteDriver()}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? "Usuwanie..." : "Usuń kierowcę"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 }

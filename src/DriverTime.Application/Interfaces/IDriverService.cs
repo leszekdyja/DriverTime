@@ -9,4 +9,6 @@ public interface IDriverService
     Task<DriverDetailsDto?> GetByIdAsync(Guid id);
 
     Task<DriverDto> CreateAsync(CreateDriverDto dto);
+
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

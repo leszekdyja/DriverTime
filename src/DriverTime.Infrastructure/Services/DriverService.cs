@@ -220,4 +220,107 @@ public class DriverService : IDriverService
             CreatedAtUtc = driver.CreatedAtUtc
         };
     }
+
+    public async Task<bool> DeleteAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var companyId = _currentUser.CompanyId;
+        var driverExists = await _dbContext.Drivers
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == id && x.CompanyId == companyId,
+                cancellationToken);
+
+        if (!driverExists)
+        {
+            return false;
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(cancellationToken);
+
+        var dddFileIds = await _dbContext.DddFiles
+            .Where(x => x.CompanyId == companyId && x.DriverId == id)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        await _dbContext.ComplianceRunViolations
+            .Where(x =>
+                x.ComplianceRun.CompanyId == companyId &&
+                x.ComplianceRun.DriverId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await _dbContext.ComplianceRuns
+            .Where(x => x.CompanyId == companyId && x.DriverId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await _dbContext.Violations
+            .Where(x =>
+                x.DriverId == id &&
+                x.Driver != null &&
+                x.Driver.CompanyId == companyId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        if (dddFileIds.Count > 0)
+        {
+            await _dbContext.DriverActivities
+                .Where(x => dddFileIds.Contains(x.DddFileId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await _dbContext.VehicleUses
+                .Where(x => dddFileIds.Contains(x.DddFileId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await _dbContext.CountryEntries
+                .Where(x => dddFileIds.Contains(x.DddFileId))
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await _dbContext.DddFiles
+                .Where(x => dddFileIds.Contains(x.Id))
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        var deletedDrivers = await _dbContext.Drivers
+            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return deletedDrivers > 0;
+    }
+
+    internal static bool IsDriverInCompanyScope(
+        Driver driver,
+        Guid driverId,
+        Guid companyId)
+    {
+        return driver.Id == driverId && driver.CompanyId == companyId;
+    }
+
+    internal static bool IsDddFileInDriverDeletionScope(
+        DddFile dddFile,
+        Guid driverId,
+        Guid companyId)
+    {
+        return dddFile.CompanyId == companyId && dddFile.DriverId == driverId;
+    }
+
+    internal static bool IsViolationInDriverDeletionScope(
+        Violation violation,
+        Guid driverId,
+        Guid companyId)
+    {
+        return violation.DriverId == driverId &&
+            violation.Driver?.CompanyId == companyId;
+    }
+
+    internal static bool IsComplianceRunInDriverDeletionScope(
+        ComplianceRun complianceRun,
+        Guid driverId,
+        Guid companyId)
+    {
+        return complianceRun.CompanyId == companyId &&
+            complianceRun.DriverId == driverId;
+    }
 }
