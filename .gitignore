@@ -41,6 +41,15 @@ node_modules/
 dist/
 build/
 coverage/
+*.exe
+
+# =========================
+# Local Tkinter planning artifacts
+# =========================
+
+planowanie_sluzb_tkinter_*.py
+planowanie_sluzb_tkinter_*.spec
+planowanie_sluzb_tkinter_*.zip
 
 npm-debug.log*
 yarn-debug.log*
