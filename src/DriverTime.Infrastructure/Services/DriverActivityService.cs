@@ -70,6 +70,7 @@ public class DriverActivityService : IDriverActivityService
 
         var activities = DeduplicateActivities(activityRows);
         var vehicleUses = await GetVehicleUsesAsync(activities);
+        var displayedVehicleUseIds = new HashSet<Guid>();
 
         return activities
             .Select(activity =>
@@ -79,6 +80,7 @@ public class DriverActivityService : IDriverActivityService
                     activity.EndUtc);
                 var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
                 var vehicleRegistration = vehicleUse?.RegistrationNumber.Trim() ?? string.Empty;
+                var shouldShowOdometer = ShouldShowOdometer(vehicleUse, displayedVehicleUseIds);
 
                 return new DriverActivityDto
                 {
@@ -96,9 +98,9 @@ public class DriverActivityService : IDriverActivityService
                     DurationSeconds = durationSeconds > int.MaxValue
                         ? int.MaxValue
                         : (int)durationSeconds,
-                    StartOdometerKm = vehicleUse?.StartOdometerKm,
-                    EndOdometerKm = vehicleUse?.EndOdometerKm,
-                    DistanceKm = vehicleUse?.DistanceKm
+                    StartOdometerKm = shouldShowOdometer ? vehicleUse?.StartOdometerKm : null,
+                    EndOdometerKm = shouldShowOdometer ? vehicleUse?.EndOdometerKm : null,
+                    DistanceKm = shouldShowOdometer ? vehicleUse?.DistanceKm : null
                 };
             })
             .ToList();
@@ -124,6 +126,7 @@ public class DriverActivityService : IDriverActivityService
                 && x.EndUtc > fromUtc)
             .Select(x => new VehicleUseReportSource
             {
+                Id = x.Id,
                 DddFileId = x.DddFileId,
                 RegistrationNumber = x.RegistrationNumber,
                 StartUtc = x.StartUtc,
@@ -175,6 +178,14 @@ public class DriverActivityService : IDriverActivityService
             .FirstOrDefault();
     }
 
+    private static bool ShouldShowOdometer(
+        VehicleUseReportSource? vehicleUse,
+        ISet<Guid> displayedVehicleUseIds)
+    {
+        return vehicleUse is not null
+            && displayedVehicleUseIds.Add(vehicleUse.Id);
+    }
+
     private sealed class DriverActivityReportSource
     {
         public Guid Id { get; set; }
@@ -198,6 +209,8 @@ public class DriverActivityService : IDriverActivityService
 
     private sealed class VehicleUseReportSource
     {
+        public Guid Id { get; set; }
+
         public Guid DddFileId { get; set; }
 
         public string RegistrationNumber { get; set; } = string.Empty;

@@ -122,6 +122,46 @@ public class DriverReportVehicleMatchingTests
         Assert.AreEqual("Brak danych", reportActivities[0].VehicleRegistration);
     }
 
+    [TestMethod]
+    public void BuildReportActivities_MultipleActivitiesInSameVehicleUse_ShowsOdometerOnlyOnce()
+    {
+        var dddFileId = Guid.NewGuid();
+        var vehicleUseId = Guid.NewGuid();
+        var fromUtc = DateTime.Parse("2026-05-06T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-05-07T00:00:00Z").ToUniversalTime();
+        var activities = new[]
+        {
+            Activity(dddFileId, "2026-05-06T08:00:00Z", "2026-05-06T09:00:00Z"),
+            Activity(dddFileId, "2026-05-06T09:00:00Z", "2026-05-06T10:00:00Z")
+        };
+        var vehicleUses = new[]
+        {
+            VehicleUse(
+                dddFileId,
+                "DW 12345",
+                "2026-05-06T07:30:00Z",
+                "2026-05-06T10:30:00Z",
+                1000,
+                1120,
+                120,
+                vehicleUseId)
+        };
+
+        var reportActivities = DriverReportExportService.BuildReportActivities(
+            activities,
+            vehicleUses,
+            fromUtc,
+            toUtcExclusive);
+
+        Assert.AreEqual(2, reportActivities.Count);
+        Assert.AreEqual(1000, reportActivities[0].StartOdometerKm);
+        Assert.AreEqual(1120, reportActivities[0].EndOdometerKm);
+        Assert.AreEqual(120, reportActivities[0].DistanceKm);
+        Assert.IsNull(reportActivities[1].StartOdometerKm);
+        Assert.IsNull(reportActivities[1].EndOdometerKm);
+        Assert.IsNull(reportActivities[1].DistanceKm);
+    }
+
     private static DriverReportExportService.DriverReportActivitySource Activity(
         Guid dddFileId,
         string startUtc,
@@ -148,10 +188,12 @@ public class DriverReportVehicleMatchingTests
         string endUtc,
         int? startOdometerKm = null,
         int? endOdometerKm = null,
-        int? distanceKm = null)
+        int? distanceKm = null,
+        Guid? vehicleUseId = null)
     {
         return new DriverReportExportService.VehicleUseReportSource
         {
+            Id = vehicleUseId ?? Guid.NewGuid(),
             DddFileId = dddFileId,
             RegistrationNumber = registrationNumber,
             StartUtc = DateTime.Parse(startUtc).ToUniversalTime(),

@@ -158,12 +158,16 @@ public class DriverReportExportService : IDriverReportExportService
         DateTime fromUtc,
         DateTime toUtcExclusive)
     {
+        var displayedVehicleUseIds = new HashSet<Guid>();
+
         return DeduplicateActivities(activities)
             .Select(activity =>
             {
                 var start = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
                 var end = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
                 var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
+                var shouldShowOdometer = vehicleUse is not null
+                    && displayedVehicleUseIds.Add(vehicleUse.Id);
 
                 return new DriverReportActivityDto
                 {
@@ -174,9 +178,9 @@ public class DriverReportExportService : IDriverReportExportService
                     VehicleRegistration = ToReportVehicleDisplay(
                         vehicleUse?.RegistrationNumber ?? string.Empty),
                     DurationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(start, end),
-                    StartOdometerKm = vehicleUse?.StartOdometerKm,
-                    EndOdometerKm = vehicleUse?.EndOdometerKm,
-                    DistanceKm = vehicleUse?.DistanceKm
+                    StartOdometerKm = shouldShowOdometer ? vehicleUse?.StartOdometerKm : null,
+                    EndOdometerKm = shouldShowOdometer ? vehicleUse?.EndOdometerKm : null,
+                    DistanceKm = shouldShowOdometer ? vehicleUse?.DistanceKm : null
                 };
             })
             .ToList();
@@ -199,6 +203,7 @@ public class DriverReportExportService : IDriverReportExportService
                 && !string.IsNullOrWhiteSpace(x.RegistrationNumber))
             .Select(x => new VehicleUseReportSource
             {
+                Id = x.Id,
                 DddFileId = x.DddFileId,
                 RegistrationNumber = x.RegistrationNumber,
                 StartUtc = x.StartUtc,
@@ -900,6 +905,8 @@ public class DriverReportExportService : IDriverReportExportService
 
     internal sealed class VehicleUseReportSource
     {
+        public Guid Id { get; set; }
+
         public Guid DddFileId { get; set; }
 
         public string RegistrationNumber { get; set; } = string.Empty;
