@@ -32,6 +32,8 @@ public class DriverReportDto
 
     public long AvailabilitySeconds { get; set; }
 
+    public int? TotalDistanceKm { get; set; }
+
     public List<DriverReportActivityDto> Activities { get; set; } = new();
 }
 
@@ -48,4 +50,10 @@ public class DriverReportActivityDto
     public string VehicleRegistration { get; set; } = string.Empty;
 
     public long DurationSeconds { get; set; }
+
+    public int? StartOdometerKm { get; set; }
+
+    public int? EndOdometerKm { get; set; }
+
+    public int? DistanceKm { get; set; }
 }

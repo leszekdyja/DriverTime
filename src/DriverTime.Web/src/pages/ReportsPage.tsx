@@ -2,13 +2,10 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import Pagination from "../components/Pagination";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
-import { exportReportExcel } from "../services/excelExportService";
 import {
     downloadDriverReport,
-    getDriverMileageReport,
     getReportActivities,
     getReportDrivers,
-    type DriverMileageReport,
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
@@ -52,16 +49,6 @@ function formatDateOnly(value: string) {
         : dateFormatter.format(date);
 }
 
-function formatReportDateOnly(value: string) {
-    if (!value) return "Brak danych";
-
-    const date = new Date(`${value}T00:00:00`);
-
-    return Number.isNaN(date.getTime())
-        ? "Brak danych"
-        : dateFormatter.format(date);
-}
-
 function formatDuration(seconds: number) {
     const safeSeconds = Math.max(seconds, 0);
     const hours = Math.floor(safeSeconds / 3600);
@@ -70,20 +57,20 @@ function formatDuration(seconds: number) {
     return `${hours} godz. ${minutes.toString().padStart(2, "0")} min`;
 }
 
+function formatNumber(value: number | null | undefined) {
+    return value === null || value === undefined
+        ? "Brak danych"
+        : value.toLocaleString("pl-PL");
+}
+
 function formatKm(value: number | null | undefined) {
     return value === null || value === undefined
         ? "Brak danych"
         : `${value.toLocaleString("pl-PL")} km`;
 }
 
-function formatPlainNumber(value: number | null | undefined) {
-    return value === null || value === undefined
-        ? "Brak danych"
-        : value.toLocaleString("pl-PL");
-}
-
 function getDriverName(driver?: ReportDriver) {
-    if (!driver) return "Wszyscy kierowcy";
+    if (!driver) return "Wybierz kierowcę";
 
     return formatDriverNameOrFallback(driver.firstName, driver.lastName, "Kierowca bez nazwy");
 }
@@ -143,13 +130,6 @@ export default function ReportsPage() {
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
     const [error, setError] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
-    const [selectedMileageDriverId, setSelectedMileageDriverId] = useState("");
-    const [mileageDateFrom, setMileageDateFrom] = useState(defaultDateRange.from);
-    const [mileageDateTo, setMileageDateTo] = useState(defaultDateRange.to);
-    const [mileageReport, setMileageReport] = useState<DriverMileageReport | null>(null);
-    const [isMileageLoading, setIsMileageLoading] = useState(false);
-    const [mileageError, setMileageError] = useState("");
-    const [hasRequestedMileageReport, setHasRequestedMileageReport] = useState(false);
 
     async function loadActivities(
         driverId = selectedDriverId,
@@ -211,11 +191,6 @@ export default function ReportsPage() {
         [selectedDriverId, drivers],
     );
 
-    const selectedMileageDriver = useMemo(
-        () => drivers.find((item) => item.id === selectedMileageDriverId),
-        [selectedMileageDriverId, drivers],
-    );
-
     const dateRangeLabel = useMemo(() => {
         if (!dateFrom && !dateTo) return "Pełny dostępny zakres danych";
         if (dateFrom && dateTo) return `${formatDateOnly(dateFrom)} - ${formatDateOnly(dateTo)}`;
@@ -225,7 +200,7 @@ export default function ReportsPage() {
     }, [dateFrom, dateTo]);
 
     const totals = useMemo(() => {
-        const result = { driving: 0, rest: 0, work: 0, availability: 0 };
+        const result = { driving: 0, rest: 0, work: 0, availability: 0, distanceKm: 0, hasDistance: false };
 
         for (const activity of activities) {
             const duration = Math.max(activity.durationSeconds, 0);
@@ -243,6 +218,11 @@ export default function ReportsPage() {
                 case "AVAILABILITY":
                     result.availability += duration;
                     break;
+            }
+
+            if (activity.distanceKm !== null && activity.distanceKm !== undefined) {
+                result.distanceKm += activity.distanceKm;
+                result.hasDistance = true;
             }
         }
 
@@ -281,6 +261,9 @@ export default function ReportsPage() {
                 "Czas trwania",
                 "Czas trwania (sekundy)",
                 "Pojazd",
+                "Przebieg początkowy",
+                "Przebieg końcowy",
+                "Km",
             ],
             ...activities.map((activity) => [
                 formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName),
@@ -291,6 +274,9 @@ export default function ReportsPage() {
                 formatDuration(activity.durationSeconds),
                 activity.durationSeconds,
                 getVehicle(activity),
+                formatNumber(activity.startOdometerKm),
+                formatNumber(activity.endOdometerKm),
+                formatNumber(activity.distanceKm),
             ]),
         ];
         const csv = rows
@@ -303,7 +289,7 @@ export default function ReportsPage() {
         const link = document.createElement("a");
 
         link.href = url;
-        link.download = "raport-aktywnosci-kierowcow.csv";
+        link.download = "raport-aktywnosci-kierowcy-z-kilometrami.csv";
         link.click();
         URL.revokeObjectURL(url);
     }
@@ -352,68 +338,15 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await exportReportExcel({
-                activities,
-                driver: selectedDriver,
-                dateFrom,
-                dateTo,
-                totals,
-            });
+            await downloadDriverReport(selectedDriver.id, dateFrom, dateTo, "excel");
         } catch (exportError) {
             setError(
                 exportError instanceof Error
                     ? exportError.message
-                    : "Nie udało się wygenerować pliku Excel.",
+                    : "Nie udało się pobrać pliku Excel.",
             );
         } finally {
             setIsGeneratingExcel(false);
-        }
-    }
-
-    async function handleMileageSubmit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-
-        if (!selectedMileageDriverId) {
-            setMileageError("Wybierz kierowcę przed wygenerowaniem raportu kilometrów.");
-            setMileageReport(null);
-            setHasRequestedMileageReport(true);
-            return;
-        }
-
-        if (!mileageDateFrom || !mileageDateTo) {
-            setMileageError("Wybierz pełny zakres dat raportu kilometrów.");
-            setMileageReport(null);
-            setHasRequestedMileageReport(true);
-            return;
-        }
-
-        if (mileageDateFrom > mileageDateTo) {
-            setMileageError("Data początkowa nie może być późniejsza niż data końcowa.");
-            setMileageReport(null);
-            setHasRequestedMileageReport(true);
-            return;
-        }
-
-        setIsMileageLoading(true);
-        setMileageError("");
-        setHasRequestedMileageReport(true);
-
-        try {
-            const report = await getDriverMileageReport(
-                selectedMileageDriverId,
-                mileageDateFrom,
-                mileageDateTo,
-            );
-            setMileageReport(report);
-        } catch (loadError) {
-            setMileageReport(null);
-            setMileageError(
-                loadError instanceof Error
-                    ? loadError.message
-                    : "Wystąpił błąd podczas pobierania raportu kilometrów.",
-            );
-        } finally {
-            setIsMileageLoading(false);
         }
     }
 
@@ -422,10 +355,10 @@ export default function ReportsPage() {
             <section className="reports-hero">
                 <div className="reports-hero-copy">
                     <span className="reports-eyebrow">Raport kierowcy</span>
-                    <h2>Analiza aktywności z plików DDD</h2>
+                    <h2>Aktywności kierowcy z kilometrami</h2>
                     <p>
-                        Sprawdź czas jazdy, pracy, odpoczynku i dyspozycyjności
-                        dla wybranego kierowcy oraz zakresu dat.
+                        Sprawdź czas jazdy, pracy, odpoczynku, dyspozycyjności oraz kilometry
+                        przypisane do użyć pojazdu z plików DDD.
                     </p>
                 </div>
                 <div className="reports-context-card" aria-label="Zakres raportu">
@@ -451,7 +384,7 @@ export default function ReportsPage() {
                         value={selectedDriverId}
                         onChange={(event) => setSelectedDriverId(event.target.value)}
                     >
-                        <option value="">Wszyscy kierowcy</option>
+                        <option value="">Wybierz kierowcę</option>
                         {drivers.map((driver) => (
                             <option key={driver.id} value={driver.id}>
                                 {formatDriverNameOrFallback(driver.firstName, driver.lastName)} ({driver.cardNumber})
@@ -483,171 +416,6 @@ export default function ReportsPage() {
                 </button>
             </form>
 
-            <section className="reports-panel mileage-report-panel">
-                <div className="reports-panel-heading">
-                    <div>
-                        <span>Raport kilometrów</span>
-                        <h3>Kilometry kierowcy z danych pojazdów</h3>
-                    </div>
-                    <span className="reports-count">
-                        {mileageReport ? `${mileageReport.rows.length} wierszy` : "Nie wygenerowano"}
-                    </span>
-                </div>
-
-                <form className="reports-filters mileage-filters" onSubmit={handleMileageSubmit}>
-                    <label>
-                        Kierowca
-                        <select
-                            value={selectedMileageDriverId}
-                            onChange={(event) => {
-                                setSelectedMileageDriverId(event.target.value);
-                                setMileageReport(null);
-                                setMileageError("");
-                            }}
-                        >
-                            <option value="">Wybierz kierowcę</option>
-                            {drivers.map((driver) => (
-                                <option key={driver.id} value={driver.id}>
-                                    {formatDriverNameOrFallback(driver.firstName, driver.lastName)} ({driver.cardNumber})
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-
-                    <label>
-                        Data od
-                        <input
-                            type="date"
-                            value={mileageDateFrom}
-                            onChange={(event) => {
-                                setMileageDateFrom(event.target.value);
-                                setMileageReport(null);
-                                setMileageError("");
-                            }}
-                        />
-                    </label>
-
-                    <label>
-                        Data do
-                        <input
-                            type="date"
-                            value={mileageDateTo}
-                            onChange={(event) => {
-                                setMileageDateTo(event.target.value);
-                                setMileageReport(null);
-                                setMileageError("");
-                            }}
-                        />
-                    </label>
-
-                    <button type="submit" disabled={isMileageLoading || drivers.length === 0}>
-                        {isMileageLoading ? "Ładowanie..." : "Generuj raport"}
-                    </button>
-                </form>
-
-                {mileageError && (
-                    <div className="reports-error" role="alert">
-                        <strong>Nie można przygotować raportu kilometrów</strong>
-                        <span>{mileageError}</span>
-                    </div>
-                )}
-
-                {isMileageLoading ? (
-                    <TableSkeleton rows={5} columns={8} />
-                ) : mileageReport ? (
-                    <div className="mileage-report-results">
-                        <div className="mileage-report-meta" aria-label="Informacje o raporcie kilometrów">
-                            <div>
-                                <span>Kierowca</span>
-                                <strong>
-                                    {mileageReport.driverName
-                                        || getDriverName(selectedMileageDriver)
-                                        || "Brak danych"}
-                                </strong>
-                            </div>
-                            <div>
-                                <span>Zakres dat</span>
-                                <strong>
-                                    {formatReportDateOnly(mileageReport.from)} - {formatReportDateOnly(mileageReport.to)}
-                                </strong>
-                            </div>
-                        </div>
-
-                        <section className="report-summary mileage-summary" aria-label="Podsumowanie kilometrów">
-                            <article className="report-summary-card driving">
-                                <span>Suma kilometrów</span>
-                                <strong>{formatKm(mileageReport.totalDistanceKm)}</strong>
-                                <small>Tylko rekordy z danymi dystansu</small>
-                            </article>
-                            <article className="report-summary-card work">
-                                <span>Użycia pojazdu</span>
-                                <strong>{mileageReport.vehicleUseCount.toLocaleString("pl-PL")}</strong>
-                                <small>Liczba zapisanych okresów pojazdu</small>
-                            </article>
-                            <article className="report-summary-card availability">
-                                <span>Braki dystansu</span>
-                                <strong>{mileageReport.missingDistanceCount.toLocaleString("pl-PL")}</strong>
-                                <small>Rekordy bez wartości DistanceKm</small>
-                            </article>
-                        </section>
-
-                        {mileageReport.rows.length === 0 ? (
-                            <EmptyState
-                                title="Brak danych kilometrów"
-                                description="Dla wybranego kierowcy i zakresu dat nie znaleziono użyć pojazdu."
-                            />
-                        ) : (
-                            <div className="reports-table-wrapper mileage-table-wrapper">
-                                <table className="reports-table mileage-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Data</th>
-                                            <th>Od</th>
-                                            <th>Do</th>
-                                            <th>Pojazd</th>
-                                            <th>Licznik początkowy</th>
-                                            <th>Licznik końcowy</th>
-                                            <th>Dystans km</th>
-                                            <th>Status danych</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {mileageReport.rows.map((row) => (
-                                            <tr key={`${row.startUtc}-${row.endUtc}-${row.registrationNumber}`}>
-                                                <td data-label="Data">{formatReportDateOnly(row.date)}</td>
-                                                <td data-label="Od">{formatDate(row.startUtc)}</td>
-                                                <td data-label="Do">{formatDate(row.endUtc)}</td>
-                                                <td data-label="Pojazd">{row.registrationNumber || "Brak danych"}</td>
-                                                <td data-label="Licznik początkowy">{formatPlainNumber(row.startOdometerKm)}</td>
-                                                <td data-label="Licznik końcowy">{formatPlainNumber(row.endOdometerKm)}</td>
-                                                <td data-label="Dystans km">
-                                                    <strong>{formatKm(row.distanceKm)}</strong>
-                                                </td>
-                                                <td data-label="Status danych">
-                                                    <span className={`mileage-status ${row.hasDistanceData ? "ok" : "missing"}`}>
-                                                        {row.hasDistanceData ? "OK" : "Brak danych dystansu"}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                ) : hasRequestedMileageReport ? (
-                    <EmptyState
-                        title="Brak danych kilometrów"
-                        description="Zmień kierowcę lub zakres dat i wygeneruj raport ponownie."
-                    />
-                ) : (
-                    <EmptyState
-                        title="Raport kilometrów nie został jeszcze wygenerowany"
-                        description="Wybierz kierowcę i zakres dat, a następnie kliknij „Generuj raport”."
-                    />
-                )}
-            </section>
-
             {error && (
                 <div className="reports-error" role="alert">
                     <strong>Nie można przygotować raportu</strong>
@@ -657,16 +425,17 @@ export default function ReportsPage() {
 
             {isLoading && activities.length === 0 ? (
                 <section className="report-summary report-summary-skeleton" aria-label="Ładowanie podsumowania">
-                    {Array.from({ length: 4 }, (_, index) => (
+                    {Array.from({ length: 5 }, (_, index) => (
                         <div className="ui-skeleton report-card-skeleton" key={index} />
                     ))}
                 </section>
             ) : (
-                <section className="report-summary" aria-label="Podsumowanie czasu">
+                <section className="report-summary report-summary-five" aria-label="Podsumowanie raportu">
                     <SummaryCard label="Jazda" seconds={totals.driving} tone="driving" />
                     <SummaryCard label="Praca" seconds={totals.work} tone="work" />
                     <SummaryCard label="Odpoczynek" seconds={totals.rest} tone="rest" />
                     <SummaryCard label="Dyspozycyjność" seconds={totals.availability} tone="availability" />
+                    <DistanceSummaryCard distanceKm={totals.hasDistance ? totals.distanceKm : null} />
                 </section>
             )}
 
@@ -674,7 +443,7 @@ export default function ReportsPage() {
                 <div className="reports-panel-heading">
                     <div>
                         <span>Lista aktywności</span>
-                        <h3>Aktywności w raporcie</h3>
+                        <h3>Aktywności, pojazdy i kilometry</h3>
                     </div>
                     <div className="reports-actions">
                         <span className="reports-count">{activities.length} rekordów</span>
@@ -719,47 +488,49 @@ export default function ReportsPage() {
                 </div>
 
                 {isLoading && activities.length === 0 ? (
-                    <TableSkeleton rows={7} columns={6} />
+                    <TableSkeleton rows={7} columns={10} />
                 ) : activities.length === 0 ? (
                     <EmptyState
                         title="Brak aktywności w raporcie"
-                        description="Zmień kierowcę lub zakres dat. Po imporcie plików DDD aktywności pojawią się tutaj automatycznie."
+                        description="Wybierz kierowcę i zakres dat. Po imporcie plików DDD aktywności pojawią się tutaj automatycznie."
                     />
                 ) : (
                     <div className={isLoading ? "reports-content is-refreshing" : "reports-content"} aria-busy={isLoading}>
                         <div className="reports-table-wrapper">
-                            <table className="reports-table">
+                            <table className="reports-table reports-table-wide">
                                 <thead>
                                     <tr>
-                                        <th>Kierowca</th>
-                                        <th>Numer karty</th>
-                                        <th>Początek</th>
-                                        <th>Koniec</th>
+                                        <th>Data</th>
+                                        <th>Od</th>
+                                        <th>Do</th>
                                         <th>Aktywność</th>
-                                        <th>Czas</th>
                                         <th>Pojazd</th>
+                                        <th>Czas trwania</th>
+                                        <th>Przebieg początkowy</th>
+                                        <th>Przebieg końcowy</th>
+                                        <th>Km</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {visibleActivities.map((activity) => (
                                         <tr key={activity.id}>
-                                            <td data-label="Kierowca">
-                                                <strong className="reports-driver-name">
-                                                    {formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName)}
-                                                </strong>
-                                            </td>
-                                            <td data-label="Numer karty">{activity.driverCardNumber || "Brak danych"}</td>
-                                            <td data-label="Początek">{formatDate(activity.startUtc)}</td>
-                                            <td data-label="Koniec">{formatDate(activity.endUtc)}</td>
+                                            <td data-label="Data">{formatDateOnly(activity.startUtc.slice(0, 10))}</td>
+                                            <td data-label="Od">{formatDate(activity.startUtc)}</td>
+                                            <td data-label="Do">{formatDate(activity.endUtc)}</td>
                                             <td data-label="Aktywność">
                                                 <span className={`activity-badge ${getActivityClass(activity.activityType)}`}>
                                                     {getActivityLabel(activity.activityType)}
                                                 </span>
                                             </td>
-                                            <td data-label="Czas">
+                                            <td data-label="Pojazd">{getVehicle(activity)}</td>
+                                            <td data-label="Czas trwania">
                                                 <strong>{formatDuration(activity.durationSeconds)}</strong>
                                             </td>
-                                            <td data-label="Pojazd">{getVehicle(activity)}</td>
+                                            <td data-label="Przebieg początkowy">{formatNumber(activity.startOdometerKm)}</td>
+                                            <td data-label="Przebieg końcowy">{formatNumber(activity.endOdometerKm)}</td>
+                                            <td data-label="Km">
+                                                <strong>{formatKm(activity.distanceKm)}</strong>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -790,6 +561,16 @@ function SummaryCard({ label, seconds, tone }: SummaryCardProps) {
             <span>{label}</span>
             <strong>{formatDuration(seconds)}</strong>
             <small>Łączny czas w wybranym raporcie</small>
+        </article>
+    );
+}
+
+function DistanceSummaryCard({ distanceKm }: { distanceKm: number | null }) {
+    return (
+        <article className="report-summary-card distance">
+            <span>Kilometry</span>
+            <strong>{formatKm(distanceKm)}</strong>
+            <small>Łączny dystans z dostępnych danych</small>
         </article>
     );
 }

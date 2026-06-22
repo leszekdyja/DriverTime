@@ -52,7 +52,7 @@ public class DriverReportVehicleMatchingTests
     }
 
     [TestMethod]
-    public void FindVehicleRegistration_ActivityTouchesVehicleUseBoundary_ReturnsNearestSameFileVehicle()
+    public void FindVehicleRegistration_ActivityTouchesVehicleUseBoundary_ReturnsEmpty()
     {
         var dddFileId = Guid.NewGuid();
         var activity = Activity(dddFileId, "2026-05-06T10:00:00Z", "2026-05-06T11:00:00Z");
@@ -63,7 +63,7 @@ public class DriverReportVehicleMatchingTests
 
         var registration = DriverReportExportService.FindVehicleRegistration(activity, vehicleUses);
 
-        Assert.AreEqual("DW 12345", registration);
+        Assert.AreEqual(string.Empty, registration);
     }
 
     [TestMethod]
@@ -82,9 +82,9 @@ public class DriverReportVehicleMatchingTests
         };
         var vehicleUses = new[]
         {
-            VehicleUse(dddFileId, "DW 11111", "2026-05-06T07:30:00Z", "2026-05-06T08:30:00Z"),
-            VehicleUse(dddFileId, "DW 22222", "2026-05-06T08:30:00Z", "2026-05-06T10:30:00Z"),
-            VehicleUse(dddFileId, "DW 33333", "2026-05-06T09:00:00Z", "2026-05-06T11:00:00Z")
+            VehicleUse(dddFileId, "DW 11111", "2026-05-06T07:30:00Z", "2026-05-06T08:30:00Z", 1000, 1020, 20),
+            VehicleUse(dddFileId, "DW 22222", "2026-05-06T08:30:00Z", "2026-05-06T10:30:00Z", 1020, 1180, 160),
+            VehicleUse(dddFileId, "DW 33333", "2026-05-06T09:00:00Z", "2026-05-06T11:00:00Z", 1180, 1250, 70)
         };
 
         var reportActivities = DriverReportExportService.BuildReportActivities(
@@ -96,6 +96,9 @@ public class DriverReportVehicleMatchingTests
         Assert.AreEqual(1, reportActivities.Count);
         Assert.AreEqual(7200, reportActivities[0].DurationSeconds);
         Assert.AreEqual("DW 22222", reportActivities[0].VehicleRegistration);
+        Assert.AreEqual(1020, reportActivities[0].StartOdometerKm);
+        Assert.AreEqual(1180, reportActivities[0].EndOdometerKm);
+        Assert.AreEqual(160, reportActivities[0].DistanceKm);
     }
 
     [TestMethod]
@@ -142,14 +145,20 @@ public class DriverReportVehicleMatchingTests
         Guid dddFileId,
         string registrationNumber,
         string startUtc,
-        string endUtc)
+        string endUtc,
+        int? startOdometerKm = null,
+        int? endOdometerKm = null,
+        int? distanceKm = null)
     {
         return new DriverReportExportService.VehicleUseReportSource
         {
             DddFileId = dddFileId,
             RegistrationNumber = registrationNumber,
             StartUtc = DateTime.Parse(startUtc).ToUniversalTime(),
-            EndUtc = DateTime.Parse(endUtc).ToUniversalTime()
+            EndUtc = DateTime.Parse(endUtc).ToUniversalTime(),
+            StartOdometerKm = startOdometerKm,
+            EndOdometerKm = endOdometerKm,
+            DistanceKm = distanceKm
         };
     }
 }

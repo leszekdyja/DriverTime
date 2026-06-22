@@ -77,7 +77,8 @@ public class DriverActivityService : IDriverActivityService
                 var durationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
                     activity.StartUtc,
                     activity.EndUtc);
-                var vehicleRegistration = FindVehicleRegistration(activity, vehicleUses);
+                var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
+                var vehicleRegistration = vehicleUse?.RegistrationNumber.Trim() ?? string.Empty;
 
                 return new DriverActivityDto
                 {
@@ -94,7 +95,10 @@ public class DriverActivityService : IDriverActivityService
                     ActivityType = activity.ActivityType,
                     DurationSeconds = durationSeconds > int.MaxValue
                         ? int.MaxValue
-                        : (int)durationSeconds
+                        : (int)durationSeconds,
+                    StartOdometerKm = vehicleUse?.StartOdometerKm,
+                    EndOdometerKm = vehicleUse?.EndOdometerKm,
+                    DistanceKm = vehicleUse?.DistanceKm
                 };
             })
             .ToList();
@@ -123,7 +127,10 @@ public class DriverActivityService : IDriverActivityService
                 DddFileId = x.DddFileId,
                 RegistrationNumber = x.RegistrationNumber,
                 StartUtc = x.StartUtc,
-                EndUtc = x.EndUtc
+                EndUtc = x.EndUtc,
+                StartOdometerKm = x.StartOdometerKm,
+                EndOdometerKm = x.EndOdometerKm,
+                DistanceKm = x.DistanceKm
             })
             .ToListAsync();
     }
@@ -135,7 +142,6 @@ public class DriverActivityService : IDriverActivityService
             .GroupBy(x => new
             {
                 DriverKey = x.DriverId?.ToString("D") ?? x.DriverCardNumber,
-                x.DddFileId,
                 x.StartUtc,
                 x.EndUtc,
                 ActivityType = x.ActivityType.ToUpperInvariant()
@@ -146,7 +152,7 @@ public class DriverActivityService : IDriverActivityService
             .ToList();
     }
 
-    private static string FindVehicleRegistration(
+    private static VehicleUseReportSource? FindBestVehicleUse(
         DriverActivityReportSource activity,
         IReadOnlyCollection<VehicleUseReportSource> vehicleUses)
     {
@@ -154,11 +160,10 @@ public class DriverActivityService : IDriverActivityService
             .Where(x =>
                 x.DddFileId == activity.DddFileId
                 && x.StartUtc < activity.EndUtc
-                && x.EndUtc > activity.StartUtc
-                && !string.IsNullOrWhiteSpace(x.RegistrationNumber))
+                && x.EndUtc > activity.StartUtc)
             .Select(x => new
             {
-                x.RegistrationNumber,
+                VehicleUse = x,
                 IsContaining = x.StartUtc <= activity.StartUtc && x.EndUtc >= activity.EndUtc,
                 OverlapSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
                     x.StartUtc > activity.StartUtc ? x.StartUtc : activity.StartUtc,
@@ -166,8 +171,8 @@ public class DriverActivityService : IDriverActivityService
             })
             .OrderByDescending(x => x.IsContaining)
             .ThenByDescending(x => x.OverlapSeconds)
-            .Select(x => x.RegistrationNumber.Trim())
-            .FirstOrDefault() ?? string.Empty;
+            .Select(x => x.VehicleUse)
+            .FirstOrDefault();
     }
 
     private sealed class DriverActivityReportSource
@@ -200,5 +205,11 @@ public class DriverActivityService : IDriverActivityService
         public DateTime StartUtc { get; set; }
 
         public DateTime EndUtc { get; set; }
+
+        public int? StartOdometerKm { get; set; }
+
+        public int? EndOdometerKm { get; set; }
+
+        public int? DistanceKm { get; set; }
     }
 }

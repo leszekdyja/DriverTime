@@ -21,28 +21,9 @@ export type ReportActivity = {
     vehicle?: string;
     vehicleRegistration?: string;
     vehicleRegistrationNumber?: string;
-};
-
-export type DriverMileageReportRow = {
-    date: string;
-    startUtc: string;
-    endUtc: string;
-    registrationNumber: string;
-    startOdometerKm: number | null;
-    endOdometerKm: number | null;
-    distanceKm: number | null;
-    hasDistanceData: boolean;
-};
-
-export type DriverMileageReport = {
-    driverId: string;
-    driverName: string;
-    from: string;
-    to: string;
-    totalDistanceKm: number;
-    vehicleUseCount: number;
-    missingDistanceCount: number;
-    rows: DriverMileageReportRow[];
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
+    distanceKm?: number | null;
 };
 
 type ReportFormat = "pdf" | "excel";
@@ -105,30 +86,6 @@ export function getReportActivities(
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
         "Nie udało się pobrać danych raportu.",
-    );
-}
-
-export function getDriverMileageReport(
-    driverId: string,
-    dateFrom: string,
-    dateTo: string,
-): Promise<DriverMileageReport> {
-    const safeDriverId = driverId.trim();
-    const safeDateFrom = dateFrom.trim();
-    const safeDateTo = dateTo.trim();
-
-    if (!safeDriverId || !safeDateFrom || !safeDateTo) {
-        throw new Error("Wybierz kierowcę i pełny zakres dat przed pobraniem raportu kilometrów.");
-    }
-
-    const parameters = new URLSearchParams({
-        from: safeDateFrom,
-        to: safeDateTo,
-    });
-
-    return getJson<DriverMileageReport>(
-        `${API_URL}/api/reports/drivers/${safeDriverId}/mileage?${parameters.toString()}`,
-        "Nie udało się pobrać raportu kilometrów.",
     );
 }
 

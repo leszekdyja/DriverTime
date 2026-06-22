@@ -82,7 +82,6 @@ public static class DependencyInjection
         services.AddScoped<ICountryEntryComplianceRule, CountryEntryCompletenessRule>();
 
         services.AddScoped<IDriverReportExportService, DriverReportExportService>();
-        services.AddScoped<IDriverMileageReportService, DriverMileageReportService>();
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddSingleton<IPasswordHasher, PasswordHasher>();

@@ -25,4 +25,10 @@ public class DriverActivityDto
     public string ActivityType { get; set; } = string.Empty;
 
     public int DurationSeconds { get; set; }
+
+    public int? StartOdometerKm { get; set; }
+
+    public int? EndOdometerKm { get; set; }
+
+    public int? DistanceKm { get; set; }
 }

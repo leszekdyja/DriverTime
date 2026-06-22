@@ -1,0 +1,28 @@
+warning: in the working copy of 'src/DriverTime.Api/Controllers/ReportsController.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Application/DDD/DTOs/DriverActivityDto.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Application/Reports/DTOs/DriverReportDto.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/DependencyInjection.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/DriverActivityService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/DriverReportExportService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/ReportsPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/excelExportService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/reportsService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/styles/reports.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/DriverTime.Infrastructure.Tests/DDD/DddFileServiceImportValidationTests.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/DriverTime.Infrastructure.Tests/Reports/DriverReportVehicleMatchingTests.cs', LF will be replaced by CRLF the next time Git touches it
+ .../Controllers/ReportsController.cs               |  29 [32m+[m[31m-[m
+ .../DDD/DTOs/DriverActivityDto.cs                  |   6 [32m+[m
+ .../Interfaces/IDriverMileageReportService.cs      |  12 [31m-[m
+ .../Reports/DTOs/DriverMileageReportDto.cs         |  39 [31m---[m
+ .../Reports/DTOs/DriverReportDto.cs                |   8 [32m+[m
+ .../DependencyInjection.cs                         |   1 [31m-[m
+ .../Services/DriverActivityService.cs              |  31 [32m+[m[31m-[m
+ .../Services/DriverMileageReportService.cs         | 148 [31m---------[m
+ .../Services/DriverReportExportService.cs          | 153 [32m+++++++[m[31m---[m
+ src/DriverTime.Web/src/pages/ReportsPage.tsx       | 335 [32m++++[m[31m-----------------[m
+ src/DriverTime.Web/src/services/reportsService.ts  |  49 [32m+[m[31m--[m
+ src/DriverTime.Web/src/styles/reports.css          |  88 [32m+[m[31m-----[m
+ .../DDD/DddFileServiceImportValidationTests.cs     | 134 [31m---------[m
+ .../Reports/DriverMileageReportServiceTests.cs     | 139 [31m---------[m
+ .../Reports/DriverReportVehicleMatchingTests.cs    |  23 [32m+[m[31m-[m
+ 15 files changed, 237 insertions(+), 958 deletions(-)
