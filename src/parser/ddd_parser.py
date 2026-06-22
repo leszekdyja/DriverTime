@@ -190,6 +190,16 @@ class VehicleUse:
     end: dt.datetime
     registration: str
     source: str = ""
+    start_odometer_km: Optional[int] = None
+    end_odometer_km: Optional[int] = None
+
+    @property
+    def distance_km(self) -> Optional[int]:
+        if self.start_odometer_km is None or self.end_odometer_km is None:
+            return None
+        if self.end_odometer_km < self.start_odometer_km:
+            return None
+        return self.end_odometer_km - self.start_odometer_km
 
 
 @dataclass(frozen=True)
@@ -723,6 +733,15 @@ def _registration_from_bytes(chunk: bytes) -> str:
     return candidates[0][1]
 
 
+def _optional_int(value: Any) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _looks_like_registration_key(key: str) -> bool:
     lower = key.lower().replace(" ", "").replace("-", "_")
     if any(bad in lower for bad in ("country", "nation", "region")):
@@ -785,7 +804,14 @@ def extract_vehicle_uses(data: Any) -> list[VehicleUse]:
         if key in seen:
             continue
         seen.add(key)
-        result.append(VehicleUse(start=start, end=end, registration=reg, source=path))
+        result.append(VehicleUse(
+            start=start,
+            end=end,
+            registration=reg,
+            source=path,
+            start_odometer_km=_optional_int(node.get("start_odometer_km") or node.get("startOdometerKm")),
+            end_odometer_km=_optional_int(node.get("end_odometer_km") or node.get("endOdometerKm")),
+        ))
     return sorted(result, key=lambda item: (item.start, item.end, item.registration))
 
 
@@ -913,6 +939,10 @@ DDD_DRIVER_IDENTIFICATION_TAG = b"\x05\x20"
 
 def _be16(data: bytes, offset: int) -> int:
     return (data[offset] << 8) | data[offset + 1]
+
+
+def _be24(data: bytes, offset: int) -> int:
+    return (data[offset] << 16) | (data[offset + 1] << 8) | data[offset + 2]
 
 
 def _be32(data: bytes, offset: int) -> int:
@@ -1084,38 +1114,60 @@ def parse_ddd_country_code_entries_embedded(ddd_path: Path) -> list[CountryCodeE
     return sorted(entries, key=lambda x: x.timestamp)
 
 
-def _parse_vehicle_uses_from_block(block: bytes, block_offset: int) -> list[VehicleUse]:
-    """Best-effort parser for CardVehiclesUsed EF 0x0505.
+CARD_VEHICLE_RECORD_OFFSET = 2
+CARD_VEHICLE_RECORD_SIZE = 31
+CARD_VEHICLE_REGISTRATION_OFFSET = 14
 
-    Driver cards store vehicle-use periods together with a vehicle registration
-    identification. The exact record layout differs by generation/vendor, so this
-    routine scans the EF block for plausible consecutive TimeReal values and then
-    reads the registration bytes that follow them.
-    """
+
+def _parse_card_vehicle_record(record: bytes, source: str) -> Optional[VehicleUse]:
+    if len(record) < CARD_VEHICLE_RECORD_SIZE:
+        return None
+
+    start_odometer = _be24(record, 0)
+    end_odometer = _be24(record, 3)
+    start = _safe_time_real(_be32(record, 6))
+    end = _safe_time_real(_be32(record, 10))
+    registration = _registration_from_bytes(record[CARD_VEHICLE_REGISTRATION_OFFSET:CARD_VEHICLE_RECORD_SIZE])
+
+    if not start or not end or end <= start:
+        return None
+    if end - start > dt.timedelta(days=370):
+        return None
+    if not registration:
+        return None
+
+    return VehicleUse(
+        start=start,
+        end=end,
+        registration=registration,
+        source=source,
+        start_odometer_km=start_odometer,
+        end_odometer_km=end_odometer,
+    )
+
+
+def _parse_vehicle_uses_from_block(block: bytes, block_offset: int) -> list[VehicleUse]:
+    """Parse CardVehiclesUsed EF 0x0505 as fixed CardVehicleRecord entries."""
     result: list[VehicleUse] = []
     seen: set[tuple[dt.datetime, dt.datetime, str]] = set()
-    if len(block) < 14:
+    if len(block) < CARD_VEHICLE_RECORD_OFFSET + CARD_VEHICLE_RECORD_SIZE:
         return result
-    for offset in range(0, len(block) - 12):
-        start = _safe_time_real(_be32(block, offset))
-        end = _safe_time_real(_be32(block, offset + 4))
-        if not start or not end or end <= start:
+
+    record_area = block[CARD_VEHICLE_RECORD_OFFSET:]
+    for offset in range(0, len(record_area) - CARD_VEHICLE_RECORD_SIZE + 1, CARD_VEHICLE_RECORD_SIZE):
+        record = record_area[offset:offset + CARD_VEHICLE_RECORD_SIZE]
+        absolute_offset = CARD_VEHICLE_RECORD_OFFSET + offset
+        vehicle_use = _parse_card_vehicle_record(
+            record,
+            source=f"embedded:EF0505@{block_offset}:record@{absolute_offset}",
+        )
+        if not vehicle_use:
             continue
-        if end - start > dt.timedelta(days=370):
-            continue
-        registration = _registration_from_bytes(block[offset + 8:offset + 36])
-        if not registration:
-            continue
-        key = (start, end, registration)
+        key = (vehicle_use.start, vehicle_use.end, vehicle_use.registration)
         if key in seen:
             continue
         seen.add(key)
-        result.append(VehicleUse(
-            start=start,
-            end=end,
-            registration=registration,
-            source=f"embedded:EF0505@{block_offset}:record@{offset}",
-        ))
+        result.append(vehicle_use)
     return sorted(result, key=lambda x: (x.start, x.end, x.registration))
 
 
@@ -1332,7 +1384,7 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
         "driver": driver,
         "parser": {
             "name": EMBEDDED_PARSER_NAME,
-            "version": "0.4-driver-identification",
+            "version": "0.5-card-vehicle-odometer",
             "file_type": "driver_card",
             "scope": "Driver identification EF 0x0520 and activity data EF 0x0504-0x0506",
             "card_read_date": file_modified.isoformat() if file_modified else "",
@@ -1346,6 +1398,9 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
                 "end": v.end.isoformat(sep=" "),
                 "vehicle_registration": v.registration,
                 "source": v.source,
+                "start_odometer_km": v.start_odometer_km,
+                "end_odometer_km": v.end_odometer_km,
+                "distance_km": v.distance_km,
             }
             for v in vehicle_uses
         ],

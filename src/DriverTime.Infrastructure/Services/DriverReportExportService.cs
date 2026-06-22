@@ -121,16 +121,6 @@ public class DriverReportExportService : IDriverReportExportService
 
         var deduplicatedActivities = DeduplicateActivities(activities);
         var vehicleUses = await GetVehicleUsesAsync(deduplicatedActivities, cancellationToken);
-        var reportActivities = deduplicatedActivities
-            .Select(x => new DriverReportActivityDto
-            {
-                DddFileId = x.DddFileId,
-                StartUtc = x.StartUtc,
-                EndUtc = x.EndUtc,
-                ActivityType = x.ActivityType,
-                VehicleRegistration = FindVehicleRegistration(x, vehicleUses)
-            })
-            .ToList();
 
         var report = new DriverReportDto
         {
@@ -145,18 +135,45 @@ public class DriverReportExportService : IDriverReportExportService
             DriverCardNumber = driver.CardNumber,
             From = from,
             To = to,
-            Activities = reportActivities
+            Activities = BuildReportActivities(
+                deduplicatedActivities,
+                vehicleUses,
+                fromUtc,
+                toUtcExclusive)
         };
 
-        foreach (var activity in reportActivities)
+        foreach (var activity in report.Activities)
         {
-            var start = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
-            var end = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
-            activity.DurationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(start, end);
             AddDuration(report, activity.ActivityType, activity.DurationSeconds);
         }
 
         return report;
+    }
+
+    internal static List<DriverReportActivityDto> BuildReportActivities(
+        IEnumerable<DriverReportActivitySource> activities,
+        IReadOnlyCollection<VehicleUseReportSource> vehicleUses,
+        DateTime fromUtc,
+        DateTime toUtcExclusive)
+    {
+        return DeduplicateActivities(activities)
+            .Select(activity =>
+            {
+                var start = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
+                var end = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
+
+                return new DriverReportActivityDto
+                {
+                    DddFileId = activity.DddFileId,
+                    StartUtc = activity.StartUtc,
+                    EndUtc = activity.EndUtc,
+                    ActivityType = activity.ActivityType,
+                    VehicleRegistration = ToReportVehicleDisplay(
+                        FindVehicleRegistration(activity, vehicleUses)),
+                    DurationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(start, end)
+                };
+            })
+            .ToList();
     }
 
     private async Task<List<VehicleUseReportSource>> GetVehicleUsesAsync(
@@ -191,7 +208,6 @@ public class DriverReportExportService : IDriverReportExportService
             .GroupBy(x => new
             {
                 DriverKey = x.DriverId?.ToString("D") ?? x.DriverCardNumber,
-                x.DddFileId,
                 x.StartUtc,
                 x.EndUtc,
                 ActivityType = x.ActivityType.ToUpperInvariant()
@@ -235,6 +251,11 @@ public class DriverReportExportService : IDriverReportExportService
             .Select(x => x.RegistrationNumber.Trim())
             .FirstOrDefault() ?? string.Empty;
     }
+
+    private static string ToReportVehicleDisplay(string registrationNumber) =>
+        string.IsNullOrWhiteSpace(registrationNumber)
+            ? "Brak danych"
+            : registrationNumber.Trim();
 
     private static long GetDistanceSeconds(
         DriverReportActivitySource activity,

@@ -1,7 +1,11 @@
 using DriverTime.Application.DDD.DTOs;
 using DriverTime.Domain.Entities;
+using DriverTime.Infrastructure.Parsing;
 using DriverTime.Infrastructure.Services;
+using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace DriverTime.Infrastructure.Tests.DDD;
 
@@ -75,5 +79,222 @@ public class DddFileServiceImportValidationTests
         DddFileService.AddVehicleUses(dddFile, new[] { vehicleUse }, NowUtc);
 
         Assert.AreEqual(0, dddFile.VehicleUses.Count);
+    }
+
+    [TestMethod]
+    public void ParsedVehicleUseDto_JsonWithOdometerFields_DeserializesValues()
+    {
+        const string json = """
+            {
+              "start": "2026-05-17 05:02:00",
+              "end": "2026-05-17 12:06:35",
+              "vehicle_registration": "DLU 68178",
+              "source": "embedded:EF0505@18277:record@3102",
+              "start_odometer_km": 581224,
+              "end_odometer_km": 581387,
+              "distance_km": 163
+            }
+            """;
+
+        var vehicleUse = JsonSerializer.Deserialize<ParsedVehicleUseDto>(json);
+
+        Assert.IsNotNull(vehicleUse);
+        Assert.AreEqual(581224, vehicleUse.StartOdometerKm);
+        Assert.AreEqual(581387, vehicleUse.EndOdometerKm);
+        Assert.AreEqual(163, vehicleUse.DistanceKm);
+    }
+
+    [TestMethod]
+    public void ParsedVehicleUseDto_OldJsonWithoutOdometerFields_DeserializesNullValues()
+    {
+        const string json = """
+            {
+              "start": "2026-05-17 05:02:00",
+              "end": "2026-05-17 12:06:35",
+              "vehicle_registration": "DLU 68178",
+              "source": "embedded:EF0505@18277:record@3102"
+            }
+            """;
+
+        var vehicleUse = JsonSerializer.Deserialize<ParsedVehicleUseDto>(json);
+
+        Assert.IsNotNull(vehicleUse);
+        Assert.IsNull(vehicleUse.StartOdometerKm);
+        Assert.IsNull(vehicleUse.EndOdometerKm);
+        Assert.IsNull(vehicleUse.DistanceKm);
+    }
+
+    [TestMethod]
+    public void AddVehicleUses_ValidOdometerValues_AddsRecordWithDistance()
+    {
+        var dddFile = new DddFile();
+        var vehicleUse = new ParsedVehicleUseDto
+        {
+            Start = "2026-05-17T05:02:00Z",
+            End = "2026-05-17T12:06:35Z",
+            VehicleRegistration = "DLU 68178",
+            StartOdometerKm = 581224,
+            EndOdometerKm = 581387,
+            DistanceKm = 163
+        };
+
+        DddFileService.AddVehicleUses(dddFile, new[] { vehicleUse }, NowUtc);
+
+        Assert.AreEqual(1, dddFile.VehicleUses.Count);
+        var savedVehicleUse = dddFile.VehicleUses.Single();
+        Assert.AreEqual(581224, savedVehicleUse.StartOdometerKm);
+        Assert.AreEqual(581387, savedVehicleUse.EndOdometerKm);
+        Assert.AreEqual(163, savedVehicleUse.DistanceKm);
+    }
+
+    [TestMethod]
+    public void AddVehicleUses_WithoutOdometerValues_AddsRecordWithNullOdometer()
+    {
+        var dddFile = new DddFile();
+        var vehicleUse = new ParsedVehicleUseDto
+        {
+            Start = "2026-05-17T05:02:00Z",
+            End = "2026-05-17T12:06:35Z",
+            VehicleRegistration = "DLU 68178"
+        };
+
+        DddFileService.AddVehicleUses(dddFile, new[] { vehicleUse }, NowUtc);
+
+        Assert.AreEqual(1, dddFile.VehicleUses.Count);
+        var savedVehicleUse = dddFile.VehicleUses.Single();
+        Assert.IsNull(savedVehicleUse.StartOdometerKm);
+        Assert.IsNull(savedVehicleUse.EndOdometerKm);
+        Assert.IsNull(savedVehicleUse.DistanceKm);
+    }
+
+    [TestMethod]
+    public async Task ParserGatewayAndVehicleUseImport_MapsOdometerFieldsToEntity()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"drivertime-parser-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            var parserScriptPath = Path.Combine(tempDirectory, "parser_stub.py");
+            var dddFilePath = Path.Combine(tempDirectory, "sample.DDD");
+
+            await File.WriteAllTextAsync(dddFilePath, "sample");
+            await File.WriteAllTextAsync(
+                parserScriptPath,
+                """
+                import json
+
+                print(json.dumps({
+                    "success": True,
+                    "raw": {
+                        "driver": {
+                            "first_name": "Jan",
+                            "last_name": "Kowalski",
+                            "card_number": "CARD-123"
+                        },
+                        "activities": [],
+                        "vehicle_uses": [
+                            {
+                                "start": "2026-05-17T05:02:00Z",
+                                "end": "2026-05-17T12:06:35Z",
+                                "vehicle_registration": "DLU 68178",
+                                "source": "embedded:EF0505@18277:record@3102",
+                                "start_odometer_km": 581224,
+                                "end_odometer_km": 581387,
+                                "distance_km": 163
+                            }
+                        ],
+                        "country_code_entries": []
+                    }
+                }))
+                """);
+
+            var gateway = new DddParserGateway(Options.Create(new DddParserOptions
+            {
+                PythonExecutable = ResolvePythonExecutable(),
+                ParserScriptPath = parserScriptPath
+            }));
+
+            var parsed = await gateway.ParseAsync(dddFilePath);
+
+            Assert.AreEqual(1, parsed.VehicleUses.Count);
+            Assert.AreEqual(581224, parsed.VehicleUses[0].StartOdometerKm);
+            Assert.AreEqual(581387, parsed.VehicleUses[0].EndOdometerKm);
+            Assert.AreEqual(163, parsed.VehicleUses[0].DistanceKm);
+
+            var dddFile = new DddFile();
+            DddFileService.AddVehicleUses(dddFile, parsed.VehicleUses, NowUtc);
+
+            Assert.AreEqual(1, dddFile.VehicleUses.Count);
+            var savedVehicleUse = dddFile.VehicleUses.Single();
+            Assert.AreEqual(581224, savedVehicleUse.StartOdometerKm);
+            Assert.AreEqual(581387, savedVehicleUse.EndOdometerKm);
+            Assert.AreEqual(163, savedVehicleUse.DistanceKm);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static string ResolvePythonExecutable()
+    {
+        foreach (var candidate in GetPythonExecutableCandidates())
+        {
+            try
+            {
+                using var process = Process.Start(new ProcessStartInfo
+                {
+                    FileName = candidate,
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+
+                if (process is null)
+                {
+                    continue;
+                }
+
+                process.WaitForExit(5000);
+
+                if (process.ExitCode == 0)
+                {
+                    return candidate;
+                }
+            }
+            catch
+            {
+                // Try next common Python launcher.
+            }
+        }
+
+        Assert.Inconclusive("Python executable was not found for parser gateway integration test.");
+        return "python";
+    }
+
+    private static IEnumerable<string> GetPythonExecutableCandidates()
+    {
+        yield return "python";
+        yield return "py";
+        yield return "python3";
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+        {
+            yield return Path.Combine(
+                userProfile,
+                ".cache",
+                "codex-runtimes",
+                "codex-primary-runtime",
+                "dependencies",
+                "python",
+                "python.exe");
+        }
     }
 }

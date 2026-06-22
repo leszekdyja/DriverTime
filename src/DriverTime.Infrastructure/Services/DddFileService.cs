@@ -212,7 +212,10 @@ public class DddFileService : IDddFileService
                 {
                     Start = x.StartUtc.ToString("O"),
                     End = x.EndUtc.ToString("O"),
-                    VehicleRegistration = x.RegistrationNumber
+                    VehicleRegistration = x.RegistrationNumber,
+                    StartOdometerKm = x.StartOdometerKm,
+                    EndOdometerKm = x.EndOdometerKm,
+                    DistanceKm = x.DistanceKm
                 })
                 .ToList()
         };
@@ -590,7 +593,10 @@ public class DddFileService : IDddFileService
                 Id = Guid.NewGuid(),
                 StartUtc = start.Value,
                 EndUtc = end.Value,
-                RegistrationNumber = vehicleUse.VehicleRegistration
+                RegistrationNumber = vehicleUse.VehicleRegistration,
+                StartOdometerKm = vehicleUse.StartOdometerKm,
+                EndOdometerKm = vehicleUse.EndOdometerKm,
+                DistanceKm = vehicleUse.DistanceKm
             });
         }
     }

@@ -15,4 +15,13 @@ public class ParsedVehicleUseDto
 
     [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
+
+    [JsonPropertyName("start_odometer_km")]
+    public int? StartOdometerKm { get; set; }
+
+    [JsonPropertyName("end_odometer_km")]
+    public int? EndOdometerKm { get; set; }
+
+    [JsonPropertyName("distance_km")]
+    public int? DistanceKm { get; set; }
 }

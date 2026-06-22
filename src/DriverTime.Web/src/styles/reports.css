@@ -321,6 +321,80 @@
     box-shadow: var(--shadow-card);
 }
 
+.mileage-report-panel .reports-filters {
+    margin-top: 0;
+    margin-bottom: 18px;
+    box-shadow: none;
+}
+
+.mileage-report-results {
+    display: grid;
+    gap: 18px;
+}
+
+.mileage-report-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.mileage-report-meta div {
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    background: #f8fafc;
+}
+
+.mileage-report-meta span {
+    display: block;
+    margin-bottom: 6px;
+    color: #667085;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.075em;
+    text-transform: uppercase;
+}
+
+.mileage-report-meta strong {
+    color: #101828;
+    font-size: 16px;
+}
+
+.mileage-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 0;
+}
+
+.mileage-table-wrapper {
+    margin-top: 2px;
+}
+
+.mileage-table {
+    min-width: 1120px;
+}
+
+.mileage-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 5px 9px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.mileage-status.ok {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.mileage-status.missing {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
 .reports-panel-heading {
     display: flex;
     align-items: flex-start;
@@ -471,6 +545,11 @@
 
     .report-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mileage-summary,
+    .mileage-report-meta {
+        grid-template-columns: 1fr;
     }
 }
 

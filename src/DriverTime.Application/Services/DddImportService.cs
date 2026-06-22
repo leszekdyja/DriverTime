@@ -49,7 +49,11 @@ public class DddImportService : IDddImportService
 
                 EndUtc = DateTime.TryParse(vehicle.End, out var end)
                     ? end
-                    : DateTime.UtcNow
+                    : DateTime.UtcNow,
+
+                StartOdometerKm = vehicle.StartOdometerKm,
+                EndOdometerKm = vehicle.EndOdometerKm,
+                DistanceKm = vehicle.DistanceKm
             });
         }
 
