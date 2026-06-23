@@ -172,6 +172,7 @@ public class DriverReportExportService : IDriverReportExportService
                 return new DriverReportActivityDto
                 {
                     DddFileId = activity.DddFileId,
+                    VehicleUseId = vehicleUse?.Id,
                     StartUtc = activity.StartUtc,
                     EndUtc = activity.EndUtc,
                     ActivityType = activity.ActivityType,
@@ -291,11 +292,12 @@ public class DriverReportExportService : IDriverReportExportService
         return Math.Max(0, (long)Math.Ceiling(distance.TotalSeconds));
     }
 
-    private static int? SumDistance(IEnumerable<DriverReportActivityDto> activities)
+    internal static int? SumDistance(IEnumerable<DriverReportActivityDto> activities)
     {
         var distances = activities
-            .Where(x => x.DistanceKm.HasValue)
-            .Select(x => x.DistanceKm!.Value)
+            .Where(x => x.VehicleUseId.HasValue && x.DistanceKm.HasValue)
+            .GroupBy(x => x.VehicleUseId!.Value)
+            .Select(x => x.First().DistanceKm!.Value)
             .ToList();
 
         return distances.Count == 0 ? null : distances.Sum();

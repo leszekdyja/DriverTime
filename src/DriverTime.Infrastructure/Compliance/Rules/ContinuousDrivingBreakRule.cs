@@ -129,8 +129,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             .Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsQualifyingBreakActivity(TimelineActivity activity) =>
-        ActivityTypeNormalizer.Normalize(activity.ActivityType)
-            .Equals(ActivityTypeNormalizer.Rest, StringComparison.OrdinalIgnoreCase);
+        ActivityTypeNormalizer.Normalize(activity.ActivityType) is ActivityTypeNormalizer.Rest or ActivityTypeNormalizer.Availability;
 
     private static void AddViolation(
         ComplianceRuleResult result,

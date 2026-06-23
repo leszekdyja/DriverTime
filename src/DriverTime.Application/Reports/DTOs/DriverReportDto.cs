@@ -41,6 +41,8 @@ public class DriverReportActivityDto
 {
     public Guid DddFileId { get; set; }
 
+    public Guid? VehicleUseId { get; set; }
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }

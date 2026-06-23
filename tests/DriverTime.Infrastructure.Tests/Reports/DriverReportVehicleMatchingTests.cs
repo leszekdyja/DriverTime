@@ -160,6 +160,58 @@ public class DriverReportVehicleMatchingTests
         Assert.IsNull(reportActivities[1].StartOdometerKm);
         Assert.IsNull(reportActivities[1].EndOdometerKm);
         Assert.IsNull(reportActivities[1].DistanceKm);
+        Assert.AreEqual(120, DriverReportExportService.SumDistance(reportActivities));
+    }
+
+    [TestMethod]
+    public void SumDistance_MultipleActivitiesAcrossTwoVehicleUses_CountsEachVehicleUseOnce()
+    {
+        var dddFileId = Guid.NewGuid();
+        var firstVehicleUseId = Guid.NewGuid();
+        var secondVehicleUseId = Guid.NewGuid();
+        var fromUtc = DateTime.Parse("2026-05-06T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-05-07T00:00:00Z").ToUniversalTime();
+        var activities = new[]
+        {
+            Activity(dddFileId, "2026-05-06T08:00:00Z", "2026-05-06T09:00:00Z"),
+            Activity(dddFileId, "2026-05-06T09:00:00Z", "2026-05-06T10:00:00Z"),
+            Activity(dddFileId, "2026-05-06T10:00:00Z", "2026-05-06T11:00:00Z"),
+            Activity(dddFileId, "2026-05-06T11:00:00Z", "2026-05-06T12:00:00Z")
+        };
+        var vehicleUses = new[]
+        {
+            VehicleUse(
+                dddFileId,
+                "DW 11111",
+                "2026-05-06T07:30:00Z",
+                "2026-05-06T10:00:00Z",
+                434727,
+                435083,
+                356,
+                firstVehicleUseId),
+            VehicleUse(
+                dddFileId,
+                "DW 22222",
+                "2026-05-06T10:00:00Z",
+                "2026-05-06T12:30:00Z",
+                435083,
+                435471,
+                388,
+                secondVehicleUseId)
+        };
+
+        var reportActivities = DriverReportExportService.BuildReportActivities(
+            activities,
+            vehicleUses,
+            fromUtc,
+            toUtcExclusive);
+
+        Assert.AreEqual(4, reportActivities.Count);
+        Assert.AreEqual(356, reportActivities[0].DistanceKm);
+        Assert.IsNull(reportActivities[1].DistanceKm);
+        Assert.AreEqual(388, reportActivities[2].DistanceKm);
+        Assert.IsNull(reportActivities[3].DistanceKm);
+        Assert.AreEqual(744, DriverReportExportService.SumDistance(reportActivities));
     }
 
     private static DriverReportExportService.DriverReportActivitySource Activity(

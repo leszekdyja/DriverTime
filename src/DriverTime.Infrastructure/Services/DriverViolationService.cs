@@ -130,6 +130,11 @@ public class DriverViolationService : IDriverViolationService
 
             if (!IsBreakActivity(activity))
             {
+                if (IsActivity(activity, "WORK"))
+                {
+                    firstSplitTaken = false;
+                }
+
                 continue;
             }
 
@@ -699,6 +704,7 @@ public class DriverViolationService : IDriverViolationService
 
     private static bool IsBreakActivity(DriverActivity activity) =>
         IsActivity(activity, "REST")
+        || IsActivity(activity, "AVAILABILITY")
         || (IsMultiManningMarker(activity) && GetDuration(activity) >= FullBreak);
 
     private static bool IsMultiManningMarker(DriverActivity activity) =>

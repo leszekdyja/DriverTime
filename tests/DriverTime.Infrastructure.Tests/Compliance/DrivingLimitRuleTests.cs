@@ -1,6 +1,8 @@
 using DriverTime.Domain.Compliance;
+using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
+using DriverTime.Infrastructure.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -348,6 +350,48 @@ public class DrivingLimitRuleTests
         Assert.AreEqual(0, result.Violations.Count);
     }
 
+    [DataTestMethod]
+    [DataRow(ActivityTypeNormalizer.Rest, ActivityTypeNormalizer.Rest)]
+    [DataRow(ActivityTypeNormalizer.Availability, ActivityTypeNormalizer.Availability)]
+    [DataRow(ActivityTypeNormalizer.Rest, ActivityTypeNormalizer.Availability)]
+    [DataRow(ActivityTypeNormalizer.Availability, ActivityTypeNormalizer.Rest)]
+    public void ContinuousDrivingBreak_WithSplitFifteenAndThirtyRestOrAvailability_ResetsCounter(
+        string firstBreakType,
+        string secondBreakType)
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T10:00:00Z"),
+            Activity(driverId, firstBreakType, "2026-06-08T10:00:00Z", "2026-06-08T10:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:15:00Z", "2026-06-08T12:45:00Z"),
+            Activity(driverId, secondBreakType, "2026-06-08T12:45:00Z", "2026-06-08T13:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:00Z", "2026-06-08T17:45:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [DataTestMethod]
+    [DataRow(ActivityTypeNormalizer.Rest)]
+    [DataRow(ActivityTypeNormalizer.Availability)]
+    public void ContinuousDrivingBreak_WithFortyFiveMinuteRestOrAvailability_ResetsCounter(string breakType)
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, breakType, "2026-06-08T12:30:00Z", "2026-06-08T13:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:00Z", "2026-06-08T17:45:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
     [TestMethod]
     public void ContinuousDrivingBreak_WithSplitThirtyAndFifteenMinutes_ReturnsViolation()
     {
@@ -429,7 +473,7 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
-    public void ContinuousDrivingBreak_WithAvailabilityBetweenSplitBreakParts_DoesNotResetCounter()
+    public void ContinuousDrivingBreak_WithAvailabilityBetweenSplitBreakParts_StillAllowsSplitCounterReset()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -444,8 +488,7 @@ public class DrivingLimitRuleTests
 
         var result = _continuousRule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(1, result.Violations.Count);
-        Assert.AreEqual(271, result.Violations[0].ActualMinutes);
+        Assert.AreEqual(0, result.Violations.Count);
     }
 
     [TestMethod]
@@ -484,7 +527,64 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
-    public void ContinuousDrivingBreak_WithFortyFiveMinuteAvailability_DoesNotResetCounter()
+    public void ContinuousDrivingBreak_WithFourteenMinutesFiftyNineSecondsAndThirtyMinutes_DoesNotResetCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T10:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T10:00:00Z", "2026-06-08T10:14:59Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:14:59Z", "2026-06-08T12:45:59Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:45:59Z", "2026-06-08T13:15:59Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:59Z", "2026-06-08T13:16:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(271, result.Violations[0].ActualMinutes);
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithFifteenMinutesAndTwentyNineMinutesFiftyNineSeconds_DoesNotResetCounter()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T10:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T10:00:00Z", "2026-06-08T10:15:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:15:00Z", "2026-06-08T12:45:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:45:00Z", "2026-06-08T13:14:59Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:14:59Z", "2026-06-08T13:15:59Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(271, result.Violations[0].ActualMinutes);
+    }
+
+    [TestMethod]
+    public void ViolationDetectionService_WithSplitFifteenAndThirtyMinutes_DoesNotCreateContinuousDrivingViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var activities = new[]
+        {
+            DriverActivity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T10:00:00Z"),
+            DriverActivity(driverId, ActivityTypeNormalizer.Availability, "2026-06-08T10:00:00Z", "2026-06-08T10:15:00Z"),
+            DriverActivity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:15:00Z", "2026-06-08T12:45:00Z"),
+            DriverActivity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T12:45:00Z", "2026-06-08T13:15:00Z"),
+            DriverActivity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T13:15:00Z", "2026-06-08T17:45:00Z")
+        };
+
+        var violations = DetectLegacyViolations(driverId, activities);
+
+        Assert.IsFalse(violations.Any(x =>
+            x.RegulationReference == "EU561:CONTINUOUS_DRIVING_WITHOUT_45M_BREAK"));
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithFortyFiveMinuteAvailability_ResetsCounter()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -496,8 +596,7 @@ public class DrivingLimitRuleTests
 
         var result = _continuousRule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(1, result.Violations.Count);
-        Assert.AreEqual(495, result.Violations[0].ActualMinutes);
+        Assert.AreEqual(0, result.Violations.Count);
     }
 
     [TestMethod]
@@ -751,5 +850,42 @@ public class DrivingLimitRuleTests
             StartUtc = DateTime.Parse(startUtc).ToUniversalTime(),
             EndUtc = DateTime.Parse(endUtc).ToUniversalTime()
         };
+    }
+
+    private static DriverActivity DriverActivity(
+        Guid driverId,
+        string activityType,
+        string startUtc,
+        string endUtc)
+    {
+        return new DriverActivity
+        {
+            Id = Guid.NewGuid(),
+            DddFileId = Guid.NewGuid(),
+            DddFile = new DddFile
+            {
+                Id = Guid.NewGuid(),
+                DriverId = driverId,
+                DriverFirstName = "Jan",
+                DriverLastName = "Kowalski",
+                DriverCardNumber = "CARD"
+            },
+            ActivityType = activityType,
+            StartUtc = DateTime.Parse(startUtc).ToUniversalTime(),
+            EndUtc = DateTime.Parse(endUtc).ToUniversalTime()
+        };
+    }
+
+    private static IReadOnlyList<Violation> DetectLegacyViolations(
+        Guid driverId,
+        IReadOnlyList<DriverActivity> activities)
+    {
+        var method = typeof(ViolationDetectionService).GetMethod(
+            "Detect",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        Assert.IsNotNull(method);
+
+        return (IReadOnlyList<Violation>)method.Invoke(null, [driverId, activities])!;
     }
 }

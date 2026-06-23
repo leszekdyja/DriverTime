@@ -12,6 +12,8 @@ public class ViolationDetectionService : IViolationDetectionService
     private static readonly TimeSpan AbsoluteDailyDrivingLimit = TimeSpan.FromHours(10);
     private static readonly TimeSpan ContinuousDrivingLimit = TimeSpan.FromHours(4.5);
     private static readonly TimeSpan RequiredBreak = TimeSpan.FromMinutes(45);
+    private static readonly TimeSpan FirstSplitBreak = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan SecondSplitBreak = TimeSpan.FromMinutes(30);
     private static readonly TimeSpan RequiredDailyRest = TimeSpan.FromHours(11);
 
     private static readonly string[] AutomaticViolationReferences =
@@ -232,6 +234,7 @@ public class ViolationDetectionService : IViolationDetectionService
         ICollection<Violation> violations)
     {
         var driving = TimeSpan.Zero;
+        var firstSplitTaken = false;
         DateTime? periodStart = null;
         DateTime? lastDrivingEnd = null;
 
@@ -245,18 +248,36 @@ public class ViolationDetectionService : IViolationDetectionService
                 continue;
             }
 
-            if (IsRest(activity) && GetDuration(activity) >= RequiredBreak)
-            {
-                AddContinuousDrivingViolation(
-                    driverId,
-                    periodStart,
-                    lastDrivingEnd,
-                    driving,
-                    violations);
+            var duration = GetDuration(activity);
 
-                driving = TimeSpan.Zero;
-                periodStart = null;
-                lastDrivingEnd = null;
+            if (IsBreak(activity))
+            {
+                if (duration >= RequiredBreak ||
+                    (firstSplitTaken && duration >= SecondSplitBreak))
+                {
+                    AddContinuousDrivingViolation(
+                        driverId,
+                        periodStart,
+                        lastDrivingEnd,
+                        driving,
+                        violations);
+
+                    driving = TimeSpan.Zero;
+                    periodStart = null;
+                    lastDrivingEnd = null;
+                    firstSplitTaken = false;
+                }
+                else if (!firstSplitTaken && duration >= FirstSplitBreak)
+                {
+                    firstSplitTaken = true;
+                }
+
+                continue;
+            }
+
+            if (IsWork(activity))
+            {
+                firstSplitTaken = false;
             }
         }
 
@@ -353,6 +374,16 @@ public class ViolationDetectionService : IViolationDetectionService
         activity.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase)
         || activity.ActivityType.Equals("BREAK", StringComparison.OrdinalIgnoreCase)
         || activity.ActivityType.Equals("ODPOCZYNEK", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAvailability(DriverActivity activity) =>
+        activity.ActivityType.Equals("AVAILABILITY", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsBreak(DriverActivity activity) =>
+        IsRest(activity) || IsAvailability(activity);
+
+    private static bool IsWork(DriverActivity activity) =>
+        activity.ActivityType.Equals("WORK", StringComparison.OrdinalIgnoreCase)
+        || activity.ActivityType.Equals("PRACA", StringComparison.OrdinalIgnoreCase);
 
     private static TimeSpan GetDuration(DriverActivity activity)
     {
