@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import DriverActivityCalendar from "../components/DriverActivityCalendar";
 import TachographTimeline from "../components/tachograph/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
@@ -34,49 +33,11 @@ const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     timeZone: "UTC",
 });
 
-const timeFormatter = new Intl.DateTimeFormat("pl-PL", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-});
 
-const activityLabels: Record<string, string> = {
-    DRIVING: "Jazda",
-    WORK: "Praca",
-    AVAILABILITY: "Dyspozycyjność",
-    REST: "Odpoczynek",
-};
-
-const activityIcons: Record<string, string> = {
-    DRIVING: "🚚",
-    WORK: "⚒",
-    AVAILABILITY: "◷",
-    REST: "🛏",
-};
-
-const timelineLegend = [
-    { type: "DRIVING", label: activityLabels.DRIVING },
-    { type: "WORK", label: activityLabels.WORK },
-    { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
-    { type: "REST", label: activityLabels.REST },
-];
-
-const minimumIconSegmentWidthPercent = 2.4;
-
-type TimelineSegment = {
-    id: string;
-    activityType: string;
-    startUtc: Date;
-    endUtc: Date;
-    leftPercent: number;
-    widthPercent: number;
-    durationSeconds: number;
-};
 
 type TimelineDay = {
     date: string;
     label: string;
-    segments: TimelineSegment[];
 };
 
 function formatDate(value: string | null) {
@@ -143,13 +104,6 @@ function addDays(date: Date, days: number) {
     return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function secondsSinceDayStart(date: Date, dayStart: Date) {
-    return Math.max(0, (date.getTime() - dayStart.getTime()) / 1000);
-}
-
-function toTimelinePercent(seconds: number) {
-    return (seconds / 86400) * 100;
-}
 
 function buildTimelineActivityRange(activities: { startUtc: string; endUtc: string }[]) {
     const validRanges = activities
@@ -178,24 +132,6 @@ function buildTimelineActivityRange(activities: { startUtc: string; endUtc: stri
     };
 }
 
-function getActivityClass(activityType: string) {
-    const normalized = activityType.toUpperCase();
-
-    if (normalized === "DRIVING") return "driving";
-    if (normalized === "WORK") return "work";
-    if (normalized === "AVAILABILITY") return "availability";
-    if (normalized === "REST") return "rest";
-
-    return "other";
-}
-
-function getActivityLabel(activityType: string) {
-    return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
-}
-
-function getActivityIcon(activityType: string) {
-    return activityIcons[activityType.toUpperCase()] || "•";
-}
 
 function displayViolationType(violation: DriverViolation) {
     return getComplianceRuleLabel(violation.violationType, violation.code);
@@ -258,8 +194,8 @@ function DailyRestViolationDetails({ violation }: { violation: DriverViolation }
     );
 }
 
-function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[] {
-    const rawSegmentsByDay = new Map<string, TimelineSegment[]>();
+function buildTimelineDays(activities: TimelineSourceActivity[]): TimelineDay[] {
+    const days = new Map<string, Date>();
 
     for (const activity of activities) {
         const activityStart = new Date(activity.startUtc);
@@ -273,121 +209,20 @@ function buildDailyTimeline(activities: TimelineSourceActivity[]): TimelineDay[]
             continue;
         }
 
-        let segmentStart = activityStart;
+        let dayCursor = getUtcDayStart(activityStart);
 
-        while (segmentStart < activityEnd) {
-            const dayStart = getUtcDayStart(segmentStart);
-            const dayEnd = addDays(dayStart, 1);
-            const segmentEnd = activityEnd < dayEnd ? activityEnd : dayEnd;
-            const dayKey = toUtcDayKey(dayStart);
-
-            if (!rawSegmentsByDay.has(dayKey)) {
-                rawSegmentsByDay.set(dayKey, []);
-            }
-
-            rawSegmentsByDay.get(dayKey)!.push(createTimelineSegment({
-                id: activity.id,
-                activityType: activity.activityType,
-                startUtc: segmentStart,
-                endUtc: segmentEnd,
-                dayStart,
-            }));
-
-            segmentStart = segmentEnd;
+        while (dayCursor < activityEnd) {
+            days.set(toUtcDayKey(dayCursor), dayCursor);
+            dayCursor = addDays(dayCursor, 1);
         }
     }
 
-    return Array.from(rawSegmentsByDay.entries())
-        .map(([date, rawSegments]) => {
-            const dayStart = getUtcDayStart(new Date(`${date}T00:00:00Z`));
-            const dayEnd = addDays(dayStart, 1);
-            const ordered = rawSegments.sort(
-                (left, right) => left.startUtc.getTime() - right.startUtc.getTime(),
-            );
-            const segments: TimelineSegment[] = [];
-            let cursor = dayStart;
-
-            for (const segment of ordered) {
-                if (segment.endUtc <= cursor) {
-                    continue;
-                }
-
-                if (segment.startUtc > cursor) {
-                    segments.push(createTimelineSegment({
-                        id: `rest-gap-${date}-${cursor.toISOString()}`,
-                        activityType: "REST",
-                        startUtc: cursor,
-                        endUtc: segment.startUtc,
-                        dayStart,
-                    }));
-                }
-
-                const clippedStart = segment.startUtc < cursor ? cursor : segment.startUtc;
-                const clippedEnd = segment.endUtc > dayEnd ? dayEnd : segment.endUtc;
-
-                if (clippedEnd > clippedStart) {
-                    segments.push(createTimelineSegment({
-                        id: segment.id,
-                        activityType: segment.activityType,
-                        startUtc: clippedStart,
-                        endUtc: clippedEnd,
-                        dayStart,
-                    }));
-                    cursor = clippedEnd;
-                }
-            }
-
-            if (cursor < dayEnd) {
-                segments.push(createTimelineSegment({
-                    id: `rest-gap-${date}-${cursor.toISOString()}`,
-                    activityType: "REST",
-                    startUtc: cursor,
-                    endUtc: dayEnd,
-                    dayStart,
-                }));
-            }
-
-            return {
-                date,
-                label: dayFormatter.format(dayStart),
-                segments,
-            };
-        })
+    return Array.from(days.entries())
+        .map(([date, dayStart]) => ({
+            date,
+            label: dayFormatter.format(dayStart),
+        }))
         .sort((left, right) => right.date.localeCompare(left.date));
-}
-
-function createTimelineSegment({
-    id,
-    activityType,
-    startUtc,
-    endUtc,
-    dayStart,
-}: {
-    id: string;
-    activityType: string;
-    startUtc: Date;
-    endUtc: Date;
-    dayStart: Date;
-}): TimelineSegment {
-    const durationSeconds = Math.max(0, (endUtc.getTime() - startUtc.getTime()) / 1000);
-
-    return {
-        id,
-        activityType,
-        startUtc,
-        endUtc,
-        leftPercent: toTimelinePercent(secondsSinceDayStart(startUtc, dayStart)),
-        widthPercent: toTimelinePercent(durationSeconds),
-        durationSeconds,
-    };
-}
-
-function formatTimelineTooltip(segment: TimelineSegment) {
-    return [
-        getActivityLabel(segment.activityType),
-        `${timeFormatter.format(segment.startUtc)} - ${timeFormatter.format(segment.endUtc)}`,
-        formatDuration(segment.durationSeconds),
-    ].join("\n");
 }
 
 export default function DriverDetailsPage() {
@@ -489,7 +324,7 @@ export default function DriverDetailsPage() {
         void loadTimelineActivities();
     }, [details?.cardNumber, timelineActivityRange]);
     const timelineDays = useMemo(
-        () => buildDailyTimeline(timelineActivities),
+        () => buildTimelineDays(timelineActivities),
         [timelineActivities],
     );
 
@@ -551,9 +386,6 @@ export default function DriverDetailsPage() {
                         <TimeCard label="Odpoczynek" seconds={details.restSeconds} />
                         <TimeCard label="Dyspozycyjność" seconds={details.availabilitySeconds} />
                     </section>
-
-                    <DriverActivityCalendar driverId={details.id} />
-
                     <section className="driver-details-section tachograph-section">
                         <div className="daily-activity-heading">
                             <div>
@@ -591,77 +423,6 @@ export default function DriverDetailsPage() {
                             </div>
                         )}
                     </section>
-                    <section className="driver-details-section daily-activity-section">
-                        <div className="daily-activity-heading">
-                            <div>
-                                <h3>Dzienna oś aktywności</h3>
-                                <p>Pełny widok 24 godzin z rzeczywistych aktywności StartUtc i EndUtc.</p>
-                            </div>
-                            <div className="daily-activity-legend" aria-label="Legenda osi aktywności">
-                                {timelineLegend.map((item) => (
-                                    <span key={item.type}>
-                                        <i className={`daily-activity-legend-dot ${getActivityClass(item.type)}`} />
-                                        <span className="daily-activity-legend-icon" aria-hidden="true">
-                                            {getActivityIcon(item.type)}
-                                        </span>
-                                        {item.label}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-
-                        {isTimelineLoading ? (
-                            <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ładowanie osi aktywności">
-                                {Array.from({ length: 4 }, (_, index) => (
-                                    <div className="ui-skeleton daily-activity-skeleton" key={index} />
-                                ))}
-                            </div>
-                        ) : timelineError ? (
-                            <p className="activity-calendar-error" role="alert">{timelineError}</p>
-                        ) : timelineDays.length === 0 ? (
-                            <EmptyState
-                                title="Brak aktywności"
-                                description="Dzienna oś pojawi się po imporcie aktywności kierowcy."
-                            />
-                        ) : (
-                            <div className="daily-activity-days">
-                                {timelineDays.map((day) => (
-                                    <article className="daily-activity-day" key={day.date}>
-                                        <h4>{day.label}</h4>
-                                        <div className="daily-activity-timeline" aria-label={`Dzienna oś aktywności ${day.date}`}>
-                                            <span className="daily-activity-baseline" />
-                                            {day.segments.map((segment, index) => (
-                                                <span
-                                                    className={`daily-activity-segment ${getActivityClass(segment.activityType)}`}
-                                                    key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
-                                                    style={{
-                                                        left: `${segment.leftPercent}%`,
-                                                        width: `${segment.widthPercent}%`,
-                                                    }}
-                                                    title={formatTimelineTooltip(segment)}
-                                                    aria-label={formatTimelineTooltip(segment)}
-                                                >
-                                                    {segment.widthPercent >= minimumIconSegmentWidthPercent ? (
-                                                        <span className="daily-activity-segment-icon" aria-hidden="true">
-                                                            {getActivityIcon(segment.activityType)}
-                                                        </span>
-                                                    ) : null}
-                                                </span>
-                                            ))}
-                                        </div>
-                                        <div className="timeline-hours">
-                                            <span>00:00</span>
-                                            <span>06:00</span>
-                                            <span>12:00</span>
-                                            <span>18:00</span>
-                                            <span>24:00</span>
-                                        </div>
-                                    </article>
-                                ))}
-                            </div>
-                        )}
-                    </section>
-
                     <DetailsSection title="Historia importów" empty={details.recentImports.length === 0}>
                         <table><thead><tr><th>Plik</th><th>Data</th><th>Aktywności</th><th></th></tr></thead>
                             <tbody>{details.recentImports.map((item) => <tr key={item.id}><td>{item.fileName}</td><td>{formatDate(item.uploadedAtUtc)}</td><td>{item.activitiesCount}</td><td><Link className="table-link" to={`/imports/${item.id}`}>Szczegóły</Link></td></tr>)}</tbody>
