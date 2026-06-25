@@ -317,11 +317,11 @@ public class DriverReportVehicleMatchingTests
     public void BuildReportActivities_ActivityClippedToReportRange_UsesVisibleTimesAndDuration()
     {
         var dddFileId = Guid.NewGuid();
-        var fromUtc = DateTime.Parse("2026-05-06T00:00:00Z").ToUniversalTime();
-        var toUtcExclusive = DateTime.Parse("2026-05-07T00:00:00Z").ToUniversalTime();
+        var fromUtc = DateTime.Parse("2026-04-26T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-04-27T00:00:00Z").ToUniversalTime();
         var activities = new[]
         {
-            Activity(dddFileId, "2026-05-05T16:00:00Z", "2026-05-06T02:57:45Z", activityType: "REST")
+            Activity(dddFileId, "2026-04-05T00:00:00Z", "2026-04-26T02:57:45Z", activityType: "REST")
         };
 
         var reportActivities = DriverReportExportService.BuildReportActivities(
@@ -331,8 +331,47 @@ public class DriverReportVehicleMatchingTests
             toUtcExclusive);
 
         Assert.AreEqual(fromUtc, reportActivities[0].StartUtc);
-        Assert.AreEqual(DateTime.Parse("2026-05-06T02:57:45Z").ToUniversalTime(), reportActivities[0].EndUtc);
+        Assert.AreEqual(DateTime.Parse("2026-04-26T02:57:45Z").ToUniversalTime(), reportActivities[0].EndUtc);
         Assert.AreEqual(10665, reportActivities[0].DurationSeconds);
+    }
+
+    [TestMethod]
+    public void BuildReportActivities_ReportedShortDrives_ShowEachVehicleUseDistanceOnlyOnce()
+    {
+        var dddFileId = Guid.NewGuid();
+        var fromUtc = DateTime.Parse("2026-04-26T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-04-27T00:00:00Z").ToUniversalTime();
+        var activities = new[]
+        {
+            Activity(dddFileId, "2026-04-26T02:59:00Z", "2026-04-26T03:00:00Z"),
+            Activity(dddFileId, "2026-04-26T03:06:00Z", "2026-04-26T03:07:00Z"),
+            Activity(dddFileId, "2026-04-26T03:13:00Z", "2026-04-26T03:31:00Z"),
+            Activity(dddFileId, "2026-04-26T18:09:00Z", "2026-04-26T18:11:00Z"),
+            Activity(dddFileId, "2026-04-26T18:17:00Z", "2026-04-26T18:27:00Z")
+        };
+        var vehicleUses = new[]
+        {
+            VehicleUse(dddFileId, "DPL 07532", "2026-04-26T02:58:00Z", "2026-04-26T03:32:00Z", 761093, 761137, 44),
+            VehicleUse(dddFileId, "DLU 68178", "2026-04-26T18:08:00Z", "2026-04-26T18:28:00Z", 581856, 582015, 159)
+        };
+
+        var reportActivities = DriverReportExportService.BuildReportActivities(
+            activities,
+            vehicleUses,
+            fromUtc,
+            toUtcExclusive);
+
+        Assert.AreEqual(44, reportActivities[0].DistanceKm);
+        Assert.AreEqual(761093, reportActivities[0].StartOdometerKm);
+        Assert.AreEqual(761137, reportActivities[0].EndOdometerKm);
+        Assert.IsNull(reportActivities[1].DistanceKm);
+        Assert.IsNull(reportActivities[1].StartOdometerKm);
+        Assert.IsNull(reportActivities[2].DistanceKm);
+        Assert.AreEqual(159, reportActivities[3].DistanceKm);
+        Assert.AreEqual(581856, reportActivities[3].StartOdometerKm);
+        Assert.AreEqual(582015, reportActivities[3].EndOdometerKm);
+        Assert.IsNull(reportActivities[4].DistanceKm);
+        Assert.AreEqual(203, DriverReportExportService.SumDistance(reportActivities));
     }
     private static DriverReportExportService.DriverReportActivitySource Activity(
         Guid dddFileId,

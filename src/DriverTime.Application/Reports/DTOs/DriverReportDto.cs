@@ -43,6 +43,8 @@ public class DriverReportActivityDto
 
     public Guid? VehicleUseId { get; set; }
 
+    public string VehicleUseBusinessKey { get; set; } = string.Empty;
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }
