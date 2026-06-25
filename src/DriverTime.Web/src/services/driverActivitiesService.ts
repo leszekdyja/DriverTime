@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient";
+﻿import { apiFetch } from "./apiClient";
 
 export type DriverActivity = {
     id: string;
@@ -10,10 +10,15 @@ export type DriverActivity = {
     endUtc: string;
     activityType: string;
     durationSeconds: number;
+    vehicleRegistration?: string;
+    vehicleRegistrationNumber?: string;
+    vehicle?: string;
 };
 
 export async function getDriverActivitiesByCard(
     driverCardNumber: string,
+    from?: string,
+    to?: string,
 ): Promise<DriverActivity[]> {
     const parameters = new URLSearchParams();
     const safeDriverCardNumber = driverCardNumber.trim();
@@ -23,6 +28,14 @@ export async function getDriverActivitiesByCard(
     }
 
     parameters.set("driverCardNumber", safeDriverCardNumber);
+
+    if (from) {
+        parameters.set("from", from);
+    }
+
+    if (to) {
+        parameters.set("to", to);
+    }
 
     const response = await apiFetch(`/api/driver-activities?${parameters.toString()}`);
 

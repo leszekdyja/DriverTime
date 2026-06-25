@@ -1,4 +1,4 @@
-﻿using DriverTime.Application.Drivers.DTOs;
+using DriverTime.Application.Drivers.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
@@ -147,6 +147,20 @@ public class DriverService : IDriverService
         driver.LastImportAtUtc = imports.FirstOrDefault()?.UploadedAtUtc;
         driver.RecentImports = imports.Take(10).ToList();
         driver.RecentActivities = activities.Take(20).ToList();
+
+        var visibleTimelineRange = GetVisibleTimelineRange(driver.RecentActivities);
+        if (visibleTimelineRange is not null)
+        {
+            driver.CountryEntries = await GetCountryEntriesAsync(
+                id,
+                visibleTimelineRange.Value.StartUtc,
+                visibleTimelineRange.Value.EndUtc);
+            driver.VehicleUses = await GetVehicleUsesAsync(
+                id,
+                visibleTimelineRange.Value.StartUtc,
+                visibleTimelineRange.Value.EndUtc);
+        }
+
         driver.RecentViolations = ((await _driverViolationService
                 .GetViolationsForDriverAsync(id)) ?? Array.Empty<DriverViolationDto>())
             .Take(10)
@@ -171,6 +185,79 @@ public class DriverService : IDriverService
         return driver;
     }
 
+
+    private async Task<List<DriverCountryEntryDto>> GetCountryEntriesAsync(
+        Guid driverId,
+        DateTime rangeStartUtc,
+        DateTime rangeEndUtc)
+    {
+        return await _dbContext.CountryEntries
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.DddFile.DriverId == driverId
+                && x.EntryTimeUtc >= rangeStartUtc
+                && x.EntryTimeUtc < rangeEndUtc)
+            .OrderBy(x => x.EntryTimeUtc)
+            .Select(x => new DriverCountryEntryDto
+            {
+                Id = x.Id,
+                EntryTimeUtc = x.EntryTimeUtc,
+                CountryCode = x.CountryCode,
+                EntryType = "Unknown"
+            })
+            .ToListAsync();
+    }
+
+    private async Task<List<DriverVehicleUseDto>> GetVehicleUsesAsync(
+        Guid driverId,
+        DateTime rangeStartUtc,
+        DateTime rangeEndUtc)
+    {
+        return await _dbContext.VehicleUses
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == _currentUser.CompanyId
+                && x.DddFile.DriverId == driverId
+                && x.RegistrationNumber != string.Empty
+                && x.StartUtc < rangeEndUtc
+                && x.EndUtc > rangeStartUtc)
+            .OrderBy(x => x.StartUtc)
+            .Select(x => new DriverVehicleUseDto
+            {
+                Id = x.Id,
+                StartUtc = x.StartUtc,
+                EndUtc = x.EndUtc,
+                RegistrationNumber = x.RegistrationNumber,
+                DistanceKm = x.DistanceKm,
+                StartOdometerKm = x.StartOdometerKm,
+                EndOdometerKm = x.EndOdometerKm
+            })
+            .ToListAsync();
+    }
+
+    private static (DateTime StartUtc, DateTime EndUtc)? GetVisibleTimelineRange(
+        IReadOnlyCollection<DriverDetailsActivityDto> activities)
+    {
+        if (activities.Count == 0)
+        {
+            return null;
+        }
+
+        var firstStartUtc = AsUtc(activities.Min(x => x.StartUtc));
+        var lastEndUtc = AsUtc(activities.Max(x => x.EndUtc));
+        var rangeStartUtc = firstStartUtc.Date;
+        var rangeEndUtc = lastEndUtc.Date.AddDays(1);
+
+        return (rangeStartUtc, rangeEndUtc);
+    }
+
+    private static DateTime AsUtc(DateTime value)
+    {
+        return value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+    }
     private static void AddDuration(
         DriverDetailsDto driver,
         string activityType,

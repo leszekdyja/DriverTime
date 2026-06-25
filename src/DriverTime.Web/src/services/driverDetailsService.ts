@@ -22,6 +22,24 @@ export type DriverViolation = {
     severity: string;
 };
 
+export type DriverCountryEntry = {
+    id: string;
+    entryTimeUtc: string;
+    timeUtc?: string;
+    countryCode: string;
+    entryType?: string;
+};
+
+export type DriverVehicleUse = {
+    id: string;
+    startUtc: string;
+    endUtc: string;
+    registrationNumber: string;
+    distanceKm?: number | null;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
+};
+
 export type DriverVehicle = {
     registrationNumber: string;
     firstUsedAtUtc: string;
@@ -47,6 +65,8 @@ export type DriverDetails = {
     recentActivities: DriverActivity[];
     recentViolations: DriverViolation[];
     vehicles: DriverVehicle[];
+    countryEntries: DriverCountryEntry[];
+    vehicleUses: DriverVehicleUse[];
 };
 
 export async function getDriverDetails(id: string): Promise<DriverDetails> {

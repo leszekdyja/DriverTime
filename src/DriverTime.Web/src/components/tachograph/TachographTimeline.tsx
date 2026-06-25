@@ -1,4 +1,4 @@
-﻿import { getComplianceRuleLabel } from "../../utils/complianceLabels";
+import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
 export type TachographActivity = {
@@ -16,6 +16,8 @@ export type TachographCountryEntry = {
     id?: string;
     timestamp?: string;
     timestampUtc?: string;
+    entryTimeUtc?: string;
+    timeUtc?: string;
     occurredAtUtc?: string;
     countryCode?: string;
     countryName?: string;
@@ -33,6 +35,9 @@ export type TachographVehicleUse = {
     vehicleRegistration?: string;
     vehicleRegistrationNumber?: string;
     vehicle_registration?: string;
+    distanceKm?: number | null;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
 };
 
 export type TachographViolation = {
@@ -288,7 +293,7 @@ function buildCountryMarkers(entries: TachographCountryEntry[], day: string): Co
 
     return entries
         .map((entry, index) => {
-            const timestamp = parseDate(entry.timestampUtc ?? entry.timestamp ?? entry.occurredAtUtc);
+            const timestamp = parseDate(entry.entryTimeUtc ?? entry.timeUtc ?? entry.timestampUtc ?? entry.timestamp ?? entry.occurredAtUtc);
             const countryCode = entry.countryCode ?? entry.country_code ?? "";
 
             if (!timestamp || timestamp < bounds.dayStart || timestamp >= bounds.dayEnd || !countryCode.trim()) {

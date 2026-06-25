@@ -151,6 +151,33 @@ function toTimelinePercent(seconds: number) {
     return (seconds / 86400) * 100;
 }
 
+function buildTimelineActivityRange(activities: { startUtc: string; endUtc: string }[]) {
+    const validRanges = activities
+        .map((activity) => ({
+            start: new Date(activity.startUtc),
+            end: new Date(activity.endUtc),
+        }))
+        .filter(({ start, end }) =>
+            !Number.isNaN(start.getTime()) &&
+            !Number.isNaN(end.getTime()) &&
+            end > start,
+        );
+
+    if (validRanges.length === 0) {
+        return null;
+    }
+
+    const firstStart = new Date(Math.min(...validRanges.map((activity) => activity.start.getTime())));
+    const lastEnd = new Date(Math.max(...validRanges.map((activity) => activity.end.getTime())));
+    const rangeStart = getUtcDayStart(firstStart);
+    const rangeEnd = addDays(getUtcDayStart(lastEnd), 1);
+
+    return {
+        from: rangeStart.toISOString(),
+        to: rangeEnd.toISOString(),
+    };
+}
+
 function getActivityClass(activityType: string) {
     const normalized = activityType.toUpperCase();
 
@@ -426,9 +453,14 @@ export default function DriverDetailsPage() {
         void loadViolations();
     }, [details, id]);
 
+    const timelineActivityRange = useMemo(
+        () => details ? buildTimelineActivityRange(details.recentActivities) : null,
+        [details],
+    );
+
     useEffect(() => {
         async function loadTimelineActivities() {
-            if (!details?.cardNumber) {
+            if (!details?.cardNumber || !timelineActivityRange) {
                 setTimelineActivities([]);
                 setIsTimelineLoading(false);
                 return;
@@ -438,7 +470,11 @@ export default function DriverDetailsPage() {
             setTimelineError("");
 
             try {
-                setTimelineActivities(await getDriverActivitiesByCard(details.cardNumber));
+                setTimelineActivities(await getDriverActivitiesByCard(
+                    details.cardNumber,
+                    timelineActivityRange.from,
+                    timelineActivityRange.to,
+                ));
             } catch (loadError) {
                 setTimelineError(
                     loadError instanceof Error
@@ -451,8 +487,7 @@ export default function DriverDetailsPage() {
         }
 
         void loadTimelineActivities();
-    }, [details?.cardNumber]);
-
+    }, [details?.cardNumber, timelineActivityRange]);
     const timelineDays = useMemo(
         () => buildDailyTimeline(timelineActivities),
         [timelineActivities],
@@ -548,6 +583,8 @@ export default function DriverDetailsPage() {
                                         day={day.date}
                                         key={day.date}
                                         label={day.label}
+                                        countryEntries={details.countryEntries}
+                                        vehicleUses={details.vehicleUses}
                                         violations={violations}
                                     />
                                 ))}
