@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import DriverActivityCalendar from "../components/DriverActivityCalendar";
+import TachographTimeline from "../components/tachograph/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDriverDetails,
@@ -518,6 +519,40 @@ export default function DriverDetailsPage() {
 
                     <DriverActivityCalendar driverId={details.id} />
 
+                    <section className="driver-details-section tachograph-section">
+                        <div className="daily-activity-heading">
+                            <div>
+                                <h3>Wykres tachografowy</h3>
+                                <p>Nowy widok dzienny 00:00-24:00 z godzinową skalą i tooltipami segmentów.</p>
+                            </div>
+                        </div>
+
+                        {isTimelineLoading ? (
+                            <div className="activity-calendar-skeleton" aria-busy="true" aria-label="Ładowanie wykresu tachografowego">
+                                {Array.from({ length: 4 }, (_, index) => (
+                                    <div className="ui-skeleton daily-activity-skeleton" key={index} />
+                                ))}
+                            </div>
+                        ) : timelineError ? (
+                            <p className="activity-calendar-error" role="alert">{timelineError}</p>
+                        ) : timelineDays.length === 0 ? (
+                            <EmptyState
+                                title="Brak aktywności"
+                                description="Wykres tachografowy pojawi się po imporcie aktywności kierowcy."
+                            />
+                        ) : (
+                            <div className="tachograph-days">
+                                {timelineDays.map((day) => (
+                                    <TachographTimeline
+                                        activities={timelineActivities}
+                                        day={day.date}
+                                        key={day.date}
+                                        label={day.label}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </section>
                     <section className="driver-details-section daily-activity-section">
                         <div className="daily-activity-heading">
                             <div>
