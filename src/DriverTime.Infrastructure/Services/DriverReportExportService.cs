@@ -158,23 +158,25 @@ public class DriverReportExportService : IDriverReportExportService
         DateTime fromUtc,
         DateTime toUtcExclusive)
     {
-        var displayedVehicleUseIds = new HashSet<Guid>();
+        var displayedVehicleUseKeys = new HashSet<string>();
+        var uniqueVehicleUses = DeduplicateVehicleUses(vehicleUses);
 
         return DeduplicateActivities(activities)
             .Select(activity =>
             {
                 var start = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
                 var end = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
-                var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
+                var vehicleUse = FindBestVehicleUse(activity, uniqueVehicleUses);
                 var shouldShowOdometer = vehicleUse is not null
-                    && displayedVehicleUseIds.Add(vehicleUse.Id);
+                    && CanReportVehicleUseDistance(activity)
+                    && displayedVehicleUseKeys.Add(GetVehicleUseBusinessKey(vehicleUse));
 
                 return new DriverReportActivityDto
                 {
                     DddFileId = activity.DddFileId,
                     VehicleUseId = vehicleUse?.Id,
-                    StartUtc = activity.StartUtc,
-                    EndUtc = activity.EndUtc,
+                    StartUtc = start,
+                    EndUtc = end,
                     ActivityType = activity.ActivityType,
                     VehicleRegistration = ToReportVehicleDisplay(
                         vehicleUse?.RegistrationNumber ?? string.Empty),
@@ -197,11 +199,16 @@ public class DriverReportExportService : IDriverReportExportService
         }
 
         var dddFileIds = activities.Select(x => x.DddFileId).Distinct().ToList();
-        return await _dbContext.VehicleUses
+        var fromUtc = activities.Min(x => x.StartUtc);
+        var toUtc = activities.Max(x => x.EndUtc);
+
+        var vehicleUses = await _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 dddFileIds.Contains(x.DddFileId)
-                && !string.IsNullOrWhiteSpace(x.RegistrationNumber))
+                && !string.IsNullOrWhiteSpace(x.RegistrationNumber)
+                && x.StartUtc < toUtc
+                && x.EndUtc > fromUtc)
             .Select(x => new VehicleUseReportSource
             {
                 Id = x.Id,
@@ -214,8 +221,38 @@ public class DriverReportExportService : IDriverReportExportService
                 DistanceKm = x.DistanceKm
             })
             .ToListAsync(cancellationToken);
+
+        return DeduplicateVehicleUses(vehicleUses);
     }
 
+
+    private static List<VehicleUseReportSource> DeduplicateVehicleUses(
+        IEnumerable<VehicleUseReportSource> vehicleUses)
+    {
+        return vehicleUses
+            .GroupBy(GetVehicleUseBusinessKey)
+            .Select(group => group
+                .OrderBy(x => x.StartUtc)
+                .ThenBy(x => x.EndUtc)
+                .ThenBy(x => x.Id)
+                .First())
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+    }
+
+    private static bool CanReportVehicleUseDistance(DriverReportActivitySource activity) =>
+        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetVehicleUseBusinessKey(VehicleUseReportSource vehicleUse) => string.Join(
+        "|",
+        vehicleUse.DddFileId.ToString("D"),
+        vehicleUse.RegistrationNumber.Trim().ToUpperInvariant(),
+        vehicleUse.StartUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.EndUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
     private static List<DriverReportActivitySource> DeduplicateActivities(
         IEnumerable<DriverReportActivitySource> activities)
     {
