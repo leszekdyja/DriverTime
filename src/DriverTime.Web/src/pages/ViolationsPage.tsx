@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import StatusBadge from "../components/StatusBadge";
+import TachographTimeline from "../components/tachograph/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDrivers,
@@ -9,6 +10,10 @@ import {
 } from "../services/complianceService";
 import { exportViolationsExcel } from "../services/excelExportService";
 import { exportViolationsPdf } from "../services/pdfExportService";
+import {
+    getDriverActivitiesByCard,
+    type DriverActivity as TimelineActivity,
+} from "../services/driverActivitiesService";
 import {
     getDriverViolations,
     type DriverViolation,
@@ -60,6 +65,18 @@ const alertSeverityLabels: Record<AlertSeverity, string> = {
     critical: "Krytyczne",
 };
 
+type TimelineDay = {
+    date: string;
+    label: string;
+};
+
+const timelineDayFormatter = new Intl.DateTimeFormat("pl-PL", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+});
 const alertSeverityTones: Record<AlertSeverity, "info" | "warning" | "danger" | "critical"> = {
     info: "info",
     warning: "warning",
@@ -67,6 +84,87 @@ const alertSeverityTones: Record<AlertSeverity, "info" | "warning" | "danger" | 
     critical: "critical",
 };
 
+function parseUtcDate(value?: string | null) {
+    if (!value) return null;
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getUtcDayStart(date: Date) {
+    return new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+    ));
+}
+
+function addDays(date: Date, days: number) {
+    return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function toUtcDayKey(date: Date) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+}
+
+function getViolationPeriod(violation: DriverViolation) {
+    const start = parseUtcDate(violation.occurredAtUtc);
+    const rawEnd = parseUtcDate(violation.periodEndUtc);
+    const end = start && rawEnd && rawEnd > start ? rawEnd : null;
+
+    return {
+        start,
+        end,
+        hasExactRange: Boolean(start && end),
+    };
+}
+
+function buildViolationTimelineDays(violation: DriverViolation): TimelineDay[] {
+    const { start, end } = getViolationPeriod(violation);
+
+    if (!start) {
+        return [];
+    }
+
+    const firstDay = getUtcDayStart(start);
+    const lastInstant = end && end.getTime() > firstDay.getTime()
+        ? new Date(end.getTime() - 1)
+        : start;
+    const lastDay = getUtcDayStart(lastInstant);
+    const days: TimelineDay[] = [];
+
+    for (let cursor = firstDay; cursor <= lastDay; cursor = addDays(cursor, 1)) {
+        days.push({
+            date: toUtcDayKey(cursor),
+            label: timelineDayFormatter.format(cursor),
+        });
+    }
+
+    return days;
+}
+
+function getViolationTimelineFetchRange(days: TimelineDay[]) {
+    if (days.length === 0) {
+        return null;
+    }
+
+    const firstDay = new Date(`${days[0].date}T00:00:00Z`);
+    const lastDay = new Date(`${days[days.length - 1].date}T00:00:00Z`);
+
+    if (Number.isNaN(firstDay.getTime()) || Number.isNaN(lastDay.getTime())) {
+        return null;
+    }
+
+    return {
+        from: firstDay.toISOString(),
+        to: addDays(lastDay, 1).toISOString(),
+    };
+}
 function loadReadAlertIds() {
     try {
         const value = window.localStorage.getItem(readAlertsStorageKey);
@@ -966,8 +1064,45 @@ function ViolationDetailsModal({
     const severity = normalizeSeverity(violation.severity);
     const status = normalizeStatus(violation.status);
     const businessDetails = getBusinessDetailsRows(violation);
+    const timelineDays = useMemo(() => buildViolationTimelineDays(violation), [violation]);
+    const timelineRange = useMemo(() => getViolationTimelineFetchRange(timelineDays), [timelineDays]);
+    const violationPeriod = useMemo(() => getViolationPeriod(violation), [violation]);
+    const [timelineActivities, setTimelineActivities] = useState<TimelineActivity[]>([]);
+    const [isTimelineLoading, setIsTimelineLoading] = useState(false);
+    const [timelineError, setTimelineError] = useState("");
     const hasBusinessDetails =
         businessDetails.summary.length > 0 || businessDetails.rows.length > 0;
+
+    useEffect(() => {
+        async function loadTimelineActivities() {
+            if (!violation.driverCardNumber || !timelineRange) {
+                setTimelineActivities([]);
+                setIsTimelineLoading(false);
+                return;
+            }
+
+            setIsTimelineLoading(true);
+            setTimelineError("");
+
+            try {
+                setTimelineActivities(await getDriverActivitiesByCard(
+                    violation.driverCardNumber,
+                    timelineRange.from,
+                    timelineRange.to,
+                ));
+            } catch (loadError) {
+                setTimelineError(
+                    loadError instanceof Error
+                        ? loadError.message
+                        : "Wystąpił błąd podczas pobierania aktywności do osi czasu.",
+                );
+            } finally {
+                setIsTimelineLoading(false);
+            }
+        }
+
+        void loadTimelineActivities();
+    }, [timelineRange, violation.driverCardNumber]);
 
     return (
         <div className="violation-modal-backdrop" role="presentation" onClick={onClose}>
@@ -1004,7 +1139,7 @@ function ViolationDetailsModal({
                     <div><dt>Kierowca</dt><dd>{displayDriver(violation)}</dd></div>
                     <div><dt>Numer karty</dt><dd>{violation.driverCardNumber || "Brak danych"}</dd></div>
                     <div><dt>Start</dt><dd>{formatDate(violation.occurredAtUtc)}</dd></div>
-                    <div><dt>Koniec</dt><dd>{formatDate(violation.periodEndUtc || violation.occurredAtUtc)}</dd></div>
+                    <div><dt>Koniec</dt><dd>{violation.periodEndUtc ? formatDate(violation.periodEndUtc) : "Brak dokładnego zakresu"}</dd></div>
                     <div><dt>Czas / przekroczenie</dt><dd>{getViolationDuration(violation)}</dd></div>
                 </dl>
 
@@ -1029,6 +1164,38 @@ function ViolationDetailsModal({
                     <h4>Opis</h4>
                     <p>{violation.description || "Brak opisu naruszenia."}</p>
                 </section>
+
+                <section className="violation-details-section violation-timeline-section">
+                    <h4>Kontekst na osi czasu</h4>
+                    {!violationPeriod.hasExactRange && (
+                        <p className="violation-timeline-note">Brak dokładnego zakresu naruszenia. Pokazano dzień wystąpienia zdarzenia.</p>
+                    )}
+                    {!violation.driverCardNumber && (
+                        <p className="violation-timeline-note">Brak numeru karty kierowcy, więc nie można pobrać aktywności do wykresu.</p>
+                    )}
+                    {isTimelineLoading ? (
+                        <div className="violation-timeline-loading" aria-busy="true">
+                            Ładowanie osi czasu...
+                        </div>
+                    ) : timelineError ? (
+                        <p className="violation-timeline-error" role="alert">{timelineError}</p>
+                    ) : timelineDays.length === 0 ? (
+                        <p className="violation-timeline-note">Brak daty, dla której można zbudować oś czasu.</p>
+                    ) : (
+                        <div className="violation-timeline-days">
+                            {timelineDays.map((day) => (
+                                <TachographTimeline
+                                    activities={timelineActivities}
+                                    day={day.date}
+                                    key={day.date}
+                                    label={day.label}
+                                    violations={violationPeriod.hasExactRange ? [violation] : []}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </section>
+
                 <section className="violation-details-section">
                     <h4>Wyjaśnienie prawne i biznesowe</h4>
                     <p>{getLegalExplanation(violation)}</p>

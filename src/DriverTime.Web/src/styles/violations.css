@@ -490,7 +490,7 @@
 }
 
 .violation-details-modal {
-    width: min(100%, 820px);
+    width: min(100%, 1120px);
     max-height: min(88vh, 880px);
     overflow-y: auto;
     padding: 26px;
@@ -628,6 +628,47 @@
     font-weight: 760;
 }
 
+.violation-timeline-section {
+    overflow: hidden;
+}
+
+.violation-timeline-section h4 {
+    margin-bottom: 10px;
+}
+
+.violation-timeline-days {
+    display: grid;
+    gap: 14px;
+    margin-top: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.violation-timeline-days .tachograph-timeline {
+    min-width: 760px;
+}
+
+.violation-timeline-note,
+.violation-timeline-error,
+.violation-timeline-loading {
+    margin: 10px 0 0;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.violation-timeline-error {
+    color: var(--danger);
+}
+
+.violation-timeline-loading {
+    display: grid;
+    min-height: 96px;
+    place-items: center;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    font-weight: 760;
+}
 .violation-details-section.recommendation {
     border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
     background: var(--primary-soft);
