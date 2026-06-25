@@ -1,4 +1,4 @@
-﻿.tachograph-days {
+.tachograph-days {
     display: grid;
     gap: 16px;
     margin-top: 20px;
@@ -135,7 +135,8 @@
 
 .tachograph-country-marker,
 .tachograph-vehicle-marker,
-.tachograph-violation-marker {
+.tachograph-violation-marker,
+.tachograph-violation-range {
     position: absolute;
     display: inline-flex;
     align-items: center;
@@ -144,6 +145,16 @@
     z-index: 3;
 }
 
+.tachograph-violation-range {
+    bottom: 17px;
+    z-index: 2;
+    height: 7px;
+    min-width: 3px;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.24);
+    pointer-events: none;
+}
 .tachograph-country-marker {
     top: 8px;
     min-width: 30px;
@@ -194,7 +205,11 @@
     background: #fee2e2;
     color: #b91c1c;
     font-size: 13px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
     font-weight: 900;
+    line-height: 1;
 }
 
 .tachograph-violation-marker::before {
@@ -349,7 +364,18 @@
     color: #bfdbfe;
 }
 
-:root[data-theme="dark"] .tachograph-violation-marker {
+:root[data-theme="dark"] .tachograph-violation-range {
+    position: absolute;
+    bottom: 17px;
+    z-index: 2;
+    height: 7px;
+    min-width: 3px;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.24);
+    pointer-events: none;
+}
+.tachograph-violation-marker {
     border-color: rgba(248, 113, 113, 0.38);
     background: #7f1d1d;
     color: #fecaca;

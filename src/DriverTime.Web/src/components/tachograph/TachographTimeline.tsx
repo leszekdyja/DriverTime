@@ -68,6 +68,7 @@ type TimelineSegment = {
     widthPercent: number;
     durationSeconds: number;
     vehicleRegistration: string | null;
+    countryLabel: string | null;
 };
 
 type CountryMarker = {
@@ -93,6 +94,8 @@ type ViolationMarker = {
     endUtc: Date | null;
     description: string | null;
     leftPercent: number;
+    rangeLeftPercent: number;
+    rangeWidthPercent: number;
 };
 
 const secondsInDay = 24 * 60 * 60;
@@ -186,6 +189,52 @@ function getVehicleRegistration(activity: TachographActivity) {
         ?? null;
 }
 
+function getCountryEntryTimestamp(entry: TachographCountryEntry) {
+    return parseDate(entry.entryTimeUtc ?? entry.timeUtc ?? entry.timestampUtc ?? entry.timestamp ?? entry.occurredAtUtc);
+}
+
+function getCountryEntryCode(entry: TachographCountryEntry) {
+    return (entry.countryCode ?? entry.country_code ?? "").trim().toUpperCase();
+}
+
+function formatCountryLabel(code: string, name?: string | null) {
+    const safeCode = code.trim().toUpperCase();
+    const safeName = name?.trim();
+
+    if (!safeCode) {
+        return safeName || null;
+    }
+
+    return safeName ? `${safeCode} - ${safeName}` : safeCode;
+}
+
+function findCountryForActivity(
+    segmentStart: Date,
+    segmentEnd: Date,
+    countryEntries: TachographCountryEntry[],
+) {
+    const matchingEntries = countryEntries
+        .map((entry, index) => ({
+            code: getCountryEntryCode(entry),
+            name: entry.countryName ?? entry.country_name ?? null,
+            timestamp: getCountryEntryTimestamp(entry),
+            index,
+        }))
+        .filter((entry) => entry.code && entry.timestamp && entry.timestamp <= segmentEnd)
+        .sort((left, right) => {
+            const timeDiff = right.timestamp!.getTime() - left.timestamp!.getTime();
+
+            return timeDiff !== 0 ? timeDiff : right.index - left.index;
+        });
+
+    const nearestBeforeOrDuring = matchingEntries.find((entry) => entry.timestamp! <= segmentStart)
+        ?? matchingEntries.find((entry) => entry.timestamp! >= segmentStart && entry.timestamp! <= segmentEnd);
+
+    return nearestBeforeOrDuring
+        ? formatCountryLabel(nearestBeforeOrDuring.code, nearestBeforeOrDuring.name)
+        : null;
+}
+
 function formatActivityTooltip(segment: TimelineSegment) {
     const lines = [
         getActivityLabel(segment.activityType),
@@ -198,13 +247,15 @@ function formatActivityTooltip(segment: TimelineSegment) {
         lines.push(`Pojazd: ${segment.vehicleRegistration}`);
     }
 
+    if (segment.countryLabel) {
+        lines.push(`Kraj: ${segment.countryLabel}`);
+    }
+
     return lines.join("\n");
 }
 
 function formatCountryTooltip(marker: CountryMarker) {
-    const country = marker.countryName
-        ? `${marker.countryCode} - ${marker.countryName}`
-        : marker.countryCode;
+    const country = formatCountryLabel(marker.countryCode, marker.countryName) ?? marker.countryCode;
 
     return [`Kraj: ${country}`, `Godzina: ${timeFormatter.format(marker.timestamp)}`].join("\n");
 }
@@ -224,12 +275,12 @@ function formatVehicleTooltip(marker: VehicleMarker) {
 
 function formatViolationTooltip(marker: ViolationMarker) {
     const lines = [
-        marker.label,
-        `Start: ${timeFormatter.format(marker.occurredAtUtc)}`,
+        `Naruszenie: ${marker.label}`,
+        `Czas wystąpienia: ${timeFormatter.format(marker.occurredAtUtc)}`,
     ];
 
     if (marker.endUtc) {
-        lines.push(`Koniec: ${timeFormatter.format(marker.endUtc)}`);
+        lines.push(`Zakres: ${timeFormatter.format(marker.occurredAtUtc)} - ${timeFormatter.format(marker.endUtc)}`);
     }
 
     if (marker.description) {
@@ -239,7 +290,11 @@ function formatViolationTooltip(marker: ViolationMarker) {
     return lines.join("\n");
 }
 
-function buildSegments(activities: TachographActivity[], day: string): TimelineSegment[] {
+function buildSegments(
+    activities: TachographActivity[],
+    day: string,
+    countryEntries: TachographCountryEntry[],
+): TimelineSegment[] {
     const bounds = getDayBounds(day);
 
     if (!bounds) {
@@ -278,6 +333,7 @@ function buildSegments(activities: TachographActivity[], day: string): TimelineS
                 widthPercent: (durationSeconds / secondsInDay) * 100,
                 durationSeconds,
                 vehicleRegistration: getVehicleRegistration(activity),
+                countryLabel: findCountryForActivity(segmentStart, segmentEnd, countryEntries),
             };
         })
         .filter((segment): segment is TimelineSegment => segment !== null)
@@ -293,16 +349,16 @@ function buildCountryMarkers(entries: TachographCountryEntry[], day: string): Co
 
     return entries
         .map((entry, index) => {
-            const timestamp = parseDate(entry.entryTimeUtc ?? entry.timeUtc ?? entry.timestampUtc ?? entry.timestamp ?? entry.occurredAtUtc);
-            const countryCode = entry.countryCode ?? entry.country_code ?? "";
+            const timestamp = getCountryEntryTimestamp(entry);
+            const countryCode = getCountryEntryCode(entry);
 
-            if (!timestamp || timestamp < bounds.dayStart || timestamp >= bounds.dayEnd || !countryCode.trim()) {
+            if (!timestamp || timestamp < bounds.dayStart || timestamp >= bounds.dayEnd || !countryCode) {
                 return null;
             }
 
             return {
                 id: entry.id ?? `${countryCode}-${timestamp.toISOString()}-${index}`,
-                countryCode: countryCode.toUpperCase(),
+                countryCode,
                 countryName: entry.countryName ?? entry.country_name ?? null,
                 timestamp,
                 leftPercent: getPercentForDate(timestamp, bounds.dayStartMs),
@@ -363,11 +419,21 @@ function buildViolationMarkers(violations: TachographViolation[], day: string): 
     return violations
         .map((violation, index) => {
             const occurredAtUtc = parseDate(violation.occurredAtUtc);
-            const endUtc = parseDate(violation.periodEndUtc ?? violation.endUtc);
+            const rawEndUtc = parseDate(violation.periodEndUtc ?? violation.endUtc);
+            const endUtc = rawEndUtc && occurredAtUtc && rawEndUtc > occurredAtUtc ? rawEndUtc : null;
+            const violationEnd = endUtc ?? occurredAtUtc;
 
-            if (!occurredAtUtc || occurredAtUtc < bounds.dayStart || occurredAtUtc >= bounds.dayEnd) {
+            if (!occurredAtUtc || !violationEnd || violationEnd < bounds.dayStart || occurredAtUtc >= bounds.dayEnd) {
                 return null;
             }
+
+            const markerTime = occurredAtUtc < bounds.dayStart ? bounds.dayStart : occurredAtUtc;
+            const rangeStart = occurredAtUtc < bounds.dayStart ? bounds.dayStart : occurredAtUtc;
+            const rangeEnd = violationEnd > bounds.dayEnd ? bounds.dayEnd : violationEnd;
+            const rangeWidthPercent = Math.max(
+                0.35,
+                ((rangeEnd.getTime() - rangeStart.getTime()) / 1000 / secondsInDay) * 100,
+            );
 
             return {
                 id: violation.id ?? `${violation.violationType}-${occurredAtUtc.toISOString()}-${index}`,
@@ -375,7 +441,9 @@ function buildViolationMarkers(violations: TachographViolation[], day: string): 
                 occurredAtUtc,
                 endUtc,
                 description: violation.description ?? null,
-                leftPercent: getPercentForDate(occurredAtUtc, bounds.dayStartMs),
+                leftPercent: getPercentForDate(markerTime, bounds.dayStartMs),
+                rangeLeftPercent: getPercentForDate(rangeStart, bounds.dayStartMs),
+                rangeWidthPercent,
             };
         })
         .filter((marker): marker is ViolationMarker => marker !== null)
@@ -390,7 +458,7 @@ export default function TachographTimeline({
     vehicleUses = [],
     violations = [],
 }: TachographTimelineProps) {
-    const segments = buildSegments(activities, day);
+    const segments = buildSegments(activities, day, countryEntries);
     const countryMarkers = buildCountryMarkers(countryEntries, day);
     const vehicleMarkers = buildVehicleMarkers(vehicleUses, day);
     const violationMarkers = buildViolationMarkers(violations, day);
@@ -473,15 +541,25 @@ export default function TachographTimeline({
                     <div className="tachograph-marker-layer violation-layer" aria-label="Znaczniki naruszeń">
                         {violationMarkers.map((marker) => (
                             <span
+                                className="tachograph-violation-range"
+                                key={`${marker.id}-range`}
+                                style={{
+                                    left: `${marker.rangeLeftPercent}%`,
+                                    width: `${marker.rangeWidthPercent}%`,
+                                }}
+                            />
+                        ))}
+                        {violationMarkers.map((marker) => (
+                            <button
                                 className="tachograph-violation-marker"
                                 data-tooltip={formatViolationTooltip(marker)}
                                 key={marker.id}
                                 style={{ left: `${marker.leftPercent}%` }}
-                                tabIndex={0}
+                                type="button"
                                 aria-label={formatViolationTooltip(marker)}
                             >
                                 ⚠
-                            </span>
+                            </button>
                         ))}
                     </div>
                 </div>
