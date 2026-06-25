@@ -548,6 +548,7 @@ export default function DriverDetailsPage() {
                                         day={day.date}
                                         key={day.date}
                                         label={day.label}
+                                        violations={violations}
                                     />
                                 ))}
                             </div>

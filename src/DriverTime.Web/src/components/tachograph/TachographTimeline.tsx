@@ -1,4 +1,5 @@
-﻿import "./TachographTimeline.css";
+﻿import { getComplianceRuleLabel } from "../../utils/complianceLabels";
+import "./TachographTimeline.css";
 
 export type TachographActivity = {
     id: string;
@@ -7,13 +8,50 @@ export type TachographActivity = {
     activityType: string;
     durationSeconds?: number;
     vehicleRegistration?: string | null;
+    vehicleRegistrationNumber?: string | null;
     registrationNumber?: string | null;
+};
+
+export type TachographCountryEntry = {
+    id?: string;
+    timestamp?: string;
+    timestampUtc?: string;
+    occurredAtUtc?: string;
+    countryCode?: string;
+    countryName?: string;
+    country_code?: string;
+    country_name?: string;
+};
+
+export type TachographVehicleUse = {
+    id?: string;
+    startUtc?: string;
+    endUtc?: string;
+    start?: string;
+    end?: string;
+    registrationNumber?: string;
+    vehicleRegistration?: string;
+    vehicleRegistrationNumber?: string;
+    vehicle_registration?: string;
+};
+
+export type TachographViolation = {
+    id?: string;
+    code?: string;
+    violationType: string;
+    occurredAtUtc: string;
+    periodEndUtc?: string | null;
+    endUtc?: string | null;
+    description?: string | null;
 };
 
 type TachographTimelineProps = {
     activities: TachographActivity[];
     day: string;
     label?: string;
+    countryEntries?: TachographCountryEntry[];
+    vehicleUses?: TachographVehicleUse[];
+    violations?: TachographViolation[];
 };
 
 type TimelineSegment = {
@@ -25,6 +63,31 @@ type TimelineSegment = {
     widthPercent: number;
     durationSeconds: number;
     vehicleRegistration: string | null;
+};
+
+type CountryMarker = {
+    id: string;
+    countryCode: string;
+    countryName: string | null;
+    timestamp: Date;
+    leftPercent: number;
+};
+
+type VehicleMarker = {
+    id: string;
+    registrationNumber: string;
+    startUtc: Date;
+    endUtc: Date | null;
+    leftPercent: number;
+};
+
+type ViolationMarker = {
+    id: string;
+    label: string;
+    occurredAtUtc: Date;
+    endUtc: Date | null;
+    description: string | null;
+    leftPercent: number;
 };
 
 const secondsInDay = 24 * 60 * 60;
@@ -54,6 +117,21 @@ function getDayStart(day: string) {
     return new Date(`${day}T00:00:00Z`);
 }
 
+function getDayBounds(day: string) {
+    const dayStart = getDayStart(day);
+    const dayStartMs = dayStart.getTime();
+
+    if (Number.isNaN(dayStartMs)) {
+        return null;
+    }
+
+    return {
+        dayStart,
+        dayEnd: new Date(dayStartMs + secondsInDay * 1000),
+        dayStartMs,
+    };
+}
+
 function getActivityClass(activityType: string) {
     const normalized = activityType.toUpperCase();
 
@@ -69,8 +147,12 @@ function getActivityLabel(activityType: string) {
     return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
 }
 
+function getPercentForDate(date: Date, dayStartMs: number) {
+    return ((date.getTime() - dayStartMs) / 1000 / secondsInDay) * 100;
+}
+
 function formatHour(hour: number) {
-    return `${String(hour).padStart(2, "0")}:00`;
+    return String(hour).padStart(2, "0");
 }
 
 function formatDuration(seconds: number) {
@@ -85,7 +167,21 @@ function formatDuration(seconds: number) {
     return `${hours} godz. ${minutes} min`;
 }
 
-function formatTooltip(segment: TimelineSegment) {
+function parseDate(value?: string | null) {
+    if (!value) return null;
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getVehicleRegistration(activity: TachographActivity) {
+    return activity.vehicleRegistration
+        ?? activity.vehicleRegistrationNumber
+        ?? activity.registrationNumber
+        ?? null;
+}
+
+function formatActivityTooltip(segment: TimelineSegment) {
     const lines = [
         getActivityLabel(segment.activityType),
         `Start: ${timeFormatter.format(segment.startUtc)}`,
@@ -100,33 +196,68 @@ function formatTooltip(segment: TimelineSegment) {
     return lines.join("\n");
 }
 
-function buildSegments(activities: TachographActivity[], day: string): TimelineSegment[] {
-    const dayStart = getDayStart(day);
-    const dayStartMs = dayStart.getTime();
+function formatCountryTooltip(marker: CountryMarker) {
+    const country = marker.countryName
+        ? `${marker.countryCode} - ${marker.countryName}`
+        : marker.countryCode;
 
-    if (Number.isNaN(dayStartMs)) {
+    return [`Kraj: ${country}`, `Godzina: ${timeFormatter.format(marker.timestamp)}`].join("\n");
+}
+
+function formatVehicleTooltip(marker: VehicleMarker) {
+    const lines = [
+        `Pojazd: ${marker.registrationNumber}`,
+        `Start: ${timeFormatter.format(marker.startUtc)}`,
+    ];
+
+    if (marker.endUtc) {
+        lines.push(`Koniec: ${timeFormatter.format(marker.endUtc)}`);
+    }
+
+    return lines.join("\n");
+}
+
+function formatViolationTooltip(marker: ViolationMarker) {
+    const lines = [
+        marker.label,
+        `Start: ${timeFormatter.format(marker.occurredAtUtc)}`,
+    ];
+
+    if (marker.endUtc) {
+        lines.push(`Koniec: ${timeFormatter.format(marker.endUtc)}`);
+    }
+
+    if (marker.description) {
+        lines.push(marker.description);
+    }
+
+    return lines.join("\n");
+}
+
+function buildSegments(activities: TachographActivity[], day: string): TimelineSegment[] {
+    const bounds = getDayBounds(day);
+
+    if (!bounds) {
         return [];
     }
 
-    const dayEnd = new Date(dayStartMs + secondsInDay * 1000);
-
     return activities
         .map((activity) => {
-            const activityStart = new Date(activity.startUtc);
-            const activityEnd = new Date(activity.endUtc);
+            const activityStart = parseDate(activity.startUtc);
+            const activityEnd = parseDate(activity.endUtc);
 
             if (
-                Number.isNaN(activityStart.getTime()) ||
-                Number.isNaN(activityEnd.getTime()) ||
+                !activityStart ||
+                !activityEnd ||
                 activityEnd <= activityStart ||
-                activityEnd <= dayStart ||
-                activityStart >= dayEnd
+                activityEnd <= bounds.dayStart ||
+                activityStart >= bounds.dayEnd
             ) {
                 return null;
             }
 
-            const segmentStart = activityStart < dayStart ? dayStart : activityStart;
-            const segmentEnd = activityEnd > dayEnd ? dayEnd : activityEnd;
+            const segmentStart = activityStart < bounds.dayStart ? bounds.dayStart : activityStart;
+            const segmentEnd = activityEnd > bounds.dayEnd ? bounds.dayEnd : activityEnd;
             const durationSeconds = (segmentEnd.getTime() - segmentStart.getTime()) / 1000;
 
             if (durationSeconds <= 0) {
@@ -138,18 +269,126 @@ function buildSegments(activities: TachographActivity[], day: string): TimelineS
                 activityType: activity.activityType,
                 startUtc: segmentStart,
                 endUtc: segmentEnd,
-                leftPercent: ((segmentStart.getTime() - dayStartMs) / 1000 / secondsInDay) * 100,
+                leftPercent: getPercentForDate(segmentStart, bounds.dayStartMs),
                 widthPercent: (durationSeconds / secondsInDay) * 100,
                 durationSeconds,
-                vehicleRegistration: activity.vehicleRegistration ?? activity.registrationNumber ?? null,
+                vehicleRegistration: getVehicleRegistration(activity),
             };
         })
         .filter((segment): segment is TimelineSegment => segment !== null)
         .sort((left, right) => left.startUtc.getTime() - right.startUtc.getTime());
 }
 
-export default function TachographTimeline({ activities, day, label }: TachographTimelineProps) {
+function buildCountryMarkers(entries: TachographCountryEntry[], day: string): CountryMarker[] {
+    const bounds = getDayBounds(day);
+
+    if (!bounds) {
+        return [];
+    }
+
+    return entries
+        .map((entry, index) => {
+            const timestamp = parseDate(entry.timestampUtc ?? entry.timestamp ?? entry.occurredAtUtc);
+            const countryCode = entry.countryCode ?? entry.country_code ?? "";
+
+            if (!timestamp || timestamp < bounds.dayStart || timestamp >= bounds.dayEnd || !countryCode.trim()) {
+                return null;
+            }
+
+            return {
+                id: entry.id ?? `${countryCode}-${timestamp.toISOString()}-${index}`,
+                countryCode: countryCode.toUpperCase(),
+                countryName: entry.countryName ?? entry.country_name ?? null,
+                timestamp,
+                leftPercent: getPercentForDate(timestamp, bounds.dayStartMs),
+            };
+        })
+        .filter((marker): marker is CountryMarker => marker !== null)
+        .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+}
+
+function buildVehicleMarkers(vehicleUses: TachographVehicleUse[], day: string): VehicleMarker[] {
+    const bounds = getDayBounds(day);
+
+    if (!bounds) {
+        return [];
+    }
+
+    return vehicleUses
+        .map((vehicleUse, index) => {
+            const startUtc = parseDate(vehicleUse.startUtc ?? vehicleUse.start);
+            const endUtc = parseDate(vehicleUse.endUtc ?? vehicleUse.end);
+            const registrationNumber = vehicleUse.registrationNumber
+                ?? vehicleUse.vehicleRegistration
+                ?? vehicleUse.vehicleRegistrationNumber
+                ?? vehicleUse.vehicle_registration
+                ?? "";
+
+            if (
+                !startUtc ||
+                !registrationNumber.trim() ||
+                startUtc >= bounds.dayEnd ||
+                (endUtc && endUtc <= bounds.dayStart)
+            ) {
+                return null;
+            }
+
+            const markerStart = startUtc < bounds.dayStart ? bounds.dayStart : startUtc;
+            const markerEnd = endUtc && endUtc > bounds.dayEnd ? bounds.dayEnd : endUtc;
+
+            return {
+                id: vehicleUse.id ?? `${registrationNumber}-${markerStart.toISOString()}-${index}`,
+                registrationNumber,
+                startUtc: markerStart,
+                endUtc: markerEnd,
+                leftPercent: getPercentForDate(markerStart, bounds.dayStartMs),
+            };
+        })
+        .filter((marker): marker is VehicleMarker => marker !== null)
+        .sort((left, right) => left.startUtc.getTime() - right.startUtc.getTime());
+}
+
+function buildViolationMarkers(violations: TachographViolation[], day: string): ViolationMarker[] {
+    const bounds = getDayBounds(day);
+
+    if (!bounds) {
+        return [];
+    }
+
+    return violations
+        .map((violation, index) => {
+            const occurredAtUtc = parseDate(violation.occurredAtUtc);
+            const endUtc = parseDate(violation.periodEndUtc ?? violation.endUtc);
+
+            if (!occurredAtUtc || occurredAtUtc < bounds.dayStart || occurredAtUtc >= bounds.dayEnd) {
+                return null;
+            }
+
+            return {
+                id: violation.id ?? `${violation.violationType}-${occurredAtUtc.toISOString()}-${index}`,
+                label: getComplianceRuleLabel(violation.violationType, violation.code),
+                occurredAtUtc,
+                endUtc,
+                description: violation.description ?? null,
+                leftPercent: getPercentForDate(occurredAtUtc, bounds.dayStartMs),
+            };
+        })
+        .filter((marker): marker is ViolationMarker => marker !== null)
+        .sort((left, right) => left.occurredAtUtc.getTime() - right.occurredAtUtc.getTime());
+}
+
+export default function TachographTimeline({
+    activities,
+    day,
+    label,
+    countryEntries = [],
+    vehicleUses = [],
+    violations = [],
+}: TachographTimelineProps) {
     const segments = buildSegments(activities, day);
+    const countryMarkers = buildCountryMarkers(countryEntries, day);
+    const vehicleMarkers = buildVehicleMarkers(vehicleUses, day);
+    const violationMarkers = buildViolationMarkers(violations, day);
 
     return (
         <div className="tachograph-timeline" aria-label={label ? `Wykres tachografowy ${label}` : "Wykres tachografowy"}>
@@ -162,40 +401,93 @@ export default function TachographTimeline({ activities, day, label }: Tachograp
                             {item.label}
                         </span>
                     ))}
+                    <span className="tachograph-legend-item"><i className="tachograph-marker-sample country" />Kraj</span>
+                    <span className="tachograph-legend-item"><i className="tachograph-marker-sample vehicle" />Pojazd</span>
+                    <span className="tachograph-legend-item"><i className="tachograph-marker-sample violation" />Naruszenie</span>
                 </div>
             </div>
 
-            <div className="tachograph-track" role="img" aria-label="Oś aktywności od 00:00 do 24:00">
-                <div className="tachograph-hour-grid" aria-hidden="true">
+            <div className="tachograph-scroll">
+                <div className="tachograph-track" role="img" aria-label="Oś aktywności od 00:00 do 24:00">
+                    <div className="tachograph-hour-grid" aria-hidden="true">
+                        {hourMarkers.map((hour) => (
+                            <span
+                                className={hour % 6 === 0 ? "major" : undefined}
+                                key={hour}
+                                style={{ left: `${(hour / 24) * 100}%` }}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="tachograph-marker-layer country-layer" aria-label="Znaczniki krajów">
+                        {countryMarkers.map((marker) => (
+                            <span
+                                className="tachograph-country-marker"
+                                data-tooltip={formatCountryTooltip(marker)}
+                                key={marker.id}
+                                style={{ left: `${marker.leftPercent}%` }}
+                                tabIndex={0}
+                                aria-label={formatCountryTooltip(marker)}
+                            >
+                                {marker.countryCode}
+                            </span>
+                        ))}
+                    </div>
+
+                    <div className="tachograph-marker-layer vehicle-layer" aria-label="Znaczniki pojazdów">
+                        {vehicleMarkers.map((marker) => (
+                            <span
+                                className="tachograph-vehicle-marker"
+                                data-tooltip={formatVehicleTooltip(marker)}
+                                key={marker.id}
+                                style={{ left: `${marker.leftPercent}%` }}
+                                tabIndex={0}
+                                aria-label={formatVehicleTooltip(marker)}
+                            >
+                                {marker.registrationNumber}
+                            </span>
+                        ))}
+                    </div>
+
+                    <div className="tachograph-activity-layer">
+                        {segments.map((segment, index) => (
+                            <span
+                                className={`tachograph-segment ${getActivityClass(segment.activityType)}`}
+                                key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
+                                style={{
+                                    left: `${segment.leftPercent}%`,
+                                    width: `${segment.widthPercent}%`,
+                                }}
+                                tabIndex={0}
+                                aria-label={formatActivityTooltip(segment)}
+                                data-tooltip={formatActivityTooltip(segment)}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="tachograph-marker-layer violation-layer" aria-label="Znaczniki naruszeń">
+                        {violationMarkers.map((marker) => (
+                            <span
+                                className="tachograph-violation-marker"
+                                data-tooltip={formatViolationTooltip(marker)}
+                                key={marker.id}
+                                style={{ left: `${marker.leftPercent}%` }}
+                                tabIndex={0}
+                                aria-label={formatViolationTooltip(marker)}
+                            >
+                                ⚠
+                            </span>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="tachograph-hours" aria-hidden="true">
                     {hourMarkers.map((hour) => (
-                        <span
-                            className={hour % 6 === 0 ? "major" : undefined}
-                            key={hour}
-                            style={{ left: `${(hour / 24) * 100}%` }}
-                        />
+                        <span className={hour % 6 === 0 ? "major" : undefined} key={hour}>
+                            {formatHour(hour)}
+                        </span>
                     ))}
                 </div>
-                {segments.map((segment, index) => (
-                    <span
-                        className={`tachograph-segment ${getActivityClass(segment.activityType)}`}
-                        key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
-                        style={{
-                            left: `${segment.leftPercent}%`,
-                            width: `${segment.widthPercent}%`,
-                        }}
-                        tabIndex={0}
-                        aria-label={formatTooltip(segment)}
-                        data-tooltip={formatTooltip(segment)}
-                    />
-                ))}
-            </div>
-
-            <div className="tachograph-hours" aria-hidden="true">
-                {hourMarkers.map((hour) => (
-                    <span className={hour % 6 === 0 ? "major" : undefined} key={hour}>
-                        {formatHour(hour)}
-                    </span>
-                ))}
             </div>
         </div>
     );
