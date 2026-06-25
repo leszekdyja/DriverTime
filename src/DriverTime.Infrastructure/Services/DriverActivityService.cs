@@ -1,4 +1,5 @@
-﻿using DriverTime.Application.DDD.DTOs;
+﻿using System.Globalization;
+using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -34,22 +35,21 @@ public class DriverActivityService : IDriverActivityService
                 x => x.DddFile.DriverCardNumber == driverCardNumber);
         }
 
-        if (from.HasValue)
-        {
-            var fromUtc = DateTime.SpecifyKind(
-                from.Value,
-                DateTimeKind.Utc);
+        var fromUtc = from.HasValue
+            ? DateTime.SpecifyKind(from.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
+        var toUtc = to.HasValue
+            ? DateTime.SpecifyKind(to.Value, DateTimeKind.Utc)
+            : (DateTime?)null;
 
-            query = query.Where(x => x.EndUtc > fromUtc);
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(x => x.EndUtc > fromUtc.Value);
         }
 
-        if (to.HasValue)
+        if (toUtc.HasValue)
         {
-            var toUtc = DateTime.SpecifyKind(
-                to.Value,
-                DateTimeKind.Utc);
-
-            query = query.Where(x => x.StartUtc < toUtc);
+            query = query.Where(x => x.StartUtc < toUtc.Value);
         }
 
         var activityRows = await query
@@ -69,41 +69,59 @@ public class DriverActivityService : IDriverActivityService
             .ToListAsync();
 
         var activities = DeduplicateActivities(activityRows);
-        var vehicleUses = await GetVehicleUsesAsync(activities);
-        var displayedVehicleUseIds = new HashSet<Guid>();
+        var vehicleUses = DeduplicateVehicleUses(await GetVehicleUsesAsync(activities));
+        var usedVehicleUseKeys = new HashSet<string>();
+        var result = new List<DriverActivityDto>();
 
-        return activities
-            .Select(activity =>
+        foreach (var activity in activities)
+        {
+            var clippedStart = fromUtc.HasValue && activity.StartUtc < fromUtc.Value
+                ? fromUtc.Value
+                : activity.StartUtc;
+            var clippedEnd = toUtc.HasValue && activity.EndUtc > toUtc.Value
+                ? toUtc.Value
+                : activity.EndUtc;
+
+            if (clippedEnd <= clippedStart)
             {
-                var durationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
-                    activity.StartUtc,
-                    activity.EndUtc);
-                var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
-                var vehicleRegistration = vehicleUse?.RegistrationNumber.Trim() ?? string.Empty;
-                var shouldShowOdometer = ShouldShowOdometer(vehicleUse, displayedVehicleUseIds);
+                continue;
+            }
 
-                return new DriverActivityDto
-                {
-                    Id = activity.Id,
-                    DddFileId = activity.DddFileId,
-                    DriverFirstName = activity.DriverFirstName,
-                    DriverLastName = activity.DriverLastName,
-                    DriverCardNumber = activity.DriverCardNumber,
-                    VehicleRegistration = vehicleRegistration,
-                    VehicleRegistrationNumber = vehicleRegistration,
-                    Vehicle = vehicleRegistration,
-                    StartUtc = activity.StartUtc,
-                    EndUtc = activity.EndUtc,
-                    ActivityType = activity.ActivityType,
-                    DurationSeconds = durationSeconds > int.MaxValue
-                        ? int.MaxValue
-                        : (int)durationSeconds,
-                    StartOdometerKm = shouldShowOdometer ? vehicleUse?.StartOdometerKm : null,
-                    EndOdometerKm = shouldShowOdometer ? vehicleUse?.EndOdometerKm : null,
-                    DistanceKm = shouldShowOdometer ? vehicleUse?.DistanceKm : null
-                };
-            })
-            .ToList();
+            var durationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
+                clippedStart,
+                clippedEnd);
+            var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
+            var vehicleRegistration = vehicleUse?.RegistrationNumber.Trim() ?? string.Empty;
+            var vehicleUseKey = vehicleUse is null
+                ? string.Empty
+                : GetVehicleUseBusinessKey(vehicleUse);
+            var shouldShowOdometer = vehicleUse is not null
+                && CanReportVehicleUseDistance(activity)
+                && usedVehicleUseKeys.Add(vehicleUseKey);
+
+            result.Add(new DriverActivityDto
+            {
+                Id = activity.Id,
+                DddFileId = activity.DddFileId,
+                DriverFirstName = activity.DriverFirstName,
+                DriverLastName = activity.DriverLastName,
+                DriverCardNumber = activity.DriverCardNumber,
+                VehicleRegistration = vehicleRegistration,
+                VehicleRegistrationNumber = vehicleRegistration,
+                Vehicle = vehicleRegistration,
+                StartUtc = clippedStart,
+                EndUtc = clippedEnd,
+                ActivityType = activity.ActivityType,
+                DurationSeconds = durationSeconds > int.MaxValue
+                    ? int.MaxValue
+                    : (int)durationSeconds,
+                StartOdometerKm = shouldShowOdometer ? vehicleUse?.StartOdometerKm : null,
+                EndOdometerKm = shouldShowOdometer ? vehicleUse?.EndOdometerKm : null,
+                DistanceKm = shouldShowOdometer ? vehicleUse?.DistanceKm : null
+            });
+        }
+
+        return result;
     }
 
     private async Task<List<VehicleUseReportSource>> GetVehicleUsesAsync(
@@ -122,6 +140,7 @@ public class DriverActivityService : IDriverActivityService
             .AsNoTracking()
             .Where(x =>
                 dddFileIds.Contains(x.DddFileId)
+                && !string.IsNullOrWhiteSpace(x.RegistrationNumber)
                 && x.StartUtc < toUtc
                 && x.EndUtc > fromUtc)
             .Select(x => new VehicleUseReportSource
@@ -155,6 +174,21 @@ public class DriverActivityService : IDriverActivityService
             .ToList();
     }
 
+    private static List<VehicleUseReportSource> DeduplicateVehicleUses(
+        IEnumerable<VehicleUseReportSource> vehicleUses)
+    {
+        return vehicleUses
+            .GroupBy(GetVehicleUseBusinessKey)
+            .Select(group => group
+                .OrderBy(x => x.StartUtc)
+                .ThenBy(x => x.EndUtc)
+                .ThenBy(x => x.Id)
+                .First())
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+    }
+
     private static VehicleUseReportSource? FindBestVehicleUse(
         DriverActivityReportSource activity,
         IReadOnlyCollection<VehicleUseReportSource> vehicleUses)
@@ -178,13 +212,18 @@ public class DriverActivityService : IDriverActivityService
             .FirstOrDefault();
     }
 
-    private static bool ShouldShowOdometer(
-        VehicleUseReportSource? vehicleUse,
-        ISet<Guid> displayedVehicleUseIds)
-    {
-        return vehicleUse is not null
-            && displayedVehicleUseIds.Add(vehicleUse.Id);
-    }
+    private static bool CanReportVehicleUseDistance(DriverActivityReportSource activity) =>
+        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetVehicleUseBusinessKey(VehicleUseReportSource vehicleUse) => string.Join(
+        "|",
+        vehicleUse.DddFileId.ToString("D"),
+        vehicleUse.RegistrationNumber.Trim().ToUpperInvariant(),
+        vehicleUse.StartUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.EndUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
 
     private sealed class DriverActivityReportSource
     {
