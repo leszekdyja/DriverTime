@@ -373,6 +373,71 @@ public class DriverReportVehicleMatchingTests
         Assert.IsNull(reportActivities[4].DistanceKm);
         Assert.AreEqual(203, DriverReportExportService.SumDistance(reportActivities));
     }
+
+    [TestMethod]
+    public void BuildReportActivities_SameMileageAcrossDifferentVehicleUseRanges_CountsDistanceOnce()
+    {
+        var firstDddFileId = Guid.NewGuid();
+        var secondDddFileId = Guid.NewGuid();
+        var fromUtc = DateTime.Parse("2026-05-17T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-05-18T00:00:00Z").ToUniversalTime();
+        var activities = new[]
+        {
+            Activity(firstDddFileId, "2026-05-17T08:00:00Z", "2026-05-17T09:00:00Z"),
+            Activity(secondDddFileId, "2026-05-17T10:00:00Z", "2026-05-17T11:00:00Z")
+        };
+        var vehicleUses = new[]
+        {
+            VehicleUse(firstDddFileId, "DLU 5539F", "2026-05-17T07:55:00Z", "2026-05-17T09:05:00Z", 312965, 313160, 195),
+            VehicleUse(secondDddFileId, "DLU 5539F", "2026-05-17T09:50:00Z", "2026-05-17T11:10:00Z", 312965, 313160, 195)
+        };
+
+        var reportActivities = DriverReportExportService.BuildReportActivities(
+            activities,
+            vehicleUses,
+            fromUtc,
+            toUtcExclusive);
+
+        Assert.AreEqual(2, reportActivities.Count);
+        Assert.AreEqual("DLU 5539F", reportActivities[0].VehicleRegistration);
+        Assert.AreEqual("DLU 5539F", reportActivities[1].VehicleRegistration);
+        Assert.AreEqual(312965, reportActivities[0].StartOdometerKm);
+        Assert.AreEqual(313160, reportActivities[0].EndOdometerKm);
+        Assert.AreEqual(195, reportActivities[0].DistanceKm);
+        Assert.IsNull(reportActivities[1].StartOdometerKm);
+        Assert.IsNull(reportActivities[1].EndOdometerKm);
+        Assert.IsNull(reportActivities[1].DistanceKm);
+        Assert.AreEqual(195, DriverReportExportService.SumDistance(reportActivities));
+    }
+
+    [TestMethod]
+    public void BuildReportActivities_SameVehicleWithDifferentOdometerRanges_CountsBothDistances()
+    {
+        var dddFileId = Guid.NewGuid();
+        var fromUtc = DateTime.Parse("2026-05-17T00:00:00Z").ToUniversalTime();
+        var toUtcExclusive = DateTime.Parse("2026-05-18T00:00:00Z").ToUniversalTime();
+        var activities = new[]
+        {
+            Activity(dddFileId, "2026-05-17T08:00:00Z", "2026-05-17T09:00:00Z"),
+            Activity(dddFileId, "2026-05-17T12:00:00Z", "2026-05-17T13:00:00Z")
+        };
+        var vehicleUses = new[]
+        {
+            VehicleUse(dddFileId, "DLU 5539F", "2026-05-17T07:55:00Z", "2026-05-17T09:05:00Z", 312965, 313160, 195),
+            VehicleUse(dddFileId, "DLU 5539F", "2026-05-17T11:55:00Z", "2026-05-17T13:05:00Z", 313160, 313240, 80)
+        };
+
+        var reportActivities = DriverReportExportService.BuildReportActivities(
+            activities,
+            vehicleUses,
+            fromUtc,
+            toUtcExclusive);
+
+        Assert.AreEqual(2, reportActivities.Count);
+        Assert.AreEqual(195, reportActivities[0].DistanceKm);
+        Assert.AreEqual(80, reportActivities[1].DistanceKm);
+        Assert.AreEqual(275, DriverReportExportService.SumDistance(reportActivities));
+    }
     private static DriverReportExportService.DriverReportActivitySource Activity(
         Guid dddFileId,
         string startUtc,

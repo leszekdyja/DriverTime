@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Infrastructure.Persistence;
@@ -70,7 +70,7 @@ public class DriverActivityService : IDriverActivityService
 
         var activities = DeduplicateActivities(activityRows);
         var vehicleUses = DeduplicateVehicleUses(await GetVehicleUsesAsync(activities));
-        var usedVehicleUseKeys = new HashSet<string>();
+        var usedMileageKeys = new HashSet<string>();
         var result = new List<DriverActivityDto>();
 
         foreach (var activity in activities)
@@ -92,12 +92,12 @@ public class DriverActivityService : IDriverActivityService
                 clippedEnd);
             var vehicleUse = FindBestVehicleUse(activity, vehicleUses);
             var vehicleRegistration = vehicleUse?.RegistrationNumber.Trim() ?? string.Empty;
-            var vehicleUseKey = vehicleUse is null
+            var mileageKey = vehicleUse is null
                 ? string.Empty
-                : GetVehicleUseBusinessKey(vehicleUse);
+                : GetVehicleUseMileageKey(vehicleUse);
             var shouldShowOdometer = vehicleUse is not null
                 && CanReportVehicleUseDistance(activity)
-                && usedVehicleUseKeys.Add(vehicleUseKey);
+                && usedMileageKeys.Add(mileageKey);
 
             result.Add(new DriverActivityDto
             {
@@ -224,6 +224,14 @@ public class DriverActivityService : IDriverActivityService
         vehicleUse.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
         vehicleUse.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
         vehicleUse.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    private static string GetVehicleUseMileageKey(VehicleUseReportSource vehicleUse) =>
+        VehicleUseMileageKeyBuilder.Build(
+            vehicleUse.RegistrationNumber,
+            vehicleUse.StartOdometerKm,
+            vehicleUse.EndOdometerKm,
+            vehicleUse.DistanceKm,
+            vehicleUse.StartUtc,
+            vehicleUse.EndUtc);
 
     private sealed class DriverActivityReportSource
     {

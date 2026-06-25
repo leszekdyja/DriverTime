@@ -158,7 +158,7 @@ public class DriverReportExportService : IDriverReportExportService
         DateTime fromUtc,
         DateTime toUtcExclusive)
     {
-        var usedVehicleUseKeys = new HashSet<string>();
+        var usedMileageKeys = new HashSet<string>();
         var uniqueVehicleUses = DeduplicateVehicleUses(vehicleUses);
         var reportActivities = new List<DriverReportActivityDto>();
 
@@ -169,10 +169,10 @@ public class DriverReportExportService : IDriverReportExportService
             var vehicleUse = FindBestVehicleUse(activity, uniqueVehicleUses);
             var vehicleUseKey = vehicleUse is null
                 ? string.Empty
-                : GetVehicleUseBusinessKey(vehicleUse);
+                : GetVehicleUseMileageKey(vehicleUse);
             var showVehicleUseDistance = vehicleUse is not null
                 && CanReportVehicleUseDistance(activity)
-                && usedVehicleUseKeys.Add(vehicleUseKey);
+                && usedMileageKeys.Add(vehicleUseKey);
 
             reportActivities.Add(new DriverReportActivityDto
             {
@@ -257,6 +257,14 @@ public class DriverReportExportService : IDriverReportExportService
         vehicleUse.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
         vehicleUse.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
         vehicleUse.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    private static string GetVehicleUseMileageKey(VehicleUseReportSource vehicleUse) =>
+        VehicleUseMileageKeyBuilder.Build(
+            vehicleUse.RegistrationNumber,
+            vehicleUse.StartOdometerKm,
+            vehicleUse.EndOdometerKm,
+            vehicleUse.DistanceKm,
+            vehicleUse.StartUtc,
+            vehicleUse.EndUtc);
 
     private static List<DriverReportActivitySource> DeduplicateActivities(
         IEnumerable<DriverReportActivitySource> activities)
@@ -357,13 +365,13 @@ public class DriverReportExportService : IDriverReportExportService
             return activity.VehicleUseId.Value.ToString("D");
         }
 
-        return string.Join(
-            "|",
-            activity.DddFileId.ToString("D"),
-            activity.VehicleRegistration.Trim().ToUpperInvariant(),
-            activity.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-            activity.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-            activity.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+        return VehicleUseMileageKeyBuilder.Build(
+            activity.VehicleRegistration,
+            activity.StartOdometerKm,
+            activity.EndOdometerKm,
+            activity.DistanceKm,
+            activity.StartUtc,
+            activity.EndUtc);
     }
     private static byte[] GeneratePdf(DriverReportDto report)
     {
