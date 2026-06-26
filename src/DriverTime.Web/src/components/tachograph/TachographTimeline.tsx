@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -48,6 +49,13 @@ export type TachographViolation = {
     periodEndUtc?: string | null;
     endUtc?: string | null;
     description?: string | null;
+    recommendation?: string | null;
+    actualValue?: string | number | null;
+    requiredValue?: string | number | null;
+    excessValue?: string | number | null;
+    missingValue?: string | number | null;
+    actualDurationMinutes?: number | null;
+    limitDurationMinutes?: number | null;
 };
 
 type TachographTimelineProps = {
@@ -96,6 +104,13 @@ type ViolationMarker = {
     leftPercent: number;
     rangeLeftPercent: number;
     rangeWidthPercent: number;
+    recommendation: string | null;
+    actualValue: string | number | null;
+    requiredValue: string | number | null;
+    excessValue: string | number | null;
+    missingValue: string | number | null;
+    actualDurationMinutes: number | null;
+    limitDurationMinutes: number | null;
 };
 
 const secondsInDay = 24 * 60 * 60;
@@ -114,6 +129,12 @@ const activityLegend = [
     { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
     { type: "REST", label: activityLabels.REST },
 ];
+
+const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+});
 
 const timeFormatter = new Intl.DateTimeFormat("pl-PL", {
     hour: "2-digit",
@@ -227,14 +248,16 @@ function findCountryForActivity(
             return timeDiff !== 0 ? timeDiff : right.index - left.index;
         });
 
-    const nearestBeforeOrDuring = matchingEntries.find((entry) => entry.timestamp! <= segmentStart)
-        ?? matchingEntries.find((entry) => entry.timestamp! >= segmentStart && entry.timestamp! <= segmentEnd);
+    const nearestBeforeOrDuring = matchingEntries.find((entry) => entry.timestamp! <= segmentStart);
+    const nearestWithinSegment = matchingEntries.find(
+        (entry) => entry.timestamp! >= segmentStart && entry.timestamp! <= segmentEnd,
+    );
+    const selectedEntry = nearestWithinSegment ?? nearestBeforeOrDuring;
 
-    return nearestBeforeOrDuring
-        ? formatCountryLabel(nearestBeforeOrDuring.code, nearestBeforeOrDuring.name)
+    return selectedEntry
+        ? formatCountryLabel(selectedEntry.code, selectedEntry.name)
         : null;
 }
-
 function formatActivityTooltip(segment: TimelineSegment) {
     const lines = [
         getActivityLabel(segment.activityType),
@@ -288,6 +311,55 @@ function formatViolationTooltip(marker: ViolationMarker) {
     }
 
     return lines.join("\n");
+}
+
+function formatDateTime(date: Date) {
+    return dateTimeFormatter.format(date);
+}
+
+function formatViolationRange(marker: ViolationMarker) {
+    return marker.endUtc
+        ? `${formatDateTime(marker.occurredAtUtc)} - ${formatDateTime(marker.endUtc)}`
+        : "Brak dokładnego zakresu";
+}
+
+function formatComplianceValue(value: string | number | null) {
+    if (value === null || value === undefined || value === "") {
+        return null;
+    }
+
+    return typeof value === "number"
+        ? value.toLocaleString("pl-PL")
+        : value;
+}
+
+function getViolationDetailRows(marker: ViolationMarker) {
+    const rows: Array<[string, string]> = [];
+    const actualValue = formatComplianceValue(marker.actualValue);
+    const requiredValue = formatComplianceValue(marker.requiredValue);
+    const excessValue = formatComplianceValue(marker.excessValue);
+    const missingValue = formatComplianceValue(marker.missingValue);
+
+    if (actualValue) rows.push(["Rzeczywista wartość", actualValue]);
+    if (requiredValue) rows.push(["Wymagana wartość", requiredValue]);
+    if (excessValue) rows.push(["Przekroczenie", excessValue]);
+    if (missingValue) rows.push(["Niedobór", missingValue]);
+    if (!actualValue && marker.actualDurationMinutes !== null) {
+        rows.push(["Rzeczywisty czas", formatDuration(marker.actualDurationMinutes * 60)]);
+    }
+    if (!requiredValue && marker.limitDurationMinutes !== null) {
+        rows.push(["Wymagany limit", formatDuration(marker.limitDurationMinutes * 60)]);
+    }
+
+    return rows;
+}
+
+function doesSegmentOverlapViolation(segment: TimelineSegment, marker: ViolationMarker) {
+    if (!marker.endUtc) {
+        return segment.startUtc <= marker.occurredAtUtc && segment.endUtc >= marker.occurredAtUtc;
+    }
+
+    return segment.startUtc < marker.endUtc && segment.endUtc > marker.occurredAtUtc;
 }
 
 function buildSegments(
@@ -444,6 +516,13 @@ function buildViolationMarkers(violations: TachographViolation[], day: string): 
                 leftPercent: getPercentForDate(markerTime, bounds.dayStartMs),
                 rangeLeftPercent: getPercentForDate(rangeStart, bounds.dayStartMs),
                 rangeWidthPercent,
+                recommendation: violation.recommendation ?? null,
+                actualValue: violation.actualValue ?? null,
+                requiredValue: violation.requiredValue ?? null,
+                excessValue: violation.excessValue ?? null,
+                missingValue: violation.missingValue ?? null,
+                actualDurationMinutes: violation.actualDurationMinutes ?? null,
+                limitDurationMinutes: violation.limitDurationMinutes ?? null,
             };
         })
         .filter((marker): marker is ViolationMarker => marker !== null)
@@ -458,13 +537,79 @@ export default function TachographTimeline({
     vehicleUses = [],
     violations = [],
 }: TachographTimelineProps) {
+    const rootRef = useRef<HTMLDivElement | null>(null);
+    const [activeViolationId, setActiveViolationId] = useState<string | null>(null);
     const segments = buildSegments(activities, day, countryEntries);
     const countryMarkers = buildCountryMarkers(countryEntries, day);
     const vehicleMarkers = buildVehicleMarkers(vehicleUses, day);
     const violationMarkers = buildViolationMarkers(violations, day);
+    const activeViolation = violationMarkers.find((marker) => marker.id === activeViolationId) ?? null;
+    const activeViolationRows = activeViolation ? getViolationDetailRows(activeViolation) : [];
+
+    useEffect(() => {
+        if (!activeViolationId || violationMarkers.some((marker) => marker.id === activeViolationId)) {
+            return;
+        }
+
+        setActiveViolationId(null);
+    }, [activeViolationId, violationMarkers]);
+
+    useEffect(() => {
+        if (!activeViolationId) {
+            return;
+        }
+
+        function handlePointerDown(event: globalThis.PointerEvent) {
+            const target = event.target as Element | null;
+
+            if (!target?.closest(".tachograph-violation-marker, .tachograph-violation-panel")) {
+                setActiveViolationId(null);
+            }
+        }
+
+        function handleKeyDown(event: globalThis.KeyboardEvent) {
+            if (event.key === "Escape") {
+                setActiveViolationId(null);
+            }
+        }
+
+        document.addEventListener("pointerdown", handlePointerDown);
+        document.addEventListener("keydown", handleKeyDown);
+
+        return () => {
+            document.removeEventListener("pointerdown", handlePointerDown);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [activeViolationId]);
+
+    function toggleViolation(marker: ViolationMarker) {
+        setActiveViolationId((currentId) => currentId === marker.id ? null : marker.id);
+    }
+
+    function handleTrackPointerDown(event: PointerEvent<HTMLDivElement>) {
+        if ((event.target as HTMLElement).closest(".tachograph-violation-marker, .tachograph-violation-panel")) {
+            return;
+        }
+
+        setActiveViolationId(null);
+    }
+
+    function handleViolationKeyDown(event: KeyboardEvent<HTMLButtonElement>, marker: ViolationMarker) {
+        if (event.key === "Escape") {
+            event.stopPropagation();
+            setActiveViolationId(null);
+            return;
+        }
+
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleViolation(marker);
+        }
+    }
 
     return (
-        <div className="tachograph-timeline" aria-label={label ? `Wykres tachografowy ${label}` : "Wykres tachografowy"}>
+        <div className={`tachograph-timeline${activeViolation ? " has-active-violation" : ""}`} ref={rootRef} aria-label={label ? `Wykres tachografowy ${label}` : "Wykres tachografowy"}>
             <div className="tachograph-timeline-header">
                 {label && <h4>{label}</h4>}
                 <div className="tachograph-legend" aria-label="Legenda aktywności">
@@ -481,7 +626,7 @@ export default function TachographTimeline({
             </div>
 
             <div className="tachograph-scroll">
-                <div className="tachograph-track" role="img" aria-label="Oś aktywności od 00:00 do 24:00">
+                <div className="tachograph-track" role="img" aria-label="Oś aktywności od 00:00 do 24:00" onPointerDown={handleTrackPointerDown}>
                     <div className="tachograph-hour-grid" aria-hidden="true">
                         {hourMarkers.map((hour) => (
                             <span
@@ -525,7 +670,7 @@ export default function TachographTimeline({
                     <div className="tachograph-activity-layer">
                         {segments.map((segment, index) => (
                             <span
-                                className={`tachograph-segment ${getActivityClass(segment.activityType)}`}
+                                className={`tachograph-segment ${getActivityClass(segment.activityType)}${activeViolation ? (doesSegmentOverlapViolation(segment, activeViolation) ? " in-active-violation" : " dimmed-by-violation") : ""}`}
                                 key={`${segment.id}-${segment.startUtc.toISOString()}-${index}`}
                                 style={{
                                     left: `${segment.leftPercent}%`,
@@ -541,7 +686,7 @@ export default function TachographTimeline({
                     <div className="tachograph-marker-layer violation-layer" aria-label="Znaczniki naruszeń">
                         {violationMarkers.map((marker) => (
                             <span
-                                className="tachograph-violation-range"
+                                className={`tachograph-violation-range${activeViolationId === marker.id ? " active" : ""}`}
                                 key={`${marker.id}-range`}
                                 style={{
                                     left: `${marker.rangeLeftPercent}%`,
@@ -551,16 +696,67 @@ export default function TachographTimeline({
                         ))}
                         {violationMarkers.map((marker) => (
                             <button
-                                className="tachograph-violation-marker"
+                                className={`tachograph-violation-marker${activeViolationId === marker.id ? " active" : ""}`}
                                 data-tooltip={formatViolationTooltip(marker)}
+                                aria-expanded={activeViolationId === marker.id}
                                 key={marker.id}
                                 style={{ left: `${marker.leftPercent}%` }}
                                 type="button"
                                 aria-label={formatViolationTooltip(marker)}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleViolation(marker);
+                                }}
+                                onKeyDown={(event) => handleViolationKeyDown(event, marker)}
                             >
-                                ⚠
+                                {"⚠"}
                             </button>
                         ))}
+
+                        {activeViolation && (
+                            <aside
+                                className="tachograph-violation-panel"
+                                style={{ left: `${activeViolation.leftPercent}%` }}
+                                role="dialog"
+                                aria-label="Szczegóły naruszenia na osi czasu"
+                                onPointerDown={(event) => event.stopPropagation()}
+                            >
+                                <div className="tachograph-violation-panel-header">
+                                    <span>Naruszenie</span>
+                                    <button
+                                        type="button"
+                                        aria-label="Zamknij szczegóły naruszenia"
+                                        onClick={() => setActiveViolationId(null)}
+                                    >
+                                        x
+                                    </button>
+                                </div>
+                                <h5>{activeViolation.label}</h5>
+                                <dl className="tachograph-violation-panel-grid">
+                                    <div>
+                                        <dt>Czas wystąpienia</dt>
+                                        <dd>{formatDateTime(activeViolation.occurredAtUtc)}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Zakres</dt>
+                                        <dd>{formatViolationRange(activeViolation)}</dd>
+                                    </div>
+                                    {activeViolationRows.map(([rowLabel, value]) => (
+                                        <div key={rowLabel}>
+                                            <dt>{rowLabel}</dt>
+                                            <dd>{value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                                {activeViolation.description && <p>{activeViolation.description}</p>}
+                                {activeViolation.recommendation && (
+                                    <div className="tachograph-violation-recommendation">
+                                        <strong>Rekomendacja</strong>
+                                        <p>{activeViolation.recommendation}</p>
+                                    </div>
+                                )}
+                            </aside>
+                        )}
                     </div>
                 </div>
 

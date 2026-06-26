@@ -669,6 +669,65 @@
     background: var(--surface);
     font-weight: 760;
 }
+
+.violation-assistant-section {
+    border-color: color-mix(in srgb, #dc2626 24%, var(--border));
+}
+
+.violation-assistant-events {
+    display: grid;
+    gap: 10px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.violation-assistant-events li {
+    display: grid;
+    grid-template-columns: 58px 28px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.violation-assistant-events li.danger {
+    border-color: color-mix(in srgb, #dc2626 44%, var(--border));
+    background: color-mix(in srgb, #fee2e2 62%, var(--surface));
+}
+
+.violation-assistant-events li.success {
+    border-color: color-mix(in srgb, #16a34a 34%, var(--border));
+    background: color-mix(in srgb, #dcfce7 54%, var(--surface));
+}
+
+.violation-assistant-events time {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.5;
+}
+
+.violation-assistant-events span {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--muted-soft, rgba(15, 23, 42, 0.08));
+    font-size: 14px;
+    line-height: 1;
+}
+
+.violation-assistant-events p {
+    margin: 0;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
 .violation-details-section.recommendation {
     border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
     background: var(--primary-soft);

@@ -1054,6 +1054,206 @@ function SummaryCard({ label, value, tone, description }: SummaryCardProps) {
     );
 }
 
+type ComplianceAssistantEvent = {
+    id: string;
+    time: Date;
+    icon: string;
+    description: string;
+    tone?: "neutral" | "warning" | "danger" | "success";
+};
+
+const assistantTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+});
+
+function formatAssistantTime(date: Date) {
+    return assistantTimeFormatter.format(date);
+}
+
+function getActivityTypeLabel(activityType: string) {
+    const normalized = activityType.trim().toUpperCase();
+
+    if (normalized.includes("DRIVING")) return "Jazda";
+    if (normalized.includes("WORK")) return "Praca";
+    if (normalized.includes("AVAILABILITY")) return "Dyspozycyjność";
+    if (normalized.includes("REST") || normalized.includes("BREAK")) return "Odpoczynek";
+
+    return "Aktywność";
+}
+
+function getActivityIcon(activityType: string) {
+    const normalized = activityType.trim().toUpperCase();
+
+    if (normalized.includes("DRIVING")) return "▶";
+    if (normalized.includes("WORK")) return "⚒";
+    if (normalized.includes("AVAILABILITY")) return "◷";
+    if (normalized.includes("REST") || normalized.includes("BREAK")) return "☕";
+
+    return "•";
+}
+
+function isDrivingActivity(activityType: string) {
+    return activityType.trim().toUpperCase().includes("DRIVING");
+}
+
+function isRestLikeActivity(activityType: string) {
+    const normalized = activityType.trim().toUpperCase();
+
+    return normalized.includes("REST") || normalized.includes("BREAK") || normalized.includes("AVAILABILITY");
+}
+
+function getActivityVehicleLabel(activity: TimelineActivity) {
+    return activity.vehicleRegistration || activity.vehicleRegistrationNumber || activity.vehicle || "";
+}
+
+function getActivityDurationMinutes(activity: TimelineActivity, start: Date, end: Date) {
+    const durationFromRange = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+
+    if (durationFromRange > 0) {
+        return durationFromRange;
+    }
+
+    return Math.max(0, Math.round((activity.durationSeconds ?? 0) / 60));
+}
+
+function buildActivityEventDescription(activity: TimelineActivity, start: Date, end: Date) {
+    const typeLabel = getActivityTypeLabel(activity.activityType);
+    const durationMinutes = getActivityDurationMinutes(activity, start, end);
+    const vehicleLabel = getActivityVehicleLabel(activity);
+    const durationText = durationMinutes > 0 ? " " + formatMinutes(durationMinutes) : "";
+    const vehicleText = vehicleLabel ? ", pojazd " + vehicleLabel : "";
+
+    if (isDrivingActivity(activity.activityType)) {
+        return typeLabel + durationText + vehicleText;
+    }
+
+    if (isRestLikeActivity(activity.activityType)) {
+        return typeLabel + durationText;
+    }
+
+    return typeLabel + durationText + vehicleText;
+}
+
+function getViolationAssistantDescription(violation: DriverViolation) {
+    const normalizedCode = violation.code.trim().toUpperCase();
+    const violationName = displayViolationType(violation);
+    const durationText = getViolationDuration(violation);
+
+    if (normalizedCode.includes("CONTINUOUS_DRIVING")) {
+        return durationText === "Brak danych"
+            ? "W tym miejscu wykryto problem z przerwą po ciągłej jeździe."
+            : "Wykryto problem z przerwą po ciągłej jeździe: " + durationText + ".";
+    }
+
+    if (normalizedCode.includes("DAILY_DRIVING")) {
+        return durationText === "Brak danych"
+            ? "W tym miejscu wykryto przekroczenie dziennego czasu jazdy."
+            : "Wykryto przekroczenie dziennego czasu jazdy: " + durationText + ".";
+    }
+
+    if (normalizedCode.includes("DAILY_REST")) {
+        return durationText === "Brak danych"
+            ? "W tym miejscu wykryto problem z odpoczynkiem dziennym."
+            : "Wykryto problem z odpoczynkiem dziennym: " + durationText + ".";
+    }
+
+    if (normalizedCode.includes("WEEKLY")) {
+        return durationText === "Brak danych"
+            ? "W tym miejscu wykryto problem z limitem lub odpoczynkiem tygodniowym."
+            : "Wykryto problem tygodniowy: " + durationText + ".";
+    }
+
+    return violation.description || "Wykryto naruszenie: " + violationName + ".";
+}
+
+function buildComplianceAssistantEvents(
+    violation: DriverViolation,
+    activities: TimelineActivity[],
+): ComplianceAssistantEvent[] {
+    const period = getViolationPeriod(violation);
+
+    if (!period.start) {
+        return [];
+    }
+
+    const dayStart = getUtcDayStart(period.start);
+    const dayEnd = addDays(dayStart, 1);
+    const rangeStart = period.hasExactRange ? period.start : dayStart;
+    const rangeEnd = period.end ?? dayEnd;
+    const parsedActivities = activities
+        .map((activity) => {
+            const start = parseUtcDate(activity.startUtc);
+            const end = parseUtcDate(activity.endUtc);
+
+            if (!start || !end || end <= rangeStart || start >= rangeEnd) {
+                return null;
+            }
+
+            return {
+                activity,
+                start: start < rangeStart ? rangeStart : start,
+                end: end > rangeEnd ? rangeEnd : end,
+            };
+        })
+        .filter((item): item is { activity: TimelineActivity; start: Date; end: Date } => item !== null)
+        .sort((left, right) => left.start.getTime() - right.start.getTime());
+
+    const events: ComplianceAssistantEvent[] = [];
+    const firstDriving = parsedActivities.find((item) => isDrivingActivity(item.activity.activityType));
+
+    if (firstDriving) {
+        events.push({
+            id: "driving-start-" + firstDriving.activity.id,
+            time: firstDriving.start,
+            icon: "▶",
+            description: "Rozpoczęcie jazdy widocznej w analizowanym zakresie.",
+        });
+    }
+
+    for (const item of parsedActivities) {
+        events.push({
+            id: "activity-" + item.activity.id + "-" + item.start.toISOString(),
+            time: item.start,
+            icon: getActivityIcon(item.activity.activityType),
+            description: buildActivityEventDescription(item.activity, item.start, item.end),
+        });
+    }
+
+    events.push({
+        id: "violation-" + (violation.id || violation.occurredAtUtc),
+        time: period.start,
+        icon: "⚠",
+        description: getViolationAssistantDescription(violation),
+        tone: "danger",
+    });
+
+    const nextRest = parsedActivities.find(
+        (item) => item.start > period.start! && isRestLikeActivity(item.activity.activityType),
+    );
+
+    if (nextRest) {
+        events.push({
+            id: "next-rest-" + nextRest.activity.id,
+            time: nextRest.start,
+            icon: "🛑",
+            description: "Rozpoczęcie przerwy lub odpoczynku po zdarzeniu.",
+            tone: "success",
+        });
+    }
+
+    return events
+        .sort((left, right) => left.time.getTime() - right.time.getTime())
+        .filter((event, index, allEvents) => {
+            const previous = allEvents[index - 1];
+
+            return !previous
+                || previous.time.getTime() !== event.time.getTime()
+                || previous.description !== event.description;
+        });
+}
+
 function ViolationDetailsModal({
     violation,
     onClose,
@@ -1072,6 +1272,10 @@ function ViolationDetailsModal({
     const [timelineError, setTimelineError] = useState("");
     const hasBusinessDetails =
         businessDetails.summary.length > 0 || businessDetails.rows.length > 0;
+    const complianceAssistantEvents = useMemo(
+        () => buildComplianceAssistantEvents(violation, timelineActivities),
+        [timelineActivities, violation],
+    );
 
     useEffect(() => {
         async function loadTimelineActivities() {
@@ -1193,6 +1397,25 @@ function ViolationDetailsModal({
                                 />
                             ))}
                         </div>
+                    )}
+                </section>
+
+                <section className="violation-details-section violation-assistant-section">
+                    <h4>Analiza przebiegu zdarzenia</h4>
+                    {isTimelineLoading ? (
+                        <p className="violation-timeline-note">Analiza zostanie pokazana po załadowaniu aktywności.</p>
+                    ) : complianceAssistantEvents.length === 0 ? (
+                        <p className="violation-timeline-note">Brak wystarczających danych aktywności, aby odtworzyć przebieg zdarzenia.</p>
+                    ) : (
+                        <ol className="violation-assistant-events">
+                            {complianceAssistantEvents.map((event) => (
+                                <li className={event.tone} key={event.id}>
+                                    <time>{formatAssistantTime(event.time)}</time>
+                                    <span aria-hidden="true">{event.icon}</span>
+                                    <p>{event.description}</p>
+                                </li>
+                            ))}
+                        </ol>
                     )}
                 </section>
 
