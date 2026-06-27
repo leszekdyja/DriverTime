@@ -1385,3 +1385,122 @@
         padding: 12px;
     }
 }
+
+
+.rule-analysis-card {
+    border-color: #bfdbfe;
+    background: linear-gradient(180deg, #eff6ff, #ffffff);
+}
+
+.rule-analysis-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.rule-analysis-heading span {
+    display: block;
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.rule-analysis-heading h4 {
+    margin: 3px 0 0;
+}
+
+.rule-analysis-heading strong {
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1e40af;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.rule-analysis-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+}
+
+.rule-analysis-metrics div {
+    padding: 10px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: rgb(255 255 255 / 72%);
+}
+
+.rule-analysis-metrics dt {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.rule-analysis-metrics dd {
+    margin: 4px 0 0;
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.rule-analysis-table-wrapper {
+    overflow-x: auto;
+    margin-top: 12px;
+}
+
+.rule-analysis-table {
+    width: 100%;
+    min-width: 720px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.rule-analysis-table th,
+.rule-analysis-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #dbeafe;
+    text-align: left;
+    vertical-align: top;
+}
+
+.rule-analysis-table th {
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+    .rule-analysis-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .rule-analysis-heading {
+        flex-direction: column;
+    }
+}
+
+:root[data-theme="dark"] .rule-analysis-card {
+    border-color: rgb(96 165 250 / 45%);
+    background: linear-gradient(180deg, rgb(30 41 59 / 86%), rgb(15 23 42 / 94%));
+}
+
+:root[data-theme="dark"] .rule-analysis-heading strong,
+:root[data-theme="dark"] .rule-analysis-metrics div {
+    border-color: rgb(96 165 250 / 35%);
+    background: rgb(30 64 175 / 22%);
+    color: #bfdbfe;
+}
+
+:root[data-theme="dark"] .rule-analysis-metrics dd {
+    color: #f8fafc;
+}
+
+:root[data-theme="dark"] .rule-analysis-table th,
+:root[data-theme="dark"] .rule-analysis-table td {
+    border-bottom-color: rgb(96 165 250 / 22%);
+}

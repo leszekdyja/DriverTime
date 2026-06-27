@@ -55,6 +55,8 @@ public class ViolationDto
     public DispatcherRecommendationDto? DispatcherRecommendation { get; set; }
 
     public ViolationBusinessDetailsDto? BusinessDetails { get; set; }
+
+    public ViolationRuleAnalysisDto? RuleAnalysis { get; set; }
 }
 
 public class ViolationBusinessDetailsDto
@@ -103,4 +105,45 @@ public class DispatcherRecommendationDto
     public bool PlannerAttentionRequired { get; set; }
 
     public DateTimeOffset? EarliestNextDriveUtc { get; set; }
+}
+
+
+public class ViolationRuleAnalysisDto
+{
+    public string RuleName { get; set; } = string.Empty;
+
+    public string RuleCode { get; set; } = string.Empty;
+
+    public long DrivingLimitMinutes { get; set; }
+
+    public long RequiredBreakMinutes { get; set; }
+
+    public DateTime ViolationDetectedAtUtc { get; set; }
+
+    public long ContinuousDrivingMinutes { get; set; }
+
+    public long ExceededMinutes { get; set; }
+
+    public bool IsEstimated { get; set; }
+
+    public string BusinessSummary { get; set; } = string.Empty;
+
+    public List<ViolationRuleAnalysisSegmentDto> Segments { get; set; } = new();
+}
+
+public class ViolationRuleAnalysisSegmentDto
+{
+    public DateTime StartUtc { get; set; }
+
+    public DateTime EndUtc { get; set; }
+
+    public string ActivityType { get; set; } = string.Empty;
+
+    public long DurationMinutes { get; set; }
+
+    public bool IncreasesDrivingCounter { get; set; }
+
+    public bool ResetsCounter { get; set; }
+
+    public long DrivingCounterAfterSegment { get; set; }
 }

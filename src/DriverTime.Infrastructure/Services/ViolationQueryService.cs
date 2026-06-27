@@ -90,7 +90,7 @@ public class ViolationQueryService : IViolationQueryService
             severity,
             type);
 
-        return violations.Select(Map).ToList();
+        return await MapWithRuleAnalysisAsync(companyId, violations, cancellationToken);
     }
 
     public async Task<ViolationDto?> GetByIdAsync(
@@ -101,7 +101,9 @@ public class ViolationQueryService : IViolationQueryService
         var violation = await BuildCompanyQuery(companyId)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-        return violation is null ? null : Map(violation);
+        return violation is null
+            ? null
+            : await MapWithRuleAnalysisAsync(companyId, violation, cancellationToken);
     }
 
     private IQueryable<Violation> BuildCompanyQuery(Guid companyId)
@@ -112,7 +114,56 @@ public class ViolationQueryService : IViolationQueryService
             .Where(x => x.Driver != null && x.Driver.CompanyId == companyId);
     }
 
-    private static ViolationDto Map(Violation violation)
+    private async Task<IReadOnlyList<ViolationDto>> MapWithRuleAnalysisAsync(
+        Guid companyId,
+        IReadOnlyList<Violation> violations,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<ViolationDto>(violations.Count);
+
+        foreach (var violation in violations)
+        {
+            results.Add(await MapWithRuleAnalysisAsync(companyId, violation, cancellationToken));
+        }
+
+        return results;
+    }
+
+    private async Task<ViolationDto> MapWithRuleAnalysisAsync(
+        Guid companyId,
+        Violation violation,
+        CancellationToken cancellationToken)
+    {
+        var activities = await LoadRuleAnalysisActivitiesAsync(companyId, violation, cancellationToken);
+        return Map(violation, activities);
+    }
+
+    private async Task<IReadOnlyList<DriverActivity>> LoadRuleAnalysisActivitiesAsync(
+        Guid companyId,
+        Violation violation,
+        CancellationToken cancellationToken)
+    {
+        if (!IsContinuousDrivingBreak(violation))
+        {
+            return [];
+        }
+
+        return await _dbContext.DriverActivities
+            .AsNoTracking()
+            .Include(x => x.DddFile)
+            .Where(x =>
+                x.DddFile.DriverId == violation.DriverId &&
+                x.DddFile.CompanyId == companyId &&
+                x.StartUtc < violation.ViolationEnd &&
+                x.EndUtc > violation.ViolationStart)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static ViolationDto Map(
+        Violation violation,
+        IReadOnlyList<DriverActivity>? ruleAnalysisActivities = null)
     {
         var businessDetails = BuildBusinessDetails(violation);
         var businessValues = BuildBusinessValues(violation, businessDetails);
@@ -145,8 +196,107 @@ public class ViolationQueryService : IViolationQueryService
             BusinessSummary = businessValues.BusinessSummary,
             ScaleLabel = businessValues.ScaleLabel,
             DispatcherRecommendation = BuildDispatcherRecommendation(violation, businessValues),
-            BusinessDetails = businessDetails
+            BusinessDetails = businessDetails,
+            RuleAnalysis = BuildRuleAnalysis(violation, businessDetails, ruleAnalysisActivities ?? [])
         };
+    }
+
+    private static ViolationRuleAnalysisDto? BuildRuleAnalysis(
+        Violation violation,
+        ViolationBusinessDetailsDto? businessDetails,
+        IReadOnlyList<DriverActivity> activities)
+    {
+        if (!IsContinuousDrivingBreak(violation) || businessDetails is null)
+        {
+            return null;
+        }
+
+        var continuousDrivingMinutes = businessDetails.ContinuousDrivingMinutes ?? violation.DurationMinutes;
+        var drivingLimitMinutes = businessDetails.DrivingLimitMinutes ?? GetLimitMinutes(violation.RegulationReference);
+        if (drivingLimitMinutes <= 0)
+        {
+            drivingLimitMinutes = 270;
+        }
+
+        var requiredBreakMinutes = businessDetails.RequiredBreakMinutes ?? 45;
+        var exceededMinutes = businessDetails.DrivingExceededMinutes ?? Math.Max(continuousDrivingMinutes - drivingLimitMinutes, 0);
+        var segments = BuildRuleAnalysisSegments(activities);
+
+        return new ViolationRuleAnalysisDto
+        {
+            RuleName = "Przerwa po 4h30 jazdy",
+            RuleCode = violation.RegulationReference,
+            DrivingLimitMinutes = drivingLimitMinutes,
+            RequiredBreakMinutes = requiredBreakMinutes,
+            ViolationDetectedAtUtc = violation.ViolationEnd,
+            ContinuousDrivingMinutes = continuousDrivingMinutes,
+            ExceededMinutes = exceededMinutes,
+            IsEstimated = true,
+            BusinessSummary = $"Kierowca prowadził {FormatMinutes(continuousDrivingMinutes)} bez wymaganej przerwy {FormatMinutes(requiredBreakMinutes)}. Limit został przekroczony o {FormatMinutes(exceededMinutes)}.",
+            Segments = segments
+        };
+    }
+
+    private static List<ViolationRuleAnalysisSegmentDto> BuildRuleAnalysisSegments(
+        IReadOnlyList<DriverActivity> activities)
+    {
+        var segments = new List<ViolationRuleAnalysisSegmentDto>();
+        var drivingCounter = 0L;
+
+        foreach (var activity in activities
+            .Where(x => x.StartUtc < x.EndUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc))
+        {
+            var activityType = NormalizeActivityType(activity.ActivityType);
+            var durationMinutes = ToRoundedMinutes(activity.EndUtc - activity.StartUtc);
+            var increasesDrivingCounter = activityType == "DRIVING";
+            var resetsCounter = IsResettingBreak(activityType, durationMinutes);
+
+            if (increasesDrivingCounter)
+            {
+                drivingCounter += durationMinutes;
+            }
+            else if (resetsCounter)
+            {
+                drivingCounter = 0;
+            }
+
+            segments.Add(new ViolationRuleAnalysisSegmentDto
+            {
+                StartUtc = activity.StartUtc,
+                EndUtc = activity.EndUtc,
+                ActivityType = activityType,
+                DurationMinutes = durationMinutes,
+                IncreasesDrivingCounter = increasesDrivingCounter,
+                ResetsCounter = resetsCounter,
+                DrivingCounterAfterSegment = drivingCounter
+            });
+        }
+
+        return segments;
+    }
+
+    private static bool IsContinuousDrivingBreak(Violation violation)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        return code.Contains("CONTINUOUS_DRIVING_BREAK", StringComparison.Ordinal) ||
+            code.Contains("CONTINUOUS_DRIVING_WITHOUT_45M_BREAK", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeActivityType(string activityType)
+    {
+        return DriverTime.Infrastructure.Compliance.ActivityTypeNormalizer.Normalize(activityType);
+    }
+
+    private static bool IsResettingBreak(string activityType, long durationMinutes)
+    {
+        return (activityType == "REST" || activityType == "AVAILABILITY") && durationMinutes >= 45;
+    }
+
+    private static long ToRoundedMinutes(TimeSpan duration)
+    {
+        return (long)Math.Round(duration.TotalMinutes);
     }
 
     private static ViolationBusinessDetailsDto? BuildBusinessDetails(Violation violation)

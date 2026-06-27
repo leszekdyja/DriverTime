@@ -30,6 +30,30 @@ export type DriverViolation = {
     scaleLabel?: string;
     dispatcherRecommendation?: DispatcherRecommendation | null;
     businessDetails?: ViolationBusinessDetails | null;
+    ruleAnalysis?: ViolationRuleAnalysis | null;
+};
+
+export type ViolationRuleAnalysis = {
+    ruleName: string;
+    ruleCode: string;
+    drivingLimitMinutes: number;
+    requiredBreakMinutes: number;
+    violationDetectedAtUtc: string;
+    continuousDrivingMinutes: number;
+    exceededMinutes: number;
+    isEstimated: boolean;
+    businessSummary: string;
+    segments: ViolationRuleAnalysisSegment[];
+};
+
+export type ViolationRuleAnalysisSegment = {
+    startUtc: string;
+    endUtc: string;
+    activityType: string;
+    durationMinutes: number;
+    increasesDrivingCounter: boolean;
+    resetsCounter: boolean;
+    drivingCounterAfterSegment: number;
 };
 
 export type DispatcherRecommendation = {

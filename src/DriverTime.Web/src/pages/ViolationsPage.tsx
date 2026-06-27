@@ -1602,6 +1602,31 @@ function buildComplianceAssistantEvents(
         });
 }
 
+
+
+function formatActivityLabel(activityType: string) {
+    const normalized = activityType.trim().toUpperCase();
+
+    if (normalized === "DRIVING") return "Jazda";
+    if (normalized === "WORK") return "Praca";
+    if (normalized === "AVAILABILITY") return "Dyspozycyjność";
+    if (normalized === "REST") return "Odpoczynek";
+
+    return activityType || "Nieznane";
+}
+
+function formatRuleSegmentImpact(segment: { increasesDrivingCounter: boolean; resetsCounter: boolean }) {
+    if (segment.increasesDrivingCounter) {
+        return "zwiększa licznik jazdy";
+    }
+
+    if (segment.resetsCounter) {
+        return "resetuje licznik";
+    }
+
+    return "bez zmiany licznika";
+}
+
 function ViolationDetailsModal({
     violation,
     onClose,
@@ -1800,6 +1825,58 @@ function ViolationDetailsModal({
                         )}
                     </section>
                 )}
+
+
+
+                {violation.ruleAnalysis && (
+                    <section className="violation-details-section rule-analysis-card">
+                        <div className="rule-analysis-heading">
+                            <div>
+                                <span>Analiza reguły</span>
+                                <h4>{violation.ruleAnalysis.ruleName}</h4>
+                            </div>
+                            <strong>{violation.ruleAnalysis.isEstimated ? "Odtworzona z aktywności" : "Z metadanych silnika"}</strong>
+                        </div>
+                        <p>{violation.ruleAnalysis.businessSummary}</p>
+                        <dl className="rule-analysis-metrics">
+                            <div><dt>Kod reguły</dt><dd>{violation.ruleAnalysis.ruleCode}</dd></div>
+                            <div><dt>Limit jazdy</dt><dd>{formatMinutes(violation.ruleAnalysis.drivingLimitMinutes)}</dd></div>
+                            <div><dt>Wymagana przerwa</dt><dd>{formatMinutes(violation.ruleAnalysis.requiredBreakMinutes)}</dd></div>
+                            <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
+                            <div><dt>Jazda bez poprawnej przerwy</dt><dd>{formatMinutes(violation.ruleAnalysis.continuousDrivingMinutes)}</dd></div>
+                            <div><dt>Przekroczenie</dt><dd>{formatMinutes(violation.ruleAnalysis.exceededMinutes)}</dd></div>
+                        </dl>
+                        {violation.ruleAnalysis.segments.length > 0 && (
+                            <div className="rule-analysis-table-wrapper">
+                                <table className="rule-analysis-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Od</th>
+                                            <th>Do</th>
+                                            <th>Typ</th>
+                                            <th>Czas</th>
+                                            <th>Wpływ na licznik</th>
+                                            <th>Licznik po segmencie</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {violation.ruleAnalysis.segments.map((segment) => (
+                                            <tr key={segment.startUtc + segment.endUtc + segment.activityType}>
+                                                <td>{formatDate(segment.startUtc)}</td>
+                                                <td>{formatDate(segment.endUtc)}</td>
+                                                <td>{formatActivityLabel(segment.activityType)}</td>
+                                                <td>{formatMinutes(segment.durationMinutes)}</td>
+                                                <td>{formatRuleSegmentImpact(segment)}</td>
+                                                <td>{formatMinutes(segment.drivingCounterAfterSegment)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </section>
+                )}
+
 
                 <section className="violation-details-section">
                     <h4>Opis</h4>

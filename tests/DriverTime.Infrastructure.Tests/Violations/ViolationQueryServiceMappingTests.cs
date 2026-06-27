@@ -146,14 +146,81 @@ public class ViolationQueryServiceMappingTests
         Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Count > 0);
     }
 
-    private static ViolationDto Map(Violation violation)
-    {
-        var method = typeof(ViolationQueryService).GetMethod(
-            "Map",
-            BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new InvalidOperationException("Map method not found.");
 
-        return (ViolationDto)method.Invoke(null, [violation])!;
+
+    [TestMethod]
+    public void Map_ContinuousDrivingBreakMetadata_BuildsRuleAnalysis()
+    {
+        var violation = CreateViolation(
+            "CONTINUOUS_DRIVING_BREAK",
+            """{"continuousDrivingMinutes":292,"requiredBreakMinutes":45,"receivedBreakMinutes":15,"exceededMinutes":22}""");
+        var activities = new[]
+        {
+            Activity(violation, "DRIVING", "2026-07-01T08:00:00Z", "2026-07-01T10:00:00Z"),
+            Activity(violation, "REST", "2026-07-01T10:00:00Z", "2026-07-01T10:15:00Z"),
+            Activity(violation, "DRIVING", "2026-07-01T10:15:00Z", "2026-07-01T13:07:00Z")
+        };
+
+        var dto = Map(violation, activities);
+
+        Assert.IsNotNull(dto.RuleAnalysis);
+        Assert.AreEqual("Przerwa po 4h30 jazdy", dto.RuleAnalysis.RuleName);
+        Assert.AreEqual("CONTINUOUS_DRIVING_BREAK", dto.RuleAnalysis.RuleCode);
+        Assert.AreEqual(270, dto.RuleAnalysis.DrivingLimitMinutes);
+        Assert.AreEqual(45, dto.RuleAnalysis.RequiredBreakMinutes);
+        Assert.AreEqual(292, dto.RuleAnalysis.ContinuousDrivingMinutes);
+        Assert.AreEqual(22, dto.RuleAnalysis.ExceededMinutes);
+        Assert.IsTrue(dto.RuleAnalysis.IsEstimated);
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("4 godz. 52 min", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("22 min", StringComparison.Ordinal));
+        Assert.AreEqual(3, dto.RuleAnalysis.Segments.Count);
+        Assert.AreEqual(120, dto.RuleAnalysis.Segments[0].DrivingCounterAfterSegment);
+        Assert.AreEqual(292, dto.RuleAnalysis.Segments[2].DrivingCounterAfterSegment);
+    }
+
+    [TestMethod]
+    public void Map_DailyRestMetadata_RuleAnalysisIsNull()
+    {
+        var violation = CreateViolation(
+            "DAILY_REST",
+            """{"longestRestMinutes":405,"requiredRegularRestMinutes":660}""");
+
+        var dto = Map(violation);
+
+        Assert.IsNull(dto.RuleAnalysis);
+    }
+
+
+    private static ViolationDto Map(Violation violation, IReadOnlyList<DriverActivity>? activities = null)
+    {
+        var method = typeof(ViolationQueryService).GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .Single(x => x.Name == "Map" && x.GetParameters().Length == 2);
+
+        return (ViolationDto)method.Invoke(null, [violation, activities ?? Array.Empty<DriverActivity>()])!;
+    }
+
+
+    private static DriverActivity Activity(
+        Violation violation,
+        string activityType,
+        string startUtc,
+        string endUtc)
+    {
+        return new DriverActivity
+        {
+            Id = Guid.NewGuid(),
+            DddFileId = Guid.NewGuid(),
+            DddFile = new DddFile
+            {
+                Id = Guid.NewGuid(),
+                DriverId = violation.DriverId,
+                CompanyId = violation.Driver?.CompanyId ?? Guid.NewGuid(),
+                DriverCardNumber = violation.Driver?.CardNumber ?? string.Empty
+            },
+            ActivityType = activityType,
+            StartUtc = DateTime.Parse(startUtc).ToUniversalTime(),
+            EndUtc = DateTime.Parse(endUtc).ToUniversalTime()
+        };
     }
 
     private static Violation CreateViolation(string code, string metadataJson)
