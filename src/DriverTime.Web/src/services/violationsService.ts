@@ -28,7 +28,18 @@ export type DriverViolation = {
     compensationDeadlineUtc?: string | null;
     businessSummary?: string;
     scaleLabel?: string;
+    dispatcherRecommendation?: DispatcherRecommendation | null;
     businessDetails?: ViolationBusinessDetails | null;
+};
+
+export type DispatcherRecommendation = {
+    status: "OK" | "WARNING" | "HIGH_RISK" | "BLOCKED" | string;
+    summary: string;
+    recommendedActions: string[];
+    canDrive: boolean;
+    canStartShift: boolean;
+    plannerAttentionRequired: boolean;
+    earliestNextDriveUtc?: string | null;
 };
 
 export type ViolationBusinessDetails = {

@@ -65,6 +65,13 @@ const alertSeverityLabels: Record<AlertSeverity, string> = {
     critical: "Krytyczne",
 };
 
+const dispatcherStatusLabels: Record<string, string> = {
+    OK: "OK",
+    WARNING: "Ostrzeżenie",
+    HIGH_RISK: "Wysokie ryzyko",
+    BLOCKED: "Blokada planowania",
+};
+
 type TimelineDay = {
     date: string;
     label: string;
@@ -281,6 +288,59 @@ function getViolationKey(violation: DriverViolation) {
         violation.violationType,
         violation.code,
     ].join("|");
+}
+
+function getDispatcherStatusLabel(status?: string | null) {
+    if (!status) {
+        return "Brak statusu";
+    }
+
+    return dispatcherStatusLabels[status] || status;
+}
+
+function getDispatcherStatusIcon(status?: string | null) {
+    switch (status) {
+        case "OK":
+            return "✓";
+        case "WARNING":
+            return "!";
+        case "HIGH_RISK":
+            return "⚠";
+        case "BLOCKED":
+            return "⛔";
+        default:
+            return "!";
+    }
+}
+
+function formatDispatcherFlag(value: boolean, trueText: string, falseText: string) {
+    return value ? trueText : falseText;
+}
+
+function getDispatcherReason(violation: DriverViolation) {
+    if (violation.excessMinutes && violation.excessMinutes > 0) {
+        return `+${formatMinutes(violation.excessMinutes)} ponad limit`;
+    }
+
+    if (violation.missingMinutes && violation.missingMinutes > 0) {
+        return `Brakuje ${formatMinutes(violation.missingMinutes)} odpoczynku`;
+    }
+
+    if (violation.differenceMinutes && violation.differenceMinutes !== 0) {
+        const prefix = violation.differenceMinutes > 0 ? "+" : "brakuje ";
+        return violation.differenceMinutes > 0
+            ? `${prefix}${formatMinutes(violation.differenceMinutes)} ponad wymaganą wartość`
+            : `${prefix}${formatMinutes(Math.abs(violation.differenceMinutes))}`;
+    }
+
+    if (
+        violation.actualValueMinutes !== null && violation.actualValueMinutes !== undefined &&
+        violation.requiredValueMinutes !== null && violation.requiredValueMinutes !== undefined
+    ) {
+        return `Rzeczywista wartość: ${formatMinutes(violation.actualValueMinutes)} / wymagane: ${formatMinutes(violation.requiredValueMinutes)}`;
+    }
+
+    return "";
 }
 
 function getViolationScaleLabel(violation: DriverViolation) {
@@ -1388,6 +1448,54 @@ function ViolationDetailsModal({
                     <StatusBadge label={getSeverityLabel(violation.severity)} tone={severityTones[severity]} />
                     <StatusBadge label={statusLabels[status]} tone={statusTones[status]} />
                 </div>
+
+                {violation.dispatcherRecommendation && (
+                    <section className={`violation-details-section dispatcher-assistant-card ${violation.dispatcherRecommendation.status.toLowerCase().replaceAll("_", "-")}`}>
+                        <div className="dispatcher-assistant-statusbar">
+                            <span className="dispatcher-assistant-icon" aria-hidden="true">
+                                {getDispatcherStatusIcon(violation.dispatcherRecommendation.status)}
+                            </span>
+                            <div>
+                                <span>Asystent Dyspozytora</span>
+                                <h4>{getDispatcherStatusLabel(violation.dispatcherRecommendation.status)}</h4>
+                            </div>
+                            <strong>{violation.dispatcherRecommendation.plannerAttentionRequired ? "Wymaga uwagi" : "Informacyjnie"}</strong>
+                        </div>
+                        <p>{violation.dispatcherRecommendation.summary}</p>
+                        {getDispatcherReason(violation) && (
+                            <div className="dispatcher-assistant-reason">
+                                <span>Powód</span>
+                                <strong>{getDispatcherReason(violation)}</strong>
+                            </div>
+                        )}
+                        <div className="dispatcher-assistant-flags" aria-label="Ocena operacyjna">
+                            <span>{formatDispatcherFlag(violation.dispatcherRecommendation.canDrive, "✓ Można jechać", "🚫 Nie planuj jazdy")}</span>
+                            <span>{formatDispatcherFlag(violation.dispatcherRecommendation.canStartShift, "✓ Można rozpocząć zmianę", "🚫 Nie zaczynaj zmiany")}</span>
+                            <span>{formatDispatcherFlag(violation.dispatcherRecommendation.plannerAttentionRequired, "👤 Uwaga planisty", "✓ Bez pilnej reakcji")}</span>
+                            {violation.dispatcherRecommendation.earliestNextDriveUtc && (
+                                <span>Najwcześniej: {formatDate(violation.dispatcherRecommendation.earliestNextDriveUtc)}</span>
+                            )}
+                        </div>
+                        {violation.dispatcherRecommendation.recommendedActions.length > 0 && (
+                            <div className="dispatcher-assistant-actions-block">
+                                <div className="dispatcher-assistant-primary-action">
+                                    <span>Najważniejsze działanie</span>
+                                    <strong>{violation.dispatcherRecommendation.recommendedActions[0]}</strong>
+                                </div>
+                                {violation.dispatcherRecommendation.recommendedActions.length > 1 && (
+                                    <div className="dispatcher-assistant-secondary-actions">
+                                        <span>Dodatkowo</span>
+                                        <ul className="dispatcher-assistant-actions">
+                                            {violation.dispatcherRecommendation.recommendedActions.slice(1).map((action) => (
+                                                <li key={action}>{action}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </section>
+                )}
 
                 <dl className="violation-details-grid">
                     <div><dt>Kierowca</dt><dd>{displayDriver(violation)}</dd></div>

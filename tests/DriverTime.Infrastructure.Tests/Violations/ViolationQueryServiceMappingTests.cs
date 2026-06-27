@@ -27,6 +27,20 @@ public class ViolationQueryServiceMappingTests
     }
 
     [TestMethod]
+    public void Map_ContinuousDrivingBreakMetadata_IncludesFortyFiveMinuteBreakAction()
+    {
+        var violation = CreateViolation(
+            "CONTINUOUS_DRIVING_BREAK",
+            """{"continuousDrivingMinutes":286,"requiredBreakMinutes":45,"receivedBreakMinutes":12,"exceededMinutes":16}""");
+
+        var dto = Map(violation);
+
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Any(x => x.Contains("45 minut", StringComparison.Ordinal)));
+        Assert.IsTrue(dto.DispatcherRecommendation.Summary.Contains("przerwy", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void Map_DailyDrivingMetadata_ExposesExcessScaleFields()
     {
         var violation = CreateViolation(
@@ -54,6 +68,82 @@ public class ViolationQueryServiceMappingTests
         Assert.AreEqual(1260, dto.CompensationMinutes);
         Assert.AreEqual(new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc), dto.CompensationDeadlineUtc);
         Assert.AreEqual("rekompensata 21 godz.", dto.ScaleLabel);
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.IsTrue(dto.DispatcherRecommendation.Summary.Contains("12.07.2026", StringComparison.Ordinal));
+        Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Any(x => x.Contains("12.07.2026", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void Map_MissingEndCountryViolation_ReturnsDispatcherRecommendation()
+    {
+        var violation = CreateViolation(
+            "MISSING_END_COUNTRY",
+            "{}"
+        );
+
+        var dto = Map(violation);
+
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.AreEqual("WARNING", dto.DispatcherRecommendation.Status);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanDrive);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanStartShift);
+        Assert.IsTrue(dto.DispatcherRecommendation.PlannerAttentionRequired);
+        Assert.IsTrue(dto.DispatcherRecommendation.Summary.Contains("kraju zakończenia", StringComparison.Ordinal));
+        Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Any(x => x.Contains("kraj zakończenia", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void Map_MissingStartCountryViolation_ReturnsDispatcherRecommendation()
+    {
+        var violation = CreateViolation(
+            "MISSING_START_COUNTRY",
+            "{}"
+        );
+
+        var dto = Map(violation);
+
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.AreEqual("WARNING", dto.DispatcherRecommendation.Status);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanDrive);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanStartShift);
+        Assert.IsTrue(dto.DispatcherRecommendation.PlannerAttentionRequired);
+        Assert.IsTrue(dto.DispatcherRecommendation.Summary.Contains("kraju rozpoczęcia", StringComparison.Ordinal));
+        Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Any(x => x.Contains("kraj rozpoczęcia", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void Map_GenericCountryDataViolation_ReturnsDataQualityRecommendation()
+    {
+        var violation = CreateViolation(
+            "INCOMPLETE_COUNTRY_DATA",
+            "{}"
+        );
+
+        var dto = Map(violation);
+
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.AreEqual("WARNING", dto.DispatcherRecommendation.Status);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanDrive);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanStartShift);
+        Assert.IsTrue(dto.DispatcherRecommendation.PlannerAttentionRequired);
+        Assert.IsTrue(dto.DispatcherRecommendation.Summary.Contains("kompletnością danych tachografu", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void Map_UnknownViolationType_ReturnsSafeFallbackRecommendation()
+    {
+        var violation = CreateViolation(
+            "UNKNOWN_RULE",
+            "{}"
+        );
+
+        var dto = Map(violation);
+
+        Assert.IsNotNull(dto.DispatcherRecommendation);
+        Assert.AreEqual("WARNING", dto.DispatcherRecommendation.Status);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanDrive);
+        Assert.IsTrue(dto.DispatcherRecommendation.CanStartShift);
+        Assert.IsTrue(dto.DispatcherRecommendation.RecommendedActions.Count > 0);
     }
 
     private static ViolationDto Map(Violation violation)

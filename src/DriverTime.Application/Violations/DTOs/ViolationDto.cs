@@ -52,6 +52,8 @@ public class ViolationDto
 
     public string ScaleLabel { get; set; } = string.Empty;
 
+    public DispatcherRecommendationDto? DispatcherRecommendation { get; set; }
+
     public ViolationBusinessDetailsDto? BusinessDetails { get; set; }
 }
 
@@ -84,4 +86,21 @@ public class ViolationBusinessDetailsDto
     public string BreakType { get; set; } = string.Empty;
 
     public string Summary { get; set; } = string.Empty;
+}
+
+public class DispatcherRecommendationDto
+{
+    public string Status { get; set; } = string.Empty;
+
+    public string Summary { get; set; } = string.Empty;
+
+    public List<string> RecommendedActions { get; set; } = new();
+
+    public bool CanDrive { get; set; }
+
+    public bool CanStartShift { get; set; }
+
+    public bool PlannerAttentionRequired { get; set; }
+
+    public DateTimeOffset? EarliestNextDriveUtc { get; set; }
 }

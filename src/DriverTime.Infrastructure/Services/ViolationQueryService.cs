@@ -144,6 +144,7 @@ public class ViolationQueryService : IViolationQueryService
             CompensationDeadlineUtc = businessValues.CompensationDeadlineUtc,
             BusinessSummary = businessValues.BusinessSummary,
             ScaleLabel = businessValues.ScaleLabel,
+            DispatcherRecommendation = BuildDispatcherRecommendation(violation, businessValues),
             BusinessDetails = businessDetails
         };
     }
@@ -480,6 +481,175 @@ public class ViolationQueryService : IViolationQueryService
             compensationDeadlineUtc,
             businessSummary,
             scaleLabel);
+    }
+
+    private static DispatcherRecommendationDto BuildDispatcherRecommendation(
+        Violation violation,
+        BusinessViolationValues values)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        var isBlocked = values.MissingMinutes.GetValueOrDefault() >= 180 ||
+            values.ExcessMinutes.GetValueOrDefault() >= 60;
+        var status = isBlocked ? "BLOCKED" : "HIGH_RISK";
+        var canDrive = false;
+        var canStartShift = false;
+        var plannerAttentionRequired = true;
+        DateTimeOffset? earliestNextDriveUtc = null;
+        var actions = new List<string>();
+        var summary = "Naruszenie wymaga weryfikacji dyspozytora przed dalszym planowaniem pracy.";
+
+        if (code.Contains("DAILY_REST", StringComparison.Ordinal))
+        {
+            summary = "Kierowca nie odebrał wymaganego odpoczynku dziennego.";
+            actions.Add("Zaplanuj pełny odpoczynek dzienny.");
+            actions.Add("Nie planuj kolejnej zmiany przed odebraniem odpoczynku.");
+            actions.Add("Zweryfikuj najwcześniejszy bezpieczny czas rozpoczęcia kolejnej jazdy.");
+            earliestNextDriveUtc = values.MissingMinutes.HasValue && values.MissingMinutes.Value > 0
+                ? new DateTimeOffset(violation.ViolationEnd, TimeSpan.Zero).AddMinutes(values.MissingMinutes.Value)
+                : null;
+        }
+        else if (code.Contains("CONTINUOUS_DRIVING", StringComparison.Ordinal))
+        {
+            status = values.ExcessMinutes.GetValueOrDefault() > 0 ? "HIGH_RISK" : "WARNING";
+            summary = "Kierowca przekroczył limit jazdy bez wymaganej przerwy.";
+            actions.Add("Zaplanuj przerwę minimum 45 minut.");
+            actions.Add("Możesz zastosować układ 15 + 30 minut, jeśli pierwsza część ma co najmniej 15 minut.");
+            actions.Add("Nie rozpoczynaj kolejnego odcinka jazdy bez wymaganej przerwy.");
+        }
+        else if (code.Contains("DAILY_DRIVING", StringComparison.Ordinal))
+        {
+            summary = "Kierowca przekroczył dzienny limit jazdy.";
+            actions.Add("Zakończ jazdę i zaplanuj odpoczynek dzienny.");
+            actions.Add("Rozważ przekazanie kolejnego zlecenia innemu kierowcy.");
+            actions.Add("Sprawdź, czy wydłużenie dnia jazdy było dopuszczalne w tym tygodniu.");
+        }
+        else if (code.Contains("WEEKLY_DRIVING", StringComparison.Ordinal))
+        {
+            summary = "Kierowca przekroczył tygodniowy limit jazdy.";
+            actions.Add("Nie planuj kolejnych tras w bieżącym tygodniu.");
+            actions.Add("Zaplanuj odpoczynek i sprawdź limit dwutygodniowy.");
+        }
+        else if (code.Contains("WEEKLY_REST_COMPENSATION", StringComparison.Ordinal) ||
+            code.Contains("REDUCED_WEEKLY_REST_COMPENSATION", StringComparison.Ordinal))
+        {
+            status = "HIGH_RISK";
+            summary = values.CompensationDeadlineUtc.HasValue
+                ? $"Kierowca ma brakującą rekompensatę odpoczynku tygodniowego do {values.CompensationDeadlineUtc.Value:dd.MM.yyyy}."
+                : "Kierowca ma brakującą rekompensatę odpoczynku tygodniowego.";
+            actions.Add("Zaplanuj rekompensatę brakującego odpoczynku.");
+            actions.Add("Dołącz rekompensatę do odpoczynku trwającego minimum 9 godzin.");
+            if (values.CompensationDeadlineUtc.HasValue)
+            {
+                actions.Add($"Dopilnuj terminu rekompensaty do {values.CompensationDeadlineUtc.Value:dd.MM.yyyy}.");
+            }
+        }
+        else if (code.Contains("REGULAR_WEEKLY_REST", StringComparison.Ordinal) ||
+            code.Contains("REDUCED_WEEKLY_REST", StringComparison.Ordinal) ||
+            code.Contains("WEEKLY_REST", StringComparison.Ordinal))
+        {
+            summary = "Kierowca nie odebrał wymaganego odpoczynku tygodniowego.";
+            actions.Add("Zaplanuj odpoczynek tygodniowy przed kolejną trasą.");
+            actions.Add("Sprawdź, czy odpoczynek może być skrócony i czy wymaga późniejszej rekompensaty.");
+        }
+        else if (code.Contains("SIX_24H_PERIODS", StringComparison.Ordinal) ||
+            code.Contains("SIX_24", StringComparison.Ordinal))
+        {
+            summary = "Kierowca przekroczył dopuszczalny czas do rozpoczęcia odpoczynku tygodniowego.";
+            actions.Add("Zaplanuj odpoczynek tygodniowy bez dalszego opóźniania.");
+            actions.Add("Nie dokładaj kolejnych zleceń przed weryfikacją planu tygodnia.");
+        }
+        else if (IsCountryDataViolation(violation))
+        {
+            status = "WARNING";
+            canDrive = true;
+            canStartShift = true;
+            plannerAttentionRequired = true;
+
+            if (IsMissingStartCountryViolation(violation))
+            {
+                summary = "Brakuje wpisu kraju rozpoczęcia dnia pracy.";
+                actions.Add("Zweryfikuj z kierowcą kraj rozpoczęcia pracy.");
+                actions.Add("Uzupełnij lub odnotuj brakujący wpis kraju w dokumentacji.");
+                actions.Add("Przypomnij kierowcy o obowiązku wyboru kraju rozpoczęcia w tachografie.");
+                actions.Add("Sprawdź, czy problem nie powtarza się w kolejnych dniach.");
+            }
+            else if (IsMissingEndCountryViolation(violation))
+            {
+                summary = "Brakuje wpisu kraju zakończenia dnia pracy.";
+                actions.Add("Zweryfikuj z kierowcą kraj zakończenia pracy.");
+                actions.Add("Uzupełnij lub odnotuj brakujący wpis kraju w dokumentacji.");
+                actions.Add("Przypomnij kierowcy o obowiązku wyboru kraju zakończenia w tachografie.");
+                actions.Add("Sprawdź, czy problem nie powtarza się w kolejnych dniach.");
+            }
+            else
+            {
+                summary = "Wykryto problem z kompletnością danych tachografu.";
+                actions.Add("Zweryfikuj dane źródłowe z odczytu karty lub tachografu.");
+                actions.Add("Sprawdź, czy import DDD zakończył się poprawnie.");
+                actions.Add("W razie potrzeby wykonaj ponowny odczyt danych.");
+            }
+        }
+        else
+        {
+            status = "WARNING";
+            canDrive = true;
+            canStartShift = true;
+            actions.Add("Zweryfikuj naruszenie z timeline aktywności i danymi DDD.");
+            actions.Add("Dodaj notatkę operacyjną, jeśli naruszenie ma uzasadnienie.");
+        }
+
+        if (actions.Count == 0)
+        {
+            actions.Add("Zweryfikuj timeline aktywności kierowcy przed dalszym planowaniem.");
+        }
+
+        return new DispatcherRecommendationDto
+        {
+            Status = status,
+            Summary = summary,
+            RecommendedActions = actions,
+            CanDrive = canDrive,
+            CanStartShift = canStartShift,
+            PlannerAttentionRequired = plannerAttentionRequired,
+            EarliestNextDriveUtc = earliestNextDriveUtc
+        };
+    }
+
+    private static bool IsCountryDataViolation(Violation violation)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        var type = violation.ViolationType.ToUpperInvariant();
+        var description = BuildDescription(violation).ToUpperInvariant();
+
+        return code.Contains("COUNTRY", StringComparison.Ordinal) ||
+            type.Contains("COUNTRY", StringComparison.Ordinal) ||
+            description.Contains("KRAJU", StringComparison.Ordinal) ||
+            description.Contains("KOD KRAJU", StringComparison.Ordinal) ||
+            description.Contains("DANE KRAJU", StringComparison.Ordinal);
+    }
+
+    private static bool IsMissingStartCountryViolation(Violation violation)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        var type = violation.ViolationType.ToUpperInvariant();
+        var description = BuildDescription(violation).ToUpperInvariant();
+
+        return code.Contains("MISSING_START_COUNTRY", StringComparison.Ordinal) ||
+            type.Contains("BRAK KRAJU ROZPOCZ", StringComparison.Ordinal) ||
+            description.Contains("BRAKUJE WPISU KRAJU ROZPOCZ", StringComparison.Ordinal) ||
+            description.Contains("BRAK KRAJU ROZPOCZ", StringComparison.Ordinal);
+    }
+
+    private static bool IsMissingEndCountryViolation(Violation violation)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        var type = violation.ViolationType.ToUpperInvariant();
+        var description = BuildDescription(violation).ToUpperInvariant();
+
+        return code.Contains("MISSING_END_COUNTRY", StringComparison.Ordinal) ||
+            type.Contains("BRAK KRAJU ZAKO", StringComparison.Ordinal) ||
+            description.Contains("BRAKUJE WPISU KRAJU ZAKO", StringComparison.Ordinal) ||
+            description.Contains("BRAK KRAJU ZAKO", StringComparison.Ordinal);
     }
 
     private static string BuildScaleLabel(
