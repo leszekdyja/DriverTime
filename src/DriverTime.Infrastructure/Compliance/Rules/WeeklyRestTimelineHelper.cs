@@ -56,7 +56,7 @@ internal static class WeeklyRestTimelineHelper
     public static IReadOnlyList<RestPeriod> BuildWeeklyRestPeriods(IReadOnlyList<TimelineActivity> timeline)
     {
         return BuildContinuousRestPeriods(timeline)
-            .Where(x => x.Duration >= MinimumReducedWeeklyRest)
+            .Where(IsAtLeastReducedWeeklyRest)
             .OrderBy(x => x.StartUtc)
             .ToList();
     }
@@ -145,12 +145,15 @@ internal static class WeeklyRestTimelineHelper
         return reductionWeekStart.AddDays(28);
     }
 
+    public static bool IsAtLeastReducedWeeklyRest(RestPeriod rest) =>
+        ToWholeMinutes(rest.Duration) >= MinimumReducedWeeklyRestMinutes;
+
     public static bool IsRegularWeeklyRest(RestPeriod rest) =>
-        rest.Duration >= RegularWeeklyRest;
+        ToWholeMinutes(rest.Duration) >= RegularWeeklyRestMinutes;
 
     public static bool IsReducedWeeklyRest(RestPeriod rest) =>
-        rest.Duration >= MinimumReducedWeeklyRest &&
-        rest.Duration < RegularWeeklyRest;
+        ToWholeMinutes(rest.Duration) >= MinimumReducedWeeklyRestMinutes &&
+        ToWholeMinutes(rest.Duration) < RegularWeeklyRestMinutes;
 
     private static IReadOnlyList<RestPeriod> MergeRestPeriods(IEnumerable<RestPeriod> periods)
     {
@@ -191,6 +194,9 @@ internal static class WeeklyRestTimelineHelper
 
     private static DateTime Max(DateTime left, DateTime right) =>
         left >= right ? left : right;
+
+    private static long ToWholeMinutes(TimeSpan duration) =>
+        (long)Math.Round(duration.TotalMinutes);
 
     internal sealed record RestPeriod(DateTime StartUtc, DateTime EndUtc)
     {

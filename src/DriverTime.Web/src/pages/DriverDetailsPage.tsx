@@ -328,6 +328,14 @@ export default function DriverDetailsPage() {
         [timelineActivities],
     );
 
+    function handleTimelineViolationClick(violationId: string) {
+        const target = document.getElementById(`driver-violation-${violationId}`);
+
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        target?.classList.add("is-highlighted");
+        window.setTimeout(() => target?.classList.remove("is-highlighted"), 1800);
+    }
+
     async function generateComplianceReport() {
         if (!details) {
             return;
@@ -418,6 +426,7 @@ export default function DriverDetailsPage() {
                                         countryEntries={details.countryEntries}
                                         vehicleUses={details.vehicleUses}
                                         violations={violations}
+                                        onViolationClick={handleTimelineViolationClick}
                                     />
                                 ))}
                             </div>
@@ -453,7 +462,7 @@ export default function DriverDetailsPage() {
                             <div className="driver-details-table violations-table">
                                 <table>
                                     <thead><tr><th>Data i czas</th><th>Typ</th><th>Opis</th><th>Poziom</th><th>Czas / przekroczenie</th></tr></thead>
-                                    <tbody>{violations.map((item, index) => <tr key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{displayViolationType(item)}</td><td><p className="violation-description">{item.description}</p><DailyRestViolationDetails violation={item} /></td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{getSeverityLabel(item.severity)}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
+                                    <tbody>{violations.map((item, index) => <tr id={`driver-violation-${item.id}`} key={`${item.code}-${item.occurredAtUtc}-${index}`}><td>{formatDate(item.occurredAtUtc)}</td><td>{displayViolationType(item)}</td><td><p className="violation-description">{item.description}</p><DailyRestViolationDetails violation={item} /></td><td><span className={`severity-badge ${getSeverityClass(item.severity)}`}>{getSeverityLabel(item.severity)}</span></td><td>{formatViolationDuration(item)}</td></tr>)}</tbody>
                                 </table>
                             </div>
                         )}

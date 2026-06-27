@@ -1,3 +1,4 @@
+using DriverTime.Application.Compliance;
 using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
@@ -10,6 +11,9 @@ namespace DriverTime.Infrastructure.Tests.Compliance;
 public class ReducedWeeklyRestCompensationRuleTests
 {
     private readonly ReducedWeeklyRestCompensationRule _rule = new(NullLogger<ReducedWeeklyRestCompensationRule>.Instance);
+    private readonly ReducedWeeklyRestRule _reducedWeeklyRestRule = new(NullLogger<ReducedWeeklyRestRule>.Instance);
+    private readonly WeeklyRestCompensationRule _weeklyRestCompensationRule = new(NullLogger<WeeklyRestCompensationRule>.Instance);
+    private readonly RegularWeeklyRestRule _regularWeeklyRestRule = new(NullLogger<RegularWeeklyRestRule>.Instance);
 
     [TestMethod]
     public void Evaluate_WithRegularFortyFiveHourWeeklyRest_ReturnsNoViolation()
@@ -24,6 +28,32 @@ public class ReducedWeeklyRestCompensationRuleTests
         var result = _rule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithManualRestOneSecondShortOfFortyFiveHours_DoesNotCreateFalseWeeklyRestViolations()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new List<TimelineActivity>
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-15T00:00:00Z", "2026-06-15T01:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-15T01:00:00Z", "2026-06-16T21:59:59Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-16T21:59:59Z", "2026-06-16T22:30:00Z")
+        };
+        var compensationTimeline = timeline.Concat(BuildBusyTimeline(
+            driverId,
+            DateTime.Parse("2026-06-16T22:30:00Z").ToUniversalTime(),
+            DateTime.Parse("2026-07-14T00:00:00Z").ToUniversalTime())).ToList();
+
+        var reducedWeeklyRestResult = _reducedWeeklyRestRule.Evaluate(driverId, timeline);
+        var weeklyRestCompensationResult = _weeklyRestCompensationRule.Evaluate(driverId, timeline);
+        var reducedWeeklyRestCompensationResult = _rule.Evaluate(driverId, compensationTimeline);
+        var regularWeeklyRestResult = _regularWeeklyRestRule.Evaluate(driverId, timeline);
+
+        AssertNoViolationCode(reducedWeeklyRestResult, "REDUCED_WEEKLY_REST");
+        AssertNoViolationCode(weeklyRestCompensationResult, "WEEKLY_REST_COMPENSATION");
+        AssertNoViolationCode(reducedWeeklyRestCompensationResult, "REDUCED_WEEKLY_REST_COMPENSATION");
+        Assert.AreEqual(0, regularWeeklyRestResult.Violations.Count);
     }
 
     [TestMethod]
@@ -125,6 +155,14 @@ public class ReducedWeeklyRestCompensationRuleTests
 
         var result = _rule.Evaluate(driverId, timeline);
 
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    private static void AssertNoViolationCode(ComplianceRuleResult result, string code)
+    {
+        Assert.IsFalse(
+            result.Violations.Any(x => string.Equals(x.Code, code, StringComparison.OrdinalIgnoreCase)),
+            $"Unexpected violation {code} was returned.");
         Assert.AreEqual(0, result.Violations.Count);
     }
 

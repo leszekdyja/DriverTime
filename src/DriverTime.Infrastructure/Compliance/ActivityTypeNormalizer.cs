@@ -44,6 +44,10 @@ public static class ActivityTypeNormalizer
             "AVAILABLE" or
             "DYSPOZYCJA" or
             "DYSPOZYCYJNOSC" or
+            "MANUALAVAILABILITY" or
+            "MANUALENTRYAVAILABILITY" or
+            "RECZNYWPISAVAILABILITY" or
+            "RECZNYWPISDYSPOZYCYJNOSC" or
             "POA" or
             "PERIODOFAVAILABILITY" => Availability,
 
@@ -54,8 +58,21 @@ public static class ActivityTypeNormalizer
             "ODPOCZYNEK" or
             "PRZERWA" or
             "PRZERWAODPOCZYNEK" or
+            "MANUALREST" or
+            "MANUALBREAK" or
+            "MANUALENTRYREST" or
+            "MANUALENTRYBREAK" or
+            "RECZNYWPISREST" or
+            "RECZNYWPISBREAK" or
+            "RECZNYWPISODPOCZYNEK" or
+            "RECZNYWPISPRZERWA" or
+            "WPISMANUALNYREST" or
+            "WPISMANUALNYBREAK" or
+            "WPISMANUALNYODPOCZYNEK" or
+            "WPISMANUALNYPRZERWA" or
             "PAUSE" or
-            "CARDDRIVERACTIVITYREST" => Rest,
+            "CARDDRIVERACTIVITYREST" or
+            "CARDDRIVERACTIVITYBREAK" => Rest,
 
             _ => Unknown
         };

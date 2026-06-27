@@ -2,6 +2,7 @@ using System.Globalization;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
+using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -717,6 +718,8 @@ public class DriverViolationService : IDriverViolationService
         values.Any(value => IsActivity(activity, value));
 
     private static bool IsActivity(DriverActivity activity, string value) =>
+        ActivityTypeNormalizer.Normalize(activity.ActivityType)
+            .Equals(value, StringComparison.OrdinalIgnoreCase) ||
         activity.ActivityType.Equals(value, StringComparison.OrdinalIgnoreCase);
 
     private static TimeSpan GetDuration(DriverActivity activity)

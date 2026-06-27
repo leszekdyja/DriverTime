@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import StatusBadge from "../components/StatusBadge";
 import TachographTimeline from "../components/tachograph/TachographTimeline";
+import ViolationTimelinePreview from "../components/violations/ViolationTimelinePreview";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDrivers,
@@ -26,12 +27,31 @@ import "../styles/violations.css";
 type SeverityLevel = "info" | "warning" | "critical";
 type ViolationStatus = "open" | "in-review" | "resolved";
 type AlertSeverity = "info" | "warning" | "serious" | "critical";
+type DispatcherKpiTone = "info" | "required" | "warning" | "danger" | "compensation" | "deadline";
+type DispatcherScaleTone = "low" | "medium" | "high" | "critical" | "warning" | "info";
+
+type DispatcherKpi = {
+    label: string;
+    value: string;
+    tone: DispatcherKpiTone;
+};
+
+type DispatcherScaleBadge = {
+    label: string;
+    tone: DispatcherScaleTone;
+};
 
 const readAlertsStorageKey = "drivertime.violationAlerts.read";
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",
+});
+
+const shortDateFormatter = new Intl.DateTimeFormat("pl-PL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
 });
 
 const severityLabels: Record<SeverityLevel, string> = {
@@ -194,6 +214,14 @@ function formatDate(value: string) {
         : dateFormatter.format(date);
 }
 
+function formatShortDate(value: string) {
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+        ? "Brak danych"
+        : shortDateFormatter.format(date);
+}
+
 function formatDateForInput(value: string) {
     const date = new Date(value);
 
@@ -216,6 +244,18 @@ function formatMinutes(minutes: number) {
     }
 
     return `${hours} godz. ${restMinutes} min`;
+}
+
+function formatSignedMinutes(minutes: number) {
+    if (minutes > 0) {
+        return `+${formatMinutes(minutes)}`;
+    }
+
+    if (minutes < 0) {
+        return `-${formatMinutes(Math.abs(minutes))}`;
+    }
+
+    return "0 min";
 }
 
 function displayDriver(violation: DriverViolation) {
@@ -341,6 +381,147 @@ function getDispatcherReason(violation: DriverViolation) {
     }
 
     return "";
+}
+
+function hasValue(value: number | null | undefined): value is number {
+    return value !== null && value !== undefined;
+}
+
+function getDispatcherKpis(violation: DriverViolation): DispatcherKpi[] {
+    const kpis: DispatcherKpi[] = [];
+
+    if (hasValue(violation.actualValueMinutes)) {
+        kpis.push({ label: "Rzeczywiste", value: formatMinutes(violation.actualValueMinutes), tone: "info" });
+    }
+
+    if (hasValue(violation.requiredValueMinutes)) {
+        kpis.push({ label: "Wymagane", value: formatMinutes(violation.requiredValueMinutes), tone: "required" });
+    }
+
+    if (hasValue(violation.differenceMinutes)) {
+        kpis.push({ label: "Różnica", value: formatSignedMinutes(violation.differenceMinutes), tone: "warning" });
+    }
+
+    if (hasValue(violation.missingMinutes)) {
+        kpis.push({ label: "Brakuje", value: formatMinutes(violation.missingMinutes), tone: "danger" });
+    }
+
+    if (hasValue(violation.excessMinutes)) {
+        kpis.push({
+            label: "Ponad limit",
+            value: violation.excessMinutes > 0 ? `+${formatMinutes(violation.excessMinutes)}` : formatSignedMinutes(violation.excessMinutes),
+            tone: "danger",
+        });
+    }
+
+    if (hasValue(violation.compensationMinutes)) {
+        kpis.push({ label: "Rekompensata", value: formatMinutes(violation.compensationMinutes), tone: "compensation" });
+    }
+
+    if (violation.compensationDeadlineUtc) {
+        kpis.push({ label: "Termin", value: formatShortDate(violation.compensationDeadlineUtc), tone: "deadline" });
+    }
+
+    return kpis;
+}
+
+function getDispatcherScaleBadge(violation: DriverViolation): DispatcherScaleBadge | null {
+    const rawLabel = violation.scaleLabel?.trim();
+
+    if (!rawLabel) {
+        return null;
+    }
+
+    const normalized = rawLabel
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+
+    if (["low", "niskie", "niska", "niewielkie", "niewielka", "male", "mala"].includes(normalized)) {
+        return { label: "Niewielkie", tone: "low" };
+    }
+
+    if (["medium", "srednie", "srednia", "umiarkowane", "umiarkowana"].includes(normalized)) {
+        return { label: "Średnie", tone: "medium" };
+    }
+
+    if (["high", "wysokie", "wysoka", "powazne", "powazna", "poważne", "poważna"].includes(normalized)) {
+        return { label: "Poważne", tone: "high" };
+    }
+
+    if (["critical", "krytyczne", "krytyczna"].includes(normalized)) {
+        return { label: "Krytyczne", tone: "critical" };
+    }
+
+    if (["warning", "ostrzezenie", "ostrzezenie", "ostrzeżenie"].includes(normalized)) {
+        return { label: "Ostrzeżenie", tone: "warning" };
+    }
+
+    if (["info", "informacyjne", "informacyjna", "informacja"].includes(normalized)) {
+        return { label: "Informacyjne", tone: "info" };
+    }
+
+    return { label: rawLabel, tone: "info" };
+}
+
+function isDataQualityViolation(violation: DriverViolation) {
+    const searchable = [
+        violation.code,
+        violation.violationType,
+        violation.description,
+    ].join(" ").toLowerCase();
+
+    return searchable.includes("country") || searchable.includes("kraju") || searchable.includes("danych");
+}
+
+function getDispatcherNextSteps(violation: DriverViolation) {
+    const status = violation.dispatcherRecommendation?.status;
+    const steps: string[] = [];
+
+    if (status === "OK") {
+        steps.push("Można kontynuować planowanie zgodnie z limitami.");
+    } else if (status === "HIGH_RISK" || status === "BLOCKED") {
+        steps.push(
+            "Zabezpiecz odpoczynek lub przerwę przed kolejną trasą.",
+            "Nie planuj kolejnego zlecenia bez weryfikacji limitów.",
+        );
+    } else if (status === "WARNING" && isDataQualityViolation(violation)) {
+        steps.push(
+            "Zweryfikuj dane z kierowcą.",
+            "Sprawdź, czy import DDD jest kompletny.",
+            "Odnotuj brakujące dane w dokumentacji.",
+        );
+    } else if (status === "WARNING") {
+        steps.push(
+            "Zweryfikuj naruszenie z kierowcą.",
+            "Sprawdź dane źródłowe i timeline aktywności.",
+        );
+    }
+
+    if (hasValue(violation.missingMinutes) && violation.missingMinutes > 0) {
+        steps.push(`Uzupełnij brakujący czas: ${formatMinutes(violation.missingMinutes) }.`);
+    }
+
+    if (hasValue(violation.excessMinutes) && violation.excessMinutes > 0) {
+        steps.push(`Uwzględnij przekroczenie limitu o ${formatMinutes(violation.excessMinutes) } w kolejnym planie pracy.`);
+    }
+
+    if (hasValue(violation.compensationMinutes) && violation.compensationMinutes > 0) {
+        steps.push(`Zaplanuj rekompensatę: ${formatMinutes(violation.compensationMinutes) }.`);
+    }
+
+    if (violation.compensationDeadlineUtc) {
+        steps.push(`Dopilnuj terminu rekompensaty: ${formatShortDate(violation.compensationDeadlineUtc)}.`);
+    }
+
+    if (isDataQualityViolation(violation)) {
+        steps.push("Zweryfikuj kraj rozpoczęcia lub zakończenia pracy w danych tachografu.");
+    }
+
+    steps.push("Zweryfikuj dane źródłowe DDD, jeśli wynik wygląda nietypowo.");
+
+    return Array.from(new Set(steps));
 }
 
 function getViolationScaleLabel(violation: DriverViolation) {
@@ -1386,6 +1567,9 @@ function ViolationDetailsModal({
         () => buildComplianceAssistantEvents(violation, timelineActivities),
         [timelineActivities, violation],
     );
+    const dispatcherKpis = useMemo(() => getDispatcherKpis(violation), [violation]);
+    const dispatcherNextSteps = useMemo(() => getDispatcherNextSteps(violation), [violation]);
+    const dispatcherScaleBadge = useMemo(() => getDispatcherScaleBadge(violation), [violation]);
 
     useEffect(() => {
         async function loadTimelineActivities() {
@@ -1459,7 +1643,14 @@ function ViolationDetailsModal({
                                 <span>Asystent Dyspozytora</span>
                                 <h4>{getDispatcherStatusLabel(violation.dispatcherRecommendation.status)}</h4>
                             </div>
-                            <strong>{violation.dispatcherRecommendation.plannerAttentionRequired ? "Wymaga uwagi" : "Informacyjnie"}</strong>
+                            <div className="dispatcher-assistant-statusmeta">
+                                {dispatcherScaleBadge && (
+                                    <span className={`dispatcher-scale-badge ${dispatcherScaleBadge.tone}`}>
+                                        Skala: {dispatcherScaleBadge.label}
+                                    </span>
+                                )}
+                                <strong>{violation.dispatcherRecommendation.plannerAttentionRequired ? "Wymaga uwagi" : "Informacyjnie"}</strong>
+                            </div>
                         </div>
                         <p>{violation.dispatcherRecommendation.summary}</p>
                         {getDispatcherReason(violation) && (
@@ -1467,6 +1658,23 @@ function ViolationDetailsModal({
                                 <span>Powód</span>
                                 <strong>{getDispatcherReason(violation)}</strong>
                             </div>
+                        )}
+                        {dispatcherKpis.length > 0 && (
+                            <div className="dispatcher-assistant-kpis" aria-label="Wartości biznesowe">
+                                {dispatcherKpis.map((kpi) => (
+                                    <div className={`dispatcher-assistant-kpi ${kpi.tone}`} key={kpi.label}>
+                                        <span>{kpi.label}</span>
+                                        <strong>{kpi.value}</strong>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {!isTimelineLoading && !timelineError && (
+                            <ViolationTimelinePreview
+                                activities={timelineActivities}
+                                occurredAtUtc={violation.occurredAtUtc}
+                                periodEndUtc={violation.periodEndUtc}
+                            />
                         )}
                         <div className="dispatcher-assistant-flags" aria-label="Ocena operacyjna">
                             <span>{formatDispatcherFlag(violation.dispatcherRecommendation.canDrive, "✓ Można jechać", "🚫 Nie planuj jazdy")}</span>
@@ -1476,20 +1684,34 @@ function ViolationDetailsModal({
                                 <span>Najwcześniej: {formatDate(violation.dispatcherRecommendation.earliestNextDriveUtc)}</span>
                             )}
                         </div>
-                        {violation.dispatcherRecommendation.recommendedActions.length > 0 && (
+                        {(violation.dispatcherRecommendation.recommendedActions.length > 0 || dispatcherNextSteps.length > 0) && (
                             <div className="dispatcher-assistant-actions-block">
-                                <div className="dispatcher-assistant-primary-action">
-                                    <span>Najważniejsze działanie</span>
-                                    <strong>{violation.dispatcherRecommendation.recommendedActions[0]}</strong>
-                                </div>
-                                {violation.dispatcherRecommendation.recommendedActions.length > 1 && (
-                                    <div className="dispatcher-assistant-secondary-actions">
-                                        <span>Dodatkowo</span>
-                                        <ul className="dispatcher-assistant-actions">
-                                            {violation.dispatcherRecommendation.recommendedActions.slice(1).map((action) => (
-                                                <li key={action}>{action}</li>
+                                {violation.dispatcherRecommendation.recommendedActions.length > 0 && (
+                                    <>
+                                        <div className="dispatcher-assistant-primary-action">
+                                            <span>Najważniejsze działanie</span>
+                                            <strong>{violation.dispatcherRecommendation.recommendedActions[0]}</strong>
+                                        </div>
+                                        {violation.dispatcherRecommendation.recommendedActions.length > 1 && (
+                                            <div className="dispatcher-assistant-secondary-actions">
+                                                <span>Dodatkowo</span>
+                                                <ul className="dispatcher-assistant-actions">
+                                                    {violation.dispatcherRecommendation.recommendedActions.slice(1).map((action) => (
+                                                        <li key={action}>{action}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                                {dispatcherNextSteps.length > 0 && (
+                                    <div className="dispatcher-assistant-next-steps">
+                                        <span>Następne kroki</span>
+                                        <ol>
+                                            {dispatcherNextSteps.map((step) => (
+                                                <li key={step}>{step}</li>
                                             ))}
-                                        </ul>
+                                        </ol>
                                     </div>
                                 )}
                             </div>

@@ -24,6 +24,17 @@ export type TachographCountryEntry = {
     countryName?: string;
     country_code?: string;
     country_name?: string;
+    entryType?: string | null;
+    type?: string | null;
+};
+
+export type TachographCardReading = {
+    id?: string;
+    timestampUtc?: string;
+    timeUtc?: string;
+    occurredAtUtc?: string;
+    readAtUtc?: string;
+    label?: string | null;
 };
 
 export type TachographVehicleUse = {
@@ -73,6 +84,8 @@ type TachographTimelineProps = {
     countryEntries?: TachographCountryEntry[];
     vehicleUses?: TachographVehicleUse[];
     violations?: TachographViolation[];
+    cardReadings?: TachographCardReading[];
+    onViolationClick?: (violationId: string) => void;
 };
 
 type TimelineSegment = {
@@ -91,6 +104,14 @@ type CountryMarker = {
     id: string;
     countryCode: string;
     countryName: string | null;
+    entryType: string | null;
+    timestamp: Date;
+    leftPercent: number;
+};
+
+type CardReadingMarker = {
+    id: string;
+    label: string;
     timestamp: Date;
     leftPercent: number;
 };
@@ -129,6 +150,7 @@ const activityLabels: Record<string, string> = {
     WORK: "Praca",
     AVAILABILITY: "Dyspozycyjność",
     REST: "Odpoczynek",
+    UNKNOWN: "Nieznane",
 };
 
 const activityLegend = [
@@ -136,6 +158,7 @@ const activityLegend = [
     { type: "WORK", label: activityLabels.WORK },
     { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
     { type: "REST", label: activityLabels.REST },
+    { type: "UNKNOWN", label: activityLabels.UNKNOWN },
 ];
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -169,19 +192,23 @@ function getDayBounds(day: string) {
     };
 }
 
+function getActivityKind(activityType: string) {
+    const normalized = activityType.trim().toUpperCase();
+
+    if (normalized.includes("DRIVING") || normalized === "DRIVE") return "DRIVING";
+    if (normalized.includes("WORK") || normalized.includes("OTHER_WORK")) return "WORK";
+    if (normalized.includes("AVAILABILITY") || normalized.includes("AVAILABLE")) return "AVAILABILITY";
+    if (normalized.includes("REST") || normalized.includes("BREAK")) return "REST";
+
+    return "UNKNOWN";
+}
+
 function getActivityClass(activityType: string) {
-    const normalized = activityType.toUpperCase();
-
-    if (normalized === "DRIVING") return "driving";
-    if (normalized === "WORK") return "work";
-    if (normalized === "AVAILABILITY") return "availability";
-    if (normalized === "REST") return "rest";
-
-    return "other";
+    return getActivityKind(activityType).toLowerCase();
 }
 
 function getActivityLabel(activityType: string) {
-    return activityLabels[activityType.toUpperCase()] || activityType || "Inne";
+    return activityLabels[getActivityKind(activityType)] || activityType || "Nieznane";
 }
 
 function getPercentForDate(date: Date, dayStartMs: number) {
@@ -224,6 +251,27 @@ function getCountryEntryTimestamp(entry: TachographCountryEntry) {
 
 function getCountryEntryCode(entry: TachographCountryEntry) {
     return (entry.countryCode ?? entry.country_code ?? "").trim().toUpperCase();
+}
+
+function getCountryEntryType(entry: TachographCountryEntry) {
+    const normalized = (entry.entryType ?? entry.type ?? "").trim().toUpperCase();
+
+    if (normalized.includes("START") || normalized.includes("BEGIN") || normalized.includes("POCZ")) {
+        return "start";
+    }
+
+    if (normalized.includes("END") || normalized.includes("STOP") || normalized.includes("KON")) {
+        return "end";
+    }
+
+    return null;
+}
+
+function getCountryEntryTypeLabel(entryType: string | null) {
+    if (entryType === "start") return "Rozpoczęcie kraju";
+    if (entryType === "end") return "Zakończenie kraju";
+
+    return "Wpis kraju";
 }
 
 function formatCountryLabel(code: string, name?: string | null) {
@@ -288,7 +336,11 @@ function formatActivityTooltip(segment: TimelineSegment) {
 function formatCountryTooltip(marker: CountryMarker) {
     const country = formatCountryLabel(marker.countryCode, marker.countryName) ?? marker.countryCode;
 
-    return [`Kraj: ${country}`, `Godzina: ${timeFormatter.format(marker.timestamp)}`].join("\n");
+    return [getCountryEntryTypeLabel(marker.entryType), `Kraj: ${country}`, `Godzina: ${timeFormatter.format(marker.timestamp)}`].join("\n");
+}
+
+function formatCardReadingTooltip(marker: CardReadingMarker) {
+    return [marker.label, `Godzina: ${timeFormatter.format(marker.timestamp)}`].join("\n");
 }
 
 function formatVehicleTooltip(marker: VehicleMarker) {
@@ -440,11 +492,42 @@ function buildCountryMarkers(entries: TachographCountryEntry[], day: string): Co
                 id: entry.id ?? `${countryCode}-${timestamp.toISOString()}-${index}`,
                 countryCode,
                 countryName: entry.countryName ?? entry.country_name ?? null,
+                entryType: getCountryEntryType(entry),
                 timestamp,
                 leftPercent: getPercentForDate(timestamp, bounds.dayStartMs),
             };
         })
         .filter((marker): marker is CountryMarker => marker !== null)
+        .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+}
+
+function getCardReadingTimestamp(reading: TachographCardReading) {
+    return parseDate(reading.timestampUtc ?? reading.timeUtc ?? reading.occurredAtUtc ?? reading.readAtUtc);
+}
+
+function buildCardReadingMarkers(cardReadings: TachographCardReading[], day: string): CardReadingMarker[] {
+    const bounds = getDayBounds(day);
+
+    if (!bounds) {
+        return [];
+    }
+
+    return cardReadings
+        .map((reading, index) => {
+            const timestamp = getCardReadingTimestamp(reading);
+
+            if (!timestamp || timestamp < bounds.dayStart || timestamp >= bounds.dayEnd) {
+                return null;
+            }
+
+            return {
+                id: reading.id ?? `card-reading-${timestamp.toISOString()}-${index}`,
+                label: reading.label?.trim() || "Odczyt karty",
+                timestamp,
+                leftPercent: getPercentForDate(timestamp, bounds.dayStartMs),
+            };
+        })
+        .filter((marker): marker is CardReadingMarker => marker !== null)
         .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
 }
 
@@ -544,12 +627,15 @@ export default function TachographTimeline({
     countryEntries = [],
     vehicleUses = [],
     violations = [],
+    cardReadings = [],
+    onViolationClick,
 }: TachographTimelineProps) {
     const rootRef = useRef<HTMLDivElement | null>(null);
     const [activeViolationId, setActiveViolationId] = useState<string | null>(null);
     const segments = buildSegments(activities, day, countryEntries);
     const countryMarkers = buildCountryMarkers(countryEntries, day);
     const vehicleMarkers = buildVehicleMarkers(vehicleUses, day);
+    const cardReadingMarkers = buildCardReadingMarkers(cardReadings, day);
     const violationMarkers = buildViolationMarkers(violations, day);
     const activeViolation = violationMarkers.find((marker) => marker.id === activeViolationId) ?? null;
     const activeViolationRows = activeViolation ? getViolationDetailRows(activeViolation) : [];
@@ -629,6 +715,7 @@ export default function TachographTimeline({
                     ))}
                     <span className="tachograph-legend-item"><i className="tachograph-marker-sample country" />Kraj</span>
                     <span className="tachograph-legend-item"><i className="tachograph-marker-sample vehicle" />Pojazd</span>
+                    <span className="tachograph-legend-item"><i className="tachograph-marker-sample card" />Odczyt karty</span>
                     <span className="tachograph-legend-item"><i className="tachograph-marker-sample violation" />Naruszenie</span>
                 </div>
             </div>
@@ -648,14 +735,29 @@ export default function TachographTimeline({
                     <div className="tachograph-marker-layer country-layer" aria-label="Znaczniki krajów">
                         {countryMarkers.map((marker) => (
                             <span
-                                className="tachograph-country-marker"
+                                className={`tachograph-country-marker ${marker.entryType ?? "unknown"}`}
                                 data-tooltip={formatCountryTooltip(marker)}
                                 key={marker.id}
                                 style={{ left: `${marker.leftPercent}%` }}
                                 tabIndex={0}
                                 aria-label={formatCountryTooltip(marker)}
                             >
-                                {marker.countryCode}
+                                {marker.entryType === "start" ? "▶ " : marker.entryType === "end" ? "■ " : ""}{marker.countryCode}
+                            </span>
+                        ))}
+                    </div>
+
+                    <div className="tachograph-marker-layer card-reading-layer" aria-label="Znaczniki odczytu karty">
+                        {cardReadingMarkers.map((marker) => (
+                            <span
+                                className="tachograph-card-marker"
+                                data-tooltip={formatCardReadingTooltip(marker)}
+                                key={marker.id}
+                                style={{ left: `${marker.leftPercent}%` }}
+                                tabIndex={0}
+                                aria-label={formatCardReadingTooltip(marker)}
+                            >
+                                K
                             </span>
                         ))}
                     </div>
@@ -714,6 +816,7 @@ export default function TachographTimeline({
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     toggleViolation(marker);
+                                    onViolationClick?.(marker.id);
                                 }}
                                 onKeyDown={(event) => handleViolationKeyDown(event, marker)}
                             >

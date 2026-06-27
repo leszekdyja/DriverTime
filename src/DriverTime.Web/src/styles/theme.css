@@ -371,8 +371,7 @@ table {
 :root[data-theme="dark"] .drivers-toolbar label,
 :root[data-theme="dark"] .driver-form label,
 :root[data-theme="dark"] .account-card label,
-:root[data-theme="dark"] .company-settings-form label,
-:root[data-theme="dark"] .activity-calendar-filters label {
+:root[data-theme="dark"] .company-settings-form label {
     color: var(--color-text);
 }
 
@@ -405,9 +404,6 @@ table {
 :root[data-theme="dark"] .upload-item,
 :root[data-theme="dark"] .ddd-dropzone,
 :root[data-theme="dark"] .profile-placeholder,
-:root[data-theme="dark"] .activity-day-card,
-:root[data-theme="dark"] .activity-summary-item,
-:root[data-theme="dark"] .activity-day-violations li,
 :root[data-theme="dark"] .drivers-count,
 :root[data-theme="dark"] .imports-list-heading > span {
     border-color: var(--premium-border);

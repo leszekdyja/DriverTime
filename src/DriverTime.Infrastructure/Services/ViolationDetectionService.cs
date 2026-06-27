@@ -1,5 +1,6 @@
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
+using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -367,23 +368,23 @@ public class ViolationDetectionService : IViolationDetectionService
     }
 
     private static bool IsDriving(DriverActivity activity) =>
-        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase)
-        || activity.ActivityType.Equals("JAZDA", StringComparison.OrdinalIgnoreCase);
+        IsActivity(activity, ActivityTypeNormalizer.Driving);
 
     private static bool IsRest(DriverActivity activity) =>
-        activity.ActivityType.Equals("REST", StringComparison.OrdinalIgnoreCase)
-        || activity.ActivityType.Equals("BREAK", StringComparison.OrdinalIgnoreCase)
-        || activity.ActivityType.Equals("ODPOCZYNEK", StringComparison.OrdinalIgnoreCase);
+        IsActivity(activity, ActivityTypeNormalizer.Rest);
 
     private static bool IsAvailability(DriverActivity activity) =>
-        activity.ActivityType.Equals("AVAILABILITY", StringComparison.OrdinalIgnoreCase);
+        IsActivity(activity, ActivityTypeNormalizer.Availability);
 
     private static bool IsBreak(DriverActivity activity) =>
         IsRest(activity) || IsAvailability(activity);
 
     private static bool IsWork(DriverActivity activity) =>
-        activity.ActivityType.Equals("WORK", StringComparison.OrdinalIgnoreCase)
-        || activity.ActivityType.Equals("PRACA", StringComparison.OrdinalIgnoreCase);
+        IsActivity(activity, ActivityTypeNormalizer.Work);
+
+    private static bool IsActivity(DriverActivity activity, string value) =>
+        ActivityTypeNormalizer.Normalize(activity.ActivityType)
+            .Equals(value, StringComparison.OrdinalIgnoreCase);
 
     private static TimeSpan GetDuration(DriverActivity activity)
     {

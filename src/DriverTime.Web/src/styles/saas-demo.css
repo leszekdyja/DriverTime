@@ -117,9 +117,9 @@ tbody tr:hover { background: #f7faff !important; }
 .pdf-button:hover:not(:disabled) { background: linear-gradient(135deg, #020617, #1e293b); }
 .excel-button:hover:not(:disabled) { background: linear-gradient(135deg, #065f46, #047857); }
 .reports-filters { padding: 22px; border-left: 4px solid var(--color-primary); }
-.reports-filters label,.drivers-toolbar label,.driver-form label,.account-card label,.company-settings-form label,.activity-calendar-filters label { color: #344054; font-size: 12px; font-weight: 730; letter-spacing: .025em; }
+.reports-filters label,.drivers-toolbar label,.driver-form label,.account-card label,.company-settings-form label { color: #344054; font-size: 12px; font-weight: 730; letter-spacing: .025em; }
 input,select,textarea { border-radius: 10px !important; }
-.reports-filters input,.reports-filters select,.drivers-toolbar input,.driver-form input,.account-card input,.company-settings-form input,.company-settings-form textarea,.risk-toolbar input,.risk-toolbar select,.activity-calendar-filters input { min-height: 44px; border: 1px solid #d0d5dd; background: #fff; box-shadow: 0 1px 2px rgb(16 24 40 / 4%); }
+.reports-filters input,.reports-filters select,.drivers-toolbar input,.driver-form input,.account-card input,.company-settings-form input,.company-settings-form textarea,.risk-toolbar input,.risk-toolbar select { min-height: 44px; border: 1px solid #d0d5dd; background: #fff; box-shadow: 0 1px 2px rgb(16 24 40 / 4%); }
 .reports-filters input:focus,.reports-filters select:focus,.drivers-toolbar input:focus,.driver-form input:focus,.account-card input:focus,.company-settings-form input:focus,.company-settings-form textarea:focus { border-color: #84adff; box-shadow: 0 0 0 4px rgb(37 99 235 / 10%); outline: 0; }
 .report-summary-card { min-height: 118px; padding: 22px; border-top: 4px solid #3b82f6; background: linear-gradient(145deg, #fff, #f8fbff); }
 .report-summary-card strong { font-size: 24px; letter-spacing: -0.035em; }
@@ -143,8 +143,6 @@ input,select,textarea { border-radius: 10px !important; }
 .driver-time-grid { gap: 16px; }
 .driver-time-grid > * { border-radius: 15px; }
 .driver-details-section,.details-card,.details-section { padding: 24px; }
-.activity-day-card { border-radius: 15px; box-shadow: var(--shadow-sm); }
-.activity-timeline { height: 16px; border-radius: 999px; }
 
 .account-card,.company-settings-form { padding: 28px; }
 .account-card-heading,.company-settings-form-heading { padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }

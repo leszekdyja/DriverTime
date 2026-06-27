@@ -36,7 +36,7 @@ public class ReducedWeeklyRestRule : IComplianceRule
         var activeWeeks = GetActiveWeekRanges(validTimeline);
         var restPeriods = WeeklyRestTimelineHelper.BuildContinuousRestPeriods(validTimeline);
         var weeklyRests = restPeriods
-            .Where(x => x.Duration >= WeeklyRestTimelineHelper.MinimumReducedWeeklyRest)
+            .Where(WeeklyRestTimelineHelper.IsAtLeastReducedWeeklyRest)
             .OrderBy(x => x.StartUtc)
             .ToList();
         var reducedWeeklyRests = weeklyRests.Count(WeeklyRestTimelineHelper.IsReducedWeeklyRest);
