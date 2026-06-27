@@ -73,36 +73,14 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
 
             if (validEntries.Count == 0)
             {
-                result.Violations.Add(CreateViolation(
-                    code: MissingStartCountryCode,
-                    ruleName: "Brak kraju rozpoczęcia",
-                    description: $"Brakuje wpisu kraju rozpoczęcia dla dnia {day:yyyy-MM-dd}.",
-                    day: day));
-
-                result.Violations.Add(CreateViolation(
-                    code: MissingEndCountryCode,
-                    ruleName: "Brak kraju zakończenia",
-                    description: $"Brakuje wpisu kraju zakończenia dla dnia {day:yyyy-MM-dd}.",
-                    day: day));
-
                 continue;
             }
 
             var hasStartEntry = validEntries.Any(x => IsStartEntry(x.EntryType));
             var hasEndEntry = validEntries.Any(x => IsEndEntry(x.EntryType));
-            var hasUnknownEntries = validEntries.Any(x => IsUnknownEntry(x.EntryType));
 
-            if (!hasStartEntry && !hasEndEntry && hasUnknownEntries)
+            if (!hasStartEntry && !hasEndEntry)
             {
-                result.Violations.Add(CreateViolation(
-                    code: IncompleteCountryDataCode,
-                    ruleName: "Niekompletne dane kraju",
-                    description: "Wpisy kraju nie zawierają informacji, czy dotyczą rozpoczęcia czy zakończenia dnia pracy. Zweryfikuj dane z tachografu lub parser DDD.",
-                    day: day,
-                    entryTimeUtc: validEntries.First().EntryTimeUtc,
-                    countryCode: validEntries.First().CountryCode,
-                    entryType: UnknownEntryType));
-
                 continue;
             }
 

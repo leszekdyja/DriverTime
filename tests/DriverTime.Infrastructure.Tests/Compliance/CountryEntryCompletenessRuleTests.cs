@@ -14,7 +14,7 @@ public class CountryEntryCompletenessRuleTests
     private readonly CountryEntryCompletenessRule _rule = new(NullLogger<CountryEntryCompletenessRule>.Instance);
 
     [TestMethod]
-    public void Evaluate_WithActiveDayWithoutCountryEntries_ReturnsMissingStartAndEndWarnings()
+    public void Evaluate_WithActiveDayWithoutCountryEntries_DoesNotCreatePreciseCountryWarnings()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -24,32 +24,32 @@ public class CountryEntryCompletenessRuleTests
 
         var result = _rule.Evaluate(driverId, timeline, Array.Empty<ComplianceCountryEntry>());
 
-        Assert.AreEqual(2, result.Violations.Count);
-        Assert.IsTrue(result.Violations.Any(x => x.Code == "MISSING_START_COUNTRY"));
-        Assert.IsTrue(result.Violations.Any(x => x.Code == "MISSING_END_COUNTRY"));
-        Assert.IsTrue(result.Violations.All(x => x.Severity == "Warning"));
+        Assert.AreEqual(0, result.Violations.Count);
     }
 
     [TestMethod]
-    public void Evaluate_WithUnknownCountryEntryForActiveDay_ReturnsIncompleteCountryDataOnly()
+    public void Evaluate_WithUnknownCountryEntriesForManyActiveDays_DoesNotCreateDailyIncompleteCountryWarnings()
     {
         var driverId = Guid.NewGuid();
         var dddFileId = Guid.NewGuid();
         var timeline = new[]
         {
-            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-15T08:00:00Z", "2026-05-15T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-16T08:00:00Z", "2026-05-16T12:00:00Z")
         };
         var countryEntries = new[]
         {
-            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Unknown")
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Unknown"),
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-15T08:00:00Z", "Unknown"),
+            CountryEntry(driverId, dddFileId, "CZ", "2026-05-16T08:00:00Z", "Unknown")
         };
 
         var result = _rule.Evaluate(driverId, timeline, countryEntries);
 
-        Assert.AreEqual(1, result.Violations.Count);
-        Assert.AreEqual("INCOMPLETE_COUNTRY_DATA", result.Violations[0].Code);
+        Assert.AreEqual(0, result.Violations.Count);
+        Assert.IsFalse(result.Violations.Any(x => x.Code == "INCOMPLETE_COUNTRY_DATA"));
         Assert.IsFalse(result.Violations.Any(x => x.Code == "MISSING_END_COUNTRY"));
-        Assert.AreEqual("Unknown", result.Violations[0].Metadata["entryType"]);
     }
 
     [TestMethod]
@@ -72,6 +72,27 @@ public class CountryEntryCompletenessRuleTests
         Assert.AreEqual("MISSING_END_COUNTRY", result.Violations[0].Code);
         Assert.AreEqual("Brak kraju zakończenia", result.Violations[0].RuleName);
         Assert.AreEqual("Start", result.Violations[0].Metadata["entryType"]);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithUnknownAndKnownStartWithoutEnd_ReturnsMissingEndWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Start"),
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-14T09:00:00Z", "Unknown")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("MISSING_END_COUNTRY", result.Violations[0].Code);
     }
 
     [TestMethod]
