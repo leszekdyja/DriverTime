@@ -46,8 +46,8 @@ function formatDate(value: string | null) {
 
 function getStatusLabel(status: string) {
     if (status === "Started") return "W trakcie";
-    if (status === "Completed") return "Zakończony";
-    if (status === "Failed") return "Błąd";
+    if (status === "Completed") return "Zakończono";
+    if (status === "Failed") return "Niepowodzenie";
     return status || "Brak danych";
 }
 

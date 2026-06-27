@@ -153,41 +153,64 @@ public class ViolationQueryServiceMappingTests
     {
         var violation = CreateViolation(
             "CONTINUOUS_DRIVING_BREAK",
-            """{"continuousDrivingMinutes":292,"requiredBreakMinutes":45,"receivedBreakMinutes":15,"exceededMinutes":22}""");
+            """{"continuousDrivingMinutes":280,"requiredBreakMinutes":45,"receivedBreakMinutes":0,"exceededMinutes":10}""");
         var activities = new[]
         {
             Activity(violation, "DRIVING", "2026-07-01T08:00:00Z", "2026-07-01T10:00:00Z"),
-            Activity(violation, "REST", "2026-07-01T10:00:00Z", "2026-07-01T10:15:00Z"),
-            Activity(violation, "DRIVING", "2026-07-01T10:15:00Z", "2026-07-01T13:07:00Z")
+            Activity(violation, "REST", "2026-07-01T10:00:00Z", "2026-07-01T10:45:00Z"),
+            Activity(violation, "DRIVING", "2026-07-01T10:45:00Z", "2026-07-01T15:25:00Z")
         };
 
         var dto = Map(violation, activities);
 
         Assert.IsNotNull(dto.RuleAnalysis);
-        Assert.AreEqual("Przerwa po 4h30 jazdy", dto.RuleAnalysis.RuleName);
+        Assert.AreEqual("Przerwa po 4 godz. 30 min jazdy", dto.RuleAnalysis.RuleName);
         Assert.AreEqual("CONTINUOUS_DRIVING_BREAK", dto.RuleAnalysis.RuleCode);
         Assert.AreEqual(270, dto.RuleAnalysis.DrivingLimitMinutes);
         Assert.AreEqual(45, dto.RuleAnalysis.RequiredBreakMinutes);
-        Assert.AreEqual(292, dto.RuleAnalysis.ContinuousDrivingMinutes);
-        Assert.AreEqual(22, dto.RuleAnalysis.ExceededMinutes);
+        Assert.AreEqual(280, dto.RuleAnalysis.ContinuousDrivingMinutes);
+        Assert.AreEqual(10, dto.RuleAnalysis.ExceededMinutes);
         Assert.IsTrue(dto.RuleAnalysis.IsEstimated);
-        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("4 godz. 52 min", StringComparison.Ordinal));
-        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("22 min", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("4 godz. 40 min", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("10 min", StringComparison.Ordinal));
+        Assert.IsNotNull(dto.RuleAnalysis.ExecutionTrace);
+        Assert.IsTrue(dto.RuleAnalysis.ExecutionTrace.Summary.Contains("Po analizie segment?w", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.Steps.Any(x => x.ResetsCounter));
+        Assert.IsTrue(dto.RuleAnalysis.Steps.Any(x => x.DetectsViolation));
         Assert.AreEqual(3, dto.RuleAnalysis.Segments.Count);
         Assert.AreEqual(120, dto.RuleAnalysis.Segments[0].DrivingCounterAfterSegment);
-        Assert.AreEqual(292, dto.RuleAnalysis.Segments[2].DrivingCounterAfterSegment);
+        Assert.AreEqual(0, dto.RuleAnalysis.Segments[1].DrivingCounterAfterSegment);
+        Assert.IsTrue(dto.RuleAnalysis.Segments[1].ResetsCounter);
+        Assert.AreEqual(280, dto.RuleAnalysis.Segments[2].DrivingCounterAfterSegment);
     }
 
     [TestMethod]
-    public void Map_DailyRestMetadata_RuleAnalysisIsNull()
+    public void Map_DailyRestMetadata_BuildsRuleAnalysis()
     {
         var violation = CreateViolation(
             "DAILY_REST",
-            """{"longestRestMinutes":405,"requiredRegularRestMinutes":660}""");
+            """{"longestRestMinutes":522,"requiredRegularRestMinutes":660,"analysisWindowStartUtc":"2026-07-01T08:00:00Z","analysisWindowEndUtc":"2026-07-02T08:00:00Z"}""");
+        var activities = new[]
+        {
+            Activity(violation, "WORK", "2026-07-01T08:00:00Z", "2026-07-01T12:00:00Z"),
+            Activity(violation, "REST", "2026-07-01T12:00:00Z", "2026-07-01T20:42:00Z"),
+            Activity(violation, "DRIVING", "2026-07-01T20:42:00Z", "2026-07-01T22:00:00Z")
+        };
 
-        var dto = Map(violation);
+        var dto = Map(violation, activities);
 
-        Assert.IsNull(dto.RuleAnalysis);
+        Assert.IsNotNull(dto.RuleAnalysis);
+        Assert.AreEqual("Odpoczynek dzienny", dto.RuleAnalysis.RuleName);
+        Assert.AreEqual("DAILY_REST", dto.RuleAnalysis.RuleCode);
+        Assert.AreEqual(660, dto.RuleAnalysis.RequiredRestMinutes);
+        Assert.AreEqual(522, dto.RuleAnalysis.LongestRestMinutes);
+        Assert.AreEqual(138, dto.RuleAnalysis.MissingRestMinutes);
+        Assert.IsTrue(dto.RuleAnalysis.IsEstimated);
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("8 godz. 42 min", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("11 godz.", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.BusinessSummary.Contains("2 godz. 18 min", StringComparison.Ordinal));
+        Assert.IsTrue(dto.RuleAnalysis.Segments.Any(x => x.ActivityType == "REST" && x.CountsAsRest));
+        Assert.IsTrue(dto.RuleAnalysis.Segments.Any(x => x.ActivityType == "REST_GAP" && x.CountsAsRest));
     }
 
 

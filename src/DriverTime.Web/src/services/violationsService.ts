@@ -41,9 +41,50 @@ export type ViolationRuleAnalysis = {
     violationDetectedAtUtc: string;
     continuousDrivingMinutes: number;
     exceededMinutes: number;
+    analysisWindowStartUtc?: string | null;
+    analysisWindowEndUtc?: string | null;
+    requiredRestMinutes?: number | null;
+    longestRestMinutes?: number | null;
+    missingRestMinutes?: number | null;
     isEstimated: boolean;
     businessSummary: string;
+    executionTrace?: RuleExecutionTrace | null;
+    steps?: RuleExecutionTraceStep[];
     segments: ViolationRuleAnalysisSegment[];
+};
+
+export type RuleExecutionTrace = {
+    ruleCode: string;
+    ruleName: string;
+    analysisWindowStartUtc?: string | null;
+    analysisWindowEndUtc?: string | null;
+    detectedAtUtc?: string | null;
+    isEstimated: boolean;
+    summary: string;
+    metrics: Record<string, string>;
+    steps: RuleExecutionTraceStep[];
+    segments: RuleExecutionTraceSegment[];
+};
+
+export type RuleExecutionTraceStep = {
+    order: number;
+    timeUtc?: string | null;
+    description: string;
+    counterMinutes?: number | null;
+    resetsCounter: boolean;
+    detectsViolation: boolean;
+};
+
+export type RuleExecutionTraceSegment = {
+    startUtc: string;
+    endUtc: string;
+    activityType: string;
+    durationMinutes: number;
+    drivingMinutesAfterSegment: number;
+    restCandidateMinutes?: number | null;
+    isResetPoint: boolean;
+    isViolationPoint: boolean;
+    note: string;
 };
 
 export type ViolationRuleAnalysisSegment = {
@@ -54,6 +95,8 @@ export type ViolationRuleAnalysisSegment = {
     increasesDrivingCounter: boolean;
     resetsCounter: boolean;
     drivingCounterAfterSegment: number;
+    countsAsRest?: boolean;
+    restCandidateMinutes?: number | null;
 };
 
 export type DispatcherRecommendation = {

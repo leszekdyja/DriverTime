@@ -44,7 +44,7 @@ const activityLabels: Record<string, string> = {
     DRIVING: "Jazda",
     WORK: "Praca",
     REST: "Odpoczynek",
-    AVAILABILITY: "Dyspozycja",
+    AVAILABILITY: "Dyspozycyjność",
 };
 
 const activityFills: Record<string, string> = {
@@ -247,7 +247,7 @@ export async function exportReportExcel(options: ReportExcelOptions) {
     });
 
     summarySheet.addRow([]);
-    const summaryHeader = summarySheet.addRow(["Jazda", "Praca", "Odpoczynek", "Dyspozycja", "Liczba aktywności"]);
+    const summaryHeader = summarySheet.addRow(["Jazda", "Praca", "Odpoczynek", "Dyspozycyjność", "Liczba aktywności"]);
     applyHeaderStyle(summaryHeader);
     const summaryValues = summarySheet.addRow([
         formatDuration(options.totals.driving),
@@ -284,7 +284,7 @@ export async function exportReportExcel(options: ReportExcelOptions) {
     });
 
     activitySheet.addRow([]);
-    activitySheet.addRow(["Podsumowanie", "Jazda", "Praca", "Odpoczynek", "Dyspozycja"]);
+    activitySheet.addRow(["Podsumowanie", "Jazda", "Praca", "Odpoczynek", "Dyspozycyjność"]);
     applyHeaderStyle(activitySheet.getRow(7));
     const topSummary = activitySheet.addRow([
         "Czas",

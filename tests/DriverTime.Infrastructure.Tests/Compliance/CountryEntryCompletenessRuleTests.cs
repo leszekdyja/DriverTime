@@ -1,6 +1,8 @@
 using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
+using DriverTime.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -29,7 +31,7 @@ public class CountryEntryCompletenessRuleTests
     }
 
     [TestMethod]
-    public void Evaluate_WithOnlyOneCountryEntryForActiveDay_ReturnsMissingEndWarning()
+    public void Evaluate_WithUnknownCountryEntryForActiveDay_ReturnsIncompleteCountryDataOnly()
     {
         var driverId = Guid.NewGuid();
         var dddFileId = Guid.NewGuid();
@@ -39,7 +41,29 @@ public class CountryEntryCompletenessRuleTests
         };
         var countryEntries = new[]
         {
-            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z")
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Unknown")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("INCOMPLETE_COUNTRY_DATA", result.Violations[0].Code);
+        Assert.IsFalse(result.Violations.Any(x => x.Code == "MISSING_END_COUNTRY"));
+        Assert.AreEqual("Unknown", result.Violations[0].Metadata["entryType"]);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithKnownStartWithoutEnd_ReturnsMissingEndWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Start")
         };
 
         var result = _rule.Evaluate(driverId, timeline, countryEntries);
@@ -47,6 +71,28 @@ public class CountryEntryCompletenessRuleTests
         Assert.AreEqual(1, result.Violations.Count);
         Assert.AreEqual("MISSING_END_COUNTRY", result.Violations[0].Code);
         Assert.AreEqual("Brak kraju zakończenia", result.Violations[0].RuleName);
+        Assert.AreEqual("Start", result.Violations[0].Metadata["entryType"]);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithKnownEndWithoutStart_ReturnsMissingStartWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-14T16:00:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("MISSING_START_COUNTRY", result.Violations[0].Code);
+        Assert.AreEqual("End", result.Violations[0].Metadata["entryType"]);
     }
 
     [TestMethod]
@@ -61,13 +107,28 @@ public class CountryEntryCompletenessRuleTests
         };
         var countryEntries = new[]
         {
-            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z"),
-            CountryEntry(driverId, dddFileId, "DE", "2026-05-14T16:00:00Z")
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T08:00:00Z", "Start"),
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-14T16:00:00Z", "End")
         };
 
         var result = _rule.Evaluate(driverId, timeline, countryEntries);
 
         Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void CountryEntryModel_EntryTypeDefault_IsUnknown()
+    {
+        var options = new DbContextOptionsBuilder<DriverTimeDbContext>()
+            .UseNpgsql("Host=localhost;Database=drivertime;Username=drivertime;Password=postgres")
+            .Options;
+        using var dbContext = new DriverTimeDbContext(options);
+
+        var property = dbContext.Model
+            .FindEntityType(typeof(DriverTime.Domain.Entities.CountryEntry))
+            ?.FindProperty(nameof(DriverTime.Domain.Entities.CountryEntry.EntryType));
+
+        Assert.AreEqual("Unknown", property?.GetDefaultValue());
     }
 
     private static TimelineActivity Activity(
@@ -90,7 +151,8 @@ public class CountryEntryCompletenessRuleTests
         Guid driverId,
         Guid dddFileId,
         string countryCode,
-        string entryTimeUtc)
+        string entryTimeUtc,
+        string entryType)
     {
         return new ComplianceCountryEntry
         {
@@ -98,6 +160,7 @@ public class CountryEntryCompletenessRuleTests
             DriverId = driverId,
             DddFileId = dddFileId,
             CountryCode = countryCode,
+            EntryType = entryType,
             EntryTimeUtc = DateTime.Parse(entryTimeUtc).ToUniversalTime()
         };
     }

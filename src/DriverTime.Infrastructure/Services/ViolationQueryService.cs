@@ -143,10 +143,14 @@ public class ViolationQueryService : IViolationQueryService
         Violation violation,
         CancellationToken cancellationToken)
     {
-        if (!IsContinuousDrivingBreak(violation))
+        if (!IsContinuousDrivingBreak(violation) && !IsDailyRest(violation))
         {
             return [];
         }
+
+        var analysisWindow = IsDailyRest(violation)
+            ? GetDailyRestAnalysisWindow(violation)
+            : (violation.ViolationStart, violation.ViolationEnd);
 
         return await _dbContext.DriverActivities
             .AsNoTracking()
@@ -154,8 +158,8 @@ public class ViolationQueryService : IViolationQueryService
             .Where(x =>
                 x.DddFile.DriverId == violation.DriverId &&
                 x.DddFile.CompanyId == companyId &&
-                x.StartUtc < violation.ViolationEnd &&
-                x.EndUtc > violation.ViolationStart)
+                x.StartUtc < analysisWindow.Item2 &&
+                x.EndUtc > analysisWindow.Item1)
             .OrderBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToListAsync(cancellationToken);
@@ -206,7 +210,25 @@ public class ViolationQueryService : IViolationQueryService
         ViolationBusinessDetailsDto? businessDetails,
         IReadOnlyList<DriverActivity> activities)
     {
-        if (!IsContinuousDrivingBreak(violation) || businessDetails is null)
+        if (IsContinuousDrivingBreak(violation))
+        {
+            return BuildContinuousDrivingBreakRuleAnalysis(violation, businessDetails, activities);
+        }
+
+        if (IsDailyRest(violation))
+        {
+            return BuildDailyRestRuleAnalysis(violation, businessDetails, activities);
+        }
+
+        return null;
+    }
+
+    private static ViolationRuleAnalysisDto? BuildContinuousDrivingBreakRuleAnalysis(
+        Violation violation,
+        ViolationBusinessDetailsDto? businessDetails,
+        IReadOnlyList<DriverActivity> activities)
+    {
+        if (businessDetails is null)
         {
             return null;
         }
@@ -220,20 +242,226 @@ public class ViolationQueryService : IViolationQueryService
 
         var requiredBreakMinutes = businessDetails.RequiredBreakMinutes ?? 45;
         var exceededMinutes = businessDetails.DrivingExceededMinutes ?? Math.Max(continuousDrivingMinutes - drivingLimitMinutes, 0);
-        var segments = BuildRuleAnalysisSegments(activities);
+        var trace = BuildContinuousDrivingBreakTrace(
+            violation,
+            activities,
+            drivingLimitMinutes,
+            requiredBreakMinutes,
+            continuousDrivingMinutes,
+            exceededMinutes);
+        var segments = trace.Segments.Select(MapTraceSegment).ToList();
 
         return new ViolationRuleAnalysisDto
         {
-            RuleName = "Przerwa po 4h30 jazdy",
-            RuleCode = violation.RegulationReference,
+            RuleName = trace.RuleName,
+            RuleCode = trace.RuleCode,
             DrivingLimitMinutes = drivingLimitMinutes,
             RequiredBreakMinutes = requiredBreakMinutes,
-            ViolationDetectedAtUtc = violation.ViolationEnd,
+            ViolationDetectedAtUtc = trace.DetectedAtUtc ?? violation.ViolationEnd,
             ContinuousDrivingMinutes = continuousDrivingMinutes,
             ExceededMinutes = exceededMinutes,
-            IsEstimated = true,
-            BusinessSummary = $"Kierowca prowadził {FormatMinutes(continuousDrivingMinutes)} bez wymaganej przerwy {FormatMinutes(requiredBreakMinutes)}. Limit został przekroczony o {FormatMinutes(exceededMinutes)}.",
+            IsEstimated = trace.IsEstimated,
+            BusinessSummary = trace.Summary,
+            ExecutionTrace = trace,
+            Steps = trace.Steps,
             Segments = segments
+        };
+    }
+
+    private static ViolationRuleAnalysisDto BuildDailyRestRuleAnalysis(
+        Violation violation,
+        ViolationBusinessDetailsDto? businessDetails,
+        IReadOnlyList<DriverActivity> activities)
+    {
+        var analysisWindow = GetDailyRestAnalysisWindow(violation);
+        var segments = BuildDailyRestRuleAnalysisSegments(activities, analysisWindow.Item1, analysisWindow.Item2);
+        var longestRestMinutesFromSegments = segments
+            .Where(x => x.CountsAsRest)
+            .Select(x => x.RestCandidateMinutes ?? x.DurationMinutes)
+            .DefaultIfEmpty(0)
+            .Max();
+        var requiredRestMinutes = businessDetails?.RequiredRestMinutes ?? GetDailyRestRequiredMinutes(violation);
+        var longestRestMinutes = businessDetails?.ActualRestMinutes ?? longestRestMinutesFromSegments;
+        var missingRestMinutes = businessDetails?.MissingRestMinutes ?? Math.Max(requiredRestMinutes - longestRestMinutes, 0);
+
+        return new ViolationRuleAnalysisDto
+        {
+            RuleName = "Odpoczynek dzienny",
+            RuleCode = violation.RegulationReference,
+            ViolationDetectedAtUtc = violation.ViolationEnd,
+            AnalysisWindowStartUtc = analysisWindow.Item1,
+            AnalysisWindowEndUtc = analysisWindow.Item2,
+            RequiredRestMinutes = requiredRestMinutes,
+            LongestRestMinutes = longestRestMinutes,
+            MissingRestMinutes = missingRestMinutes,
+            IsEstimated = true,
+            BusinessSummary = $"Analiza została odtworzona z aktywności w oknie naruszenia. W analizowanym oknie 24h najdłuższy odpoczynek wyniósł {FormatMinutes(longestRestMinutes)}. Wymagane minimum to {FormatMinutes(requiredRestMinutes)}. Brakuje {FormatMinutes(missingRestMinutes)}.",
+            Segments = segments
+        };
+    }
+
+    private static RuleExecutionTraceDto BuildContinuousDrivingBreakTrace(
+        Violation violation,
+        IReadOnlyList<DriverActivity> activities,
+        long drivingLimitMinutes,
+        long requiredBreakMinutes,
+        long continuousDrivingMinutes,
+        long exceededMinutes)
+    {
+        var trace = new RuleExecutionTraceDto
+        {
+            RuleCode = violation.RegulationReference,
+            RuleName = "Przerwa po 4 godz. 30 min jazdy",
+            AnalysisWindowStartUtc = violation.ViolationStart,
+            AnalysisWindowEndUtc = violation.ViolationEnd,
+            DetectedAtUtc = violation.ViolationEnd,
+            IsEstimated = true,
+            Summary = $"Po analizie segment?w kierowca prowadzi? {FormatMinutes(continuousDrivingMinutes)} bez wymaganej przerwy {FormatMinutes(requiredBreakMinutes)}. Limit {FormatMinutes(drivingLimitMinutes)} zosta? przekroczony o {FormatMinutes(exceededMinutes)}.",
+            Metrics = new Dictionary<string, string>
+            {
+                ["Limit jazdy"] = FormatMinutes(drivingLimitMinutes),
+                ["Wymagana przerwa"] = FormatMinutes(requiredBreakMinutes),
+                ["Jazda bez poprawnej przerwy"] = FormatMinutes(continuousDrivingMinutes),
+                ["Przekroczenie"] = FormatMinutes(exceededMinutes)
+            }
+        };
+
+        var stepOrder = 1;
+        trace.Steps.Add(new RuleExecutionTraceStepDto
+        {
+            Order = stepOrder++,
+            TimeUtc = violation.ViolationStart,
+            Description = $"Rozpocz?to analiz? regu?y przerwy po {FormatMinutes(drivingLimitMinutes)} jazdy.",
+            CounterMinutes = 0
+        });
+
+        var drivingCounter = 0L;
+        var firstSplitBreakMinutes = 0L;
+        foreach (var activity in activities
+            .Where(x => x.StartUtc < x.EndUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc))
+        {
+            var activityType = NormalizeActivityType(activity.ActivityType);
+            var durationMinutes = ToRoundedMinutes(activity.EndUtc - activity.StartUtc);
+            var isDriving = activityType == "DRIVING";
+            var isBreakCandidate = activityType == "REST" || activityType == "AVAILABILITY";
+            var isResetPoint = false;
+            var isViolationPoint = false;
+            long? restCandidateMinutes = isBreakCandidate ? durationMinutes : null;
+            var note = string.Empty;
+
+            if (isDriving)
+            {
+                drivingCounter += durationMinutes;
+                isViolationPoint = drivingCounter > drivingLimitMinutes;
+                note = isViolationPoint
+                    ? "Segment jazdy przekracza limit jazdy bez wymaganej przerwy."
+                    : "Segment jazdy zwi?ksza licznik jazdy ci?g?ej.";
+            }
+            else if (isBreakCandidate && durationMinutes >= requiredBreakMinutes)
+            {
+                drivingCounter = 0;
+                firstSplitBreakMinutes = 0;
+                isResetPoint = true;
+                note = "Przerwa lub odpoczynek co najmniej 45 min resetuje licznik jazdy ci?g?ej.";
+            }
+            else if (isBreakCandidate && firstSplitBreakMinutes >= 15 && durationMinutes >= 30)
+            {
+                drivingCounter = 0;
+                firstSplitBreakMinutes = 0;
+                isResetPoint = true;
+                note = "Druga cz??? przerwy dzielonej domyka uk?ad 15 + 30 min i resetuje licznik.";
+            }
+            else if (isBreakCandidate && firstSplitBreakMinutes < 15 && durationMinutes >= 15)
+            {
+                firstSplitBreakMinutes = durationMinutes;
+                note = "Segment przyj?ty jako pierwsza cz??? przerwy dzielonej.";
+            }
+            else if (isBreakCandidate)
+            {
+                note = "Przerwa jest za kr?tka, aby zresetowa? licznik lub domkn?? przerw? dzielon?.";
+            }
+            else
+            {
+                note = "Aktywno?? nie zwi?ksza licznika jazdy i nie resetuje przerwy.";
+            }
+
+            trace.Segments.Add(new RuleExecutionTraceSegmentDto
+            {
+                StartUtc = activity.StartUtc,
+                EndUtc = activity.EndUtc,
+                ActivityType = activityType,
+                DurationMinutes = durationMinutes,
+                DrivingMinutesAfterSegment = drivingCounter,
+                RestCandidateMinutes = restCandidateMinutes,
+                IsResetPoint = isResetPoint,
+                IsViolationPoint = isViolationPoint,
+                Note = note
+            });
+
+            trace.Steps.Add(new RuleExecutionTraceStepDto
+            {
+                Order = stepOrder++,
+                TimeUtc = activity.EndUtc,
+                Description = BuildTraceStepDescription(activityType, durationMinutes, isResetPoint, isViolationPoint),
+                CounterMinutes = drivingCounter,
+                ResetsCounter = isResetPoint,
+                DetectsViolation = isViolationPoint
+            });
+        }
+
+        if (!trace.Segments.Any(x => x.IsViolationPoint) && continuousDrivingMinutes > drivingLimitMinutes)
+        {
+            trace.Steps.Add(new RuleExecutionTraceStepDto
+            {
+                Order = stepOrder,
+                TimeUtc = violation.ViolationEnd,
+                Description = "Naruszenie wykryto na podstawie metadanych regu?y, mimo braku pe?nego segmentu przekroczenia w odtworzonym oknie.",
+                CounterMinutes = continuousDrivingMinutes,
+                DetectsViolation = true
+            });
+        }
+
+        return trace;
+    }
+
+    private static string BuildTraceStepDescription(
+        string activityType,
+        long durationMinutes,
+        bool isResetPoint,
+        bool isViolationPoint)
+    {
+        if (isViolationPoint)
+        {
+            return $"Dodano segment jazdy {FormatMinutes(durationMinutes)} i wykryto przekroczenie limitu.";
+        }
+
+        if (isResetPoint)
+        {
+            return $"Dodano przerw?/odpoczynek {FormatMinutes(durationMinutes)} i zresetowano licznik jazdy.";
+        }
+
+        return activityType switch
+        {
+            "DRIVING" => $"Dodano segment jazdy {FormatMinutes(durationMinutes)}.",
+            "REST" or "AVAILABILITY" => $"Dodano przerw? lub odpoczynek {FormatMinutes(durationMinutes)}.",
+            _ => $"Dodano segment aktywno?ci {FormatMinutes(durationMinutes)} bez wp?ywu na licznik jazdy."
+        };
+    }
+
+    private static ViolationRuleAnalysisSegmentDto MapTraceSegment(RuleExecutionTraceSegmentDto segment)
+    {
+        return new ViolationRuleAnalysisSegmentDto
+        {
+            StartUtc = segment.StartUtc,
+            EndUtc = segment.EndUtc,
+            ActivityType = segment.ActivityType,
+            DurationMinutes = segment.DurationMinutes,
+            DrivingCounterAfterSegment = segment.DrivingMinutesAfterSegment,
+            ResetsCounter = segment.IsResetPoint,
+            CountsAsRest = segment.RestCandidateMinutes.HasValue,
+            RestCandidateMinutes = segment.RestCandidateMinutes
         };
     }
 
@@ -277,11 +505,121 @@ public class ViolationQueryService : IViolationQueryService
         return segments;
     }
 
+    private static List<ViolationRuleAnalysisSegmentDto> BuildDailyRestRuleAnalysisSegments(
+        IReadOnlyList<DriverActivity> activities,
+        DateTime windowStartUtc,
+        DateTime windowEndUtc)
+    {
+        var segments = new List<ViolationRuleAnalysisSegmentDto>();
+        var cursor = windowStartUtc;
+
+        foreach (var activity in activities
+            .Where(x => x.StartUtc < x.EndUtc && x.StartUtc < windowEndUtc && x.EndUtc > windowStartUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc))
+        {
+            var segmentStart = activity.StartUtc < windowStartUtc ? windowStartUtc : activity.StartUtc;
+            var segmentEnd = activity.EndUtc > windowEndUtc ? windowEndUtc : activity.EndUtc;
+
+            if (segmentStart > cursor)
+            {
+                AddDailyRestSegment(segments, cursor, segmentStart, "REST_GAP");
+            }
+
+            AddDailyRestSegment(segments, segmentStart, segmentEnd, NormalizeActivityType(activity.ActivityType));
+            if (segmentEnd > cursor)
+            {
+                cursor = segmentEnd;
+            }
+        }
+
+        if (cursor < windowEndUtc)
+        {
+            AddDailyRestSegment(segments, cursor, windowEndUtc, "REST_GAP");
+        }
+
+        return segments;
+    }
+
+    private static void AddDailyRestSegment(
+        List<ViolationRuleAnalysisSegmentDto> segments,
+        DateTime startUtc,
+        DateTime endUtc,
+        string activityType)
+    {
+        if (endUtc <= startUtc)
+        {
+            return;
+        }
+
+        var durationMinutes = ToRoundedMinutes(endUtc - startUtc);
+        var countsAsRest = activityType == "REST" || activityType == "AVAILABILITY" || activityType == "REST_GAP";
+
+        segments.Add(new ViolationRuleAnalysisSegmentDto
+        {
+            StartUtc = startUtc,
+            EndUtc = endUtc,
+            ActivityType = activityType,
+            DurationMinutes = durationMinutes,
+            CountsAsRest = countsAsRest,
+            RestCandidateMinutes = countsAsRest ? durationMinutes : null
+        });
+    }
+
     private static bool IsContinuousDrivingBreak(Violation violation)
     {
         var code = violation.RegulationReference.ToUpperInvariant();
         return code.Contains("CONTINUOUS_DRIVING_BREAK", StringComparison.Ordinal) ||
             code.Contains("CONTINUOUS_DRIVING_WITHOUT_45M_BREAK", StringComparison.Ordinal);
+    }
+
+    private static bool IsDailyRest(Violation violation)
+    {
+        var code = violation.RegulationReference.ToUpperInvariant();
+        return code.Contains("DAILY_REST", StringComparison.Ordinal);
+    }
+
+    private static (DateTime, DateTime) GetDailyRestAnalysisWindow(Violation violation)
+    {
+        var metadata = ParseMetadata(violation.MetadataJson);
+        var windowStart = GetDateTime(metadata, "analysisWindowStartUtc")
+            ?? GetDateTime(metadata, "windowStartUtc")
+            ?? GetDateTime(metadata, "periodStartUtc")
+            ?? violation.ViolationStart;
+        var windowEnd = GetDateTime(metadata, "analysisWindowEndUtc")
+            ?? GetDateTime(metadata, "windowEndUtc")
+            ?? GetDateTime(metadata, "periodEndUtc");
+
+        if (!windowEnd.HasValue || windowEnd.Value <= windowStart)
+        {
+            windowEnd = violation.ViolationEnd > windowStart.AddHours(23)
+                ? violation.ViolationEnd
+                : windowStart.AddHours(24);
+        }
+
+        return (windowStart, windowEnd.Value);
+    }
+
+    private static long GetDailyRestRequiredMinutes(Violation violation)
+    {
+        var metadata = ParseMetadata(violation.MetadataJson);
+        var reason = GetString(metadata, "reason") ?? string.Empty;
+        var metadataRequired = GetLong(metadata, "requiredRestMinutes")
+            ?? GetLong(metadata, "requiredRegularRestMinutes")
+            ?? GetLong(metadata, "requiredReducedRestMinutes");
+
+        if (metadataRequired.HasValue)
+        {
+            return metadataRequired.Value;
+        }
+
+        if (reason.Contains("Reduced", StringComparison.OrdinalIgnoreCase) ||
+            violation.RegulationReference.Contains("REDUCED", StringComparison.OrdinalIgnoreCase))
+        {
+            return 9 * 60;
+        }
+
+        return 11 * 60;
     }
 
     private static string NormalizeActivityType(string activityType)

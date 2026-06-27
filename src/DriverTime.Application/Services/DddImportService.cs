@@ -64,6 +64,7 @@ public class DddImportService : IDddImportService
                 Id = Guid.NewGuid(),
 
                 CountryCode = country.CountryCode,
+                EntryType = NormalizeCountryEntryType(country.EntryType),
 
                 EntryTimeUtc = DateTime.TryParse(country.Timestamp, out var entryTime)
                     ? entryTime
@@ -72,5 +73,39 @@ public class DddImportService : IDddImportService
         }
 
         return Task.FromResult(dddFile.Id);
+    }
+
+    private static string NormalizeCountryEntryType(string? entryType)
+    {
+        if (string.IsNullOrWhiteSpace(entryType))
+        {
+            return "Unknown";
+        }
+
+        var normalized = entryType.Trim().ToUpperInvariant();
+
+        if (normalized.Contains("START") ||
+            normalized.Contains("BEGIN") ||
+            normalized.Contains("INSERT") ||
+            normalized.Contains("ROZPOCZ") ||
+            normalized.Contains("WLOZ") ||
+            normalized.Contains("WŁOŻ"))
+        {
+            return "Start";
+        }
+
+        if (normalized.Contains("END") ||
+            normalized.Contains("FINISH") ||
+            normalized.Contains("WITHDRAW") ||
+            normalized.Contains("REMOVE") ||
+            normalized.Contains("ZAKON") ||
+            normalized.Contains("ZAKOŃ".ToUpperInvariant()) ||
+            normalized.Contains("WYJEC") ||
+            normalized.Contains("WYJĘ".ToUpperInvariant()))
+        {
+            return "End";
+        }
+
+        return "Unknown";
     }
 }

@@ -1504,3 +1504,89 @@
 :root[data-theme="dark"] .rule-analysis-table td {
     border-bottom-color: rgb(96 165 250 / 22%);
 }
+
+
+.rule-analysis-steps {
+    margin-top: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 0.9rem;
+}
+
+.rule-analysis-steps h5 {
+    margin: 0 0 0.75rem;
+    font-size: 0.95rem;
+    color: #0f172a;
+}
+
+.rule-analysis-steps ol {
+    display: grid;
+    gap: 0.65rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.rule-analysis-steps li {
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0.7rem;
+    align-items: flex-start;
+}
+
+.rule-analysis-steps li > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #075985;
+    font-weight: 800;
+    font-size: 0.78rem;
+}
+
+.rule-analysis-steps li.reset > span {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.rule-analysis-steps li.violation > span {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.rule-analysis-steps p {
+    margin: 0.1rem 0;
+    color: #334155;
+}
+
+.rule-analysis-steps small,
+.rule-analysis-steps em {
+    display: inline-flex;
+    margin-right: 0.5rem;
+    color: #64748b;
+    font-size: 0.78rem;
+    font-style: normal;
+}
+
+.rule-analysis-steps em {
+    font-weight: 700;
+}
+
+:root[data-theme="dark"] .rule-analysis-steps {
+    border-color: rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.72);
+}
+
+:root[data-theme="dark"] .rule-analysis-steps h5,
+:root[data-theme="dark"] .rule-analysis-steps p {
+    color: #e5e7eb;
+}
+
+:root[data-theme="dark"] .rule-analysis-steps small,
+:root[data-theme="dark"] .rule-analysis-steps em {
+    color: #cbd5e1;
+}

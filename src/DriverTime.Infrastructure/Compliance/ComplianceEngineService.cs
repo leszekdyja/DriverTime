@@ -170,6 +170,7 @@ public class ComplianceEngineService : IComplianceEngineService
                 DriverId = driverId,
                 DddFileId = x.DddFileId,
                 CountryCode = x.CountryCode,
+                EntryType = x.EntryType,
                 EntryTimeUtc = x.EntryTimeUtc
             })
             .ToListAsync(cancellationToken);

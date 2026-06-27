@@ -180,6 +180,10 @@ public class DriverTimeDbContext : DbContext
         modelBuilder.Entity<CountryEntry>(entity =>
         {
             entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EntryType)
+                .HasMaxLength(20)
+                .HasDefaultValue("Unknown");
         });
 
         modelBuilder.Entity<Driver>(entity =>

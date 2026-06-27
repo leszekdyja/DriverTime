@@ -224,7 +224,8 @@ public class DddFileService : IDddFileService
                 .Select(x => new ParsedCountryEntryDto
                 {
                     Timestamp = x.EntryTimeUtc.ToString("O"),
-                    CountryCode = x.CountryCode
+                    CountryCode = x.CountryCode,
+                    EntryType = x.EntryType
                 })
                 .ToList(),
             VehicleUses = dddFile.VehicleUses
@@ -870,8 +871,43 @@ public class DddFileService : IDddFileService
             {
                 Id = Guid.NewGuid(),
                 EntryTimeUtc = timestamp.Value,
-                CountryCode = countryEntry.CountryCode
+                CountryCode = countryEntry.CountryCode,
+                EntryType = NormalizeCountryEntryType(countryEntry.EntryType)
             });
         }
+    }
+
+    private static string NormalizeCountryEntryType(string? entryType)
+    {
+        if (string.IsNullOrWhiteSpace(entryType))
+        {
+            return "Unknown";
+        }
+
+        var normalized = entryType.Trim().ToUpperInvariant();
+
+        if (normalized.Contains("START") ||
+            normalized.Contains("BEGIN") ||
+            normalized.Contains("INSERT") ||
+            normalized.Contains("ROZPOCZ") ||
+            normalized.Contains("WLOZ") ||
+            normalized.Contains("WŁOŻ"))
+        {
+            return "Start";
+        }
+
+        if (normalized.Contains("END") ||
+            normalized.Contains("FINISH") ||
+            normalized.Contains("WITHDRAW") ||
+            normalized.Contains("REMOVE") ||
+            normalized.Contains("ZAKON") ||
+            normalized.Contains("ZAKOŃ".ToUpperInvariant()) ||
+            normalized.Contains("WYJEC") ||
+            normalized.Contains("WYJĘ".ToUpperInvariant()))
+        {
+            return "End";
+        }
+
+        return "Unknown";
     }
 }

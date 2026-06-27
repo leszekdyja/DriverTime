@@ -204,7 +204,7 @@ public class DriverService : IDriverService
                 Id = x.Id,
                 EntryTimeUtc = x.EntryTimeUtc,
                 CountryCode = x.CountryCode,
-                EntryType = "Unknown"
+                EntryType = x.EntryType
             })
             .ToListAsync();
     }

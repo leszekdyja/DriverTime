@@ -29,7 +29,7 @@ export default function LandingPage() {
             <header className="landing-header">
                 <Link className="public-brand" to="/welcome">
                     <img src="/logo-mark.svg" alt="" />
-                    <span><strong>DriverTime</strong><small>Fleet intelligence</small></span>
+                    <span><strong>DriverTime</strong><small>Analiza floty</small></span>
                 </Link>
                 <nav className="landing-nav" aria-label="Nawigacja strony startowej">
                     <a href="#features">Funkcje</a>

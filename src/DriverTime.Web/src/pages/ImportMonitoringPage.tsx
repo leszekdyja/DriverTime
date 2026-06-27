@@ -30,9 +30,10 @@ function formatDate(value: string | null) {
 function translateStatus(status: string) {
     const labels: Record<string, string> = {
         Pending: "Oczekuje",
-        Processing: "Przetwarzanie",
-        Completed: "Zakończony",
-        Failed: "Błąd",
+        Processing: "W trakcie",
+        Completed: "Zakończono",
+        Failed: "Niepowodzenie",
+        Duplicate: "Już zaimportowany",
     };
 
     return labels[status] ?? status;
@@ -149,7 +150,7 @@ export default function ImportMonitoringPage() {
                     >
                         {isRetryingFailed ? "Ponawianie..." : "Ponów błędne importy"}
                     </button>
-                    <span>{isRefreshing ? "Odświeżanie..." : "Auto refresh: 5 s"}</span>
+                    <span>{isRefreshing ? "Odświeżanie..." : "Automatyczne odświeżanie: 5 s"}</span>
                     {lastRefreshAt && (
                         <small>Ostatnio: {dateFormatter.format(lastRefreshAt)}</small>
                     )}
@@ -200,8 +201,8 @@ export default function ImportMonitoringPage() {
                                     <th>Status</th>
                                     <th>Start</th>
                                     <th>Koniec</th>
-                                    <th>Retry</th>
-                                    <th>Błąd</th>
+                                    <th>Ponowienia</th>
+                                    <th>Komunikat</th>
                                     <th>Akcje</th>
                                 </tr>
                             </thead>

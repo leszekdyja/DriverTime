@@ -42,6 +42,8 @@ function getStatusLabel(item: UploadItem) {
             return "Nieobsługiwany plik. Wybierz plik .ddd";
         case "error":
             return item.message || "Import nie powiódł się";
+        case "duplicate":
+            return item.message || "Plik został już wcześniej zaimportowany";
     }
 }
 

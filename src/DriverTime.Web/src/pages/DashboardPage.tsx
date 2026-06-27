@@ -54,7 +54,7 @@ const activityDefinitions = [
     { type: "DRIVING", label: "Jazda", tone: "driving", color: "var(--chart-driving)" },
     { type: "WORK", label: "Praca", tone: "work", color: "var(--chart-work)" },
     { type: "REST", label: "Odpoczynek", tone: "rest", color: "var(--chart-rest)" },
-    { type: "AVAILABILITY", label: "Dyspozycja", tone: "availability", color: "var(--chart-availability)" },
+    { type: "AVAILABILITY", label: "Dyspozycyjność", tone: "availability", color: "var(--chart-availability)" },
 ] as const;
 
 type OperationalAlertPriority = "High" | "Medium" | "Low";
@@ -159,11 +159,27 @@ function formatRunStatus(status: string) {
     const normalized = status.trim().toLowerCase();
 
     if (normalized === "completed") {
-        return "Zakończony";
+        return "Zakończono";
     }
 
-    if (normalized === "running") {
+    if (normalized === "running" || normalized === "processing") {
         return "W trakcie";
+    }
+
+    if (normalized === "pending") {
+        return "Oczekuje";
+    }
+
+    if (normalized === "failed") {
+        return "Niepowodzenie";
+    }
+
+    if (normalized === "queued") {
+        return "W kolejce";
+    }
+
+    if (normalized === "retrying") {
+        return "Ponawianie";
     }
 
     return "Brak danych";
@@ -542,7 +558,7 @@ export default function DashboardPage() {
         <div className="dashboard-page">
             <section className="dashboard-hero">
                 <div>
-                    <span className="dashboard-eyebrow">DriverTime Command Center</span>
+                    <span className="dashboard-eyebrow">Centrum operacyjne DriverTime</span>
                     <h2>Dashboard floty i zgodności</h2>
                     <p>
                         Najważniejsze wskaźniki importów DDD, aktywności kierowców,
@@ -667,9 +683,9 @@ export default function DashboardPage() {
                     <div>
                         <span>Alerty</span>
                         <h3>Najważniejsze sygnały operacyjne</h3>
-                        <p>Alerty są liczone z terminów pobrań oraz zapisanych naruszeń compliance.</p>
+                        <p>Alerty są liczone z terminów pobrań oraz zapisanych naruszeń zgodności.</p>
                     </div>
-                    <Link to="/alerts">Otwórz Alert Center</Link>
+                    <Link to="/alerts">Otwórz centrum alertów</Link>
                 </div>
 
                 <div className="violation-widget-summary">

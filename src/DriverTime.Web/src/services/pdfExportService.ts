@@ -295,7 +295,7 @@ export async function exportComplianceReportPdf(options: ComplianceReportPdfOpti
     autoTable(document, {
         startY: 55,
         theme: "grid",
-        head: [["Naruszenia", "High", "Medium", "Low", "Jazda", "Praca", "Dyspozycja", "Odpoczynek", "Suma"]],
+        head: [["Naruszenia", "Wysokie", "Średnie", "Niskie", "Jazda", "Praca", "Dyspozycyjność", "Odpoczynek", "Suma"]],
         body: [[
             String(options.violations.length),
             String(severitySummary.high),

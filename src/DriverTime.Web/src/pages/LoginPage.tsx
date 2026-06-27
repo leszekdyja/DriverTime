@@ -54,7 +54,7 @@ export default function LoginPage() {
             <section className="login-showcase" aria-label="DriverTime">
                 <Link className="public-brand" to="/welcome">
                     <img src="/logo-mark.svg" alt="" />
-                    <span><strong>DriverTime</strong><small>Fleet intelligence</small></span>
+                    <span><strong>DriverTime</strong><small>Analiza floty</small></span>
                 </Link>
                 <div className="login-showcase-copy">
                     <span className="login-kicker">Jedno miejsce. Pełna kontrola.</span>

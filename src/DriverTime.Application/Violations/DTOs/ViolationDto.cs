@@ -124,11 +124,84 @@ public class ViolationRuleAnalysisDto
 
     public long ExceededMinutes { get; set; }
 
+    public DateTime? AnalysisWindowStartUtc { get; set; }
+
+    public DateTime? AnalysisWindowEndUtc { get; set; }
+
+    public long? RequiredRestMinutes { get; set; }
+
+    public long? LongestRestMinutes { get; set; }
+
+    public long? MissingRestMinutes { get; set; }
+
     public bool IsEstimated { get; set; }
 
     public string BusinessSummary { get; set; } = string.Empty;
 
+    public RuleExecutionTraceDto? ExecutionTrace { get; set; }
+
+    public List<RuleExecutionTraceStepDto> Steps { get; set; } = new();
+
     public List<ViolationRuleAnalysisSegmentDto> Segments { get; set; } = new();
+}
+
+public class RuleExecutionTraceDto
+{
+    public string RuleCode { get; set; } = string.Empty;
+
+    public string RuleName { get; set; } = string.Empty;
+
+    public DateTime? AnalysisWindowStartUtc { get; set; }
+
+    public DateTime? AnalysisWindowEndUtc { get; set; }
+
+    public DateTime? DetectedAtUtc { get; set; }
+
+    public bool IsEstimated { get; set; }
+
+    public string Summary { get; set; } = string.Empty;
+
+    public Dictionary<string, string> Metrics { get; set; } = new();
+
+    public List<RuleExecutionTraceStepDto> Steps { get; set; } = new();
+
+    public List<RuleExecutionTraceSegmentDto> Segments { get; set; } = new();
+}
+
+public class RuleExecutionTraceStepDto
+{
+    public int Order { get; set; }
+
+    public DateTime? TimeUtc { get; set; }
+
+    public string Description { get; set; } = string.Empty;
+
+    public long? CounterMinutes { get; set; }
+
+    public bool ResetsCounter { get; set; }
+
+    public bool DetectsViolation { get; set; }
+}
+
+public class RuleExecutionTraceSegmentDto
+{
+    public DateTime StartUtc { get; set; }
+
+    public DateTime EndUtc { get; set; }
+
+    public string ActivityType { get; set; } = string.Empty;
+
+    public long DurationMinutes { get; set; }
+
+    public long DrivingMinutesAfterSegment { get; set; }
+
+    public long? RestCandidateMinutes { get; set; }
+
+    public bool IsResetPoint { get; set; }
+
+    public bool IsViolationPoint { get; set; }
+
+    public string Note { get; set; } = string.Empty;
 }
 
 public class ViolationRuleAnalysisSegmentDto
@@ -146,4 +219,8 @@ public class ViolationRuleAnalysisSegmentDto
     public bool ResetsCounter { get; set; }
 
     public long DrivingCounterAfterSegment { get; set; }
+
+    public bool CountsAsRest { get; set; }
+
+    public long? RestCandidateMinutes { get; set; }
 }

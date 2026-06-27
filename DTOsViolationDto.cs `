@@ -1,0 +1,29 @@
+warning: in the working copy of 'src/DriverTime.Application/Violations/DTOs/ViolationDto.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/ViolationQueryService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/components/DddDropzone.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/CardReaderPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/DashboardPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/ImportMonitoringPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/LandingPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/LoginPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/ViolationsPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/excelExportService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/pdfExportService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/violationsService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/utils/complianceLabels.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/DriverTime.Infrastructure.Tests/Violations/ViolationQueryServiceMappingTests.cs', LF will be replaced by CRLF the next time Git touches it
+ .../Violations/DTOs/ViolationDto.cs                |  14 [32m++[m
+ .../Services/ViolationQueryService.cs              | 174 [32m++++++++++++++++++++[m[31m-[m
+ src/DriverTime.Web/src/components/DddDropzone.tsx  |   2 [32m+[m
+ src/DriverTime.Web/src/pages/CardReaderPage.tsx    |   4 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/DashboardPage.tsx     |  28 [32m+++[m[31m-[m
+ .../src/pages/ImportMonitoringPage.tsx             |  13 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/LandingPage.tsx       |   2 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/LoginPage.tsx         |   2 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/ViolationsPage.tsx    |  54 [32m+++++[m[31m--[m
+ .../src/services/excelExportService.ts             |   6 [32m+[m[31m-[m
+ .../src/services/pdfExportService.ts               |   2 [32m+[m[31m-[m
+ .../src/services/violationsService.ts              |   7 [32m+[m
+ src/DriverTime.Web/src/utils/complianceLabels.ts   |  65 [32m+++++[m[31m---[m
+ .../ViolationQueryServiceMappingTests.cs           |  27 [32m+++[m[31m-[m
+ 14 files changed, 337 insertions(+), 63 deletions(-)

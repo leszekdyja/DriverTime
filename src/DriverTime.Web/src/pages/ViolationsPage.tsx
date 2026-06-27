@@ -605,6 +605,28 @@ function getMetadataNumber(
     return null;
 }
 
+function formatCountryEntryType(value: number | string | null | undefined) {
+    if (typeof value !== "string" || !value.trim()) {
+        return null;
+    }
+
+    const normalized = value.trim().toUpperCase();
+
+    if (normalized === "START" || normalized.includes("START") || normalized.includes("BEGIN")) {
+        return "Rozpoczęcie";
+    }
+
+    if (normalized === "END" || normalized.includes("END") || normalized.includes("FINISH")) {
+        return "Zakończenie";
+    }
+
+    if (normalized === "UNKNOWN") {
+        return "Nieustalony";
+    }
+
+    return null;
+}
+
 function getBusinessDetailsRows(violation: DriverViolation) {
     const metadata = getViolationMetadata(violation);
     const details = violation.businessDetails;
@@ -696,6 +718,11 @@ function getBusinessDetailsRows(violation: DriverViolation) {
 
     if (countryIssueMessage) {
         rows.push(["Dane kraju", countryIssueMessage]);
+    }
+
+    const countryEntryType = formatCountryEntryType(metadata.entryType);
+    if (countryEntryType) {
+        rows.push(["Typ wpisu kraju", countryEntryType]);
     }
 
     if (continuousDrivingMinutes !== null && continuousDrivingMinutes !== undefined) {
@@ -1607,15 +1634,16 @@ function buildComplianceAssistantEvents(
 function formatActivityLabel(activityType: string) {
     const normalized = activityType.trim().toUpperCase();
 
-    if (normalized === "DRIVING") return "Jazda";
-    if (normalized === "WORK") return "Praca";
-    if (normalized === "AVAILABILITY") return "Dyspozycyjność";
-    if (normalized === "REST") return "Odpoczynek";
+    if (normalized === "REST_GAP") return "Luka w aktywnościach";
+    if (normalized.includes("DRIVING") || normalized === "DRIVE") return "Jazda";
+    if (normalized.includes("WORK") || normalized.includes("OTHER_WORK")) return "Praca";
+    if (normalized.includes("AVAILABILITY") || normalized.includes("AVAILABLE")) return "Dyspozycyjność";
+    if (normalized.includes("REST") || normalized.includes("BREAK")) return "Odpoczynek";
 
-    return activityType || "Nieznane";
+    return "Nieznane";
 }
 
-function formatRuleSegmentImpact(segment: { increasesDrivingCounter: boolean; resetsCounter: boolean }) {
+function formatRuleSegmentImpact(segment: { increasesDrivingCounter: boolean; resetsCounter: boolean; countsAsRest?: boolean }) {
     if (segment.increasesDrivingCounter) {
         return "zwiększa licznik jazdy";
     }
@@ -1624,8 +1652,23 @@ function formatRuleSegmentImpact(segment: { increasesDrivingCounter: boolean; re
         return "resetuje licznik";
     }
 
+    if (segment.countsAsRest) {
+        return "wlicza się do odpoczynku";
+    }
+
     return "bez zmiany licznika";
 }
+
+function hasDailyRestRuleAnalysis(violation: DriverViolation) {
+    return violation.ruleAnalysis?.ruleCode?.toUpperCase().includes("DAILY_REST") ?? false;
+}
+
+function getRuleAnalysisSteps(violation: DriverViolation) {
+    return violation.ruleAnalysis?.steps?.length
+        ? violation.ruleAnalysis.steps
+        : violation.ruleAnalysis?.executionTrace?.steps ?? [];
+}
+
 
 function ViolationDetailsModal({
     violation,
@@ -1840,12 +1883,50 @@ function ViolationDetailsModal({
                         <p>{violation.ruleAnalysis.businessSummary}</p>
                         <dl className="rule-analysis-metrics">
                             <div><dt>Kod reguły</dt><dd>{violation.ruleAnalysis.ruleCode}</dd></div>
-                            <div><dt>Limit jazdy</dt><dd>{formatMinutes(violation.ruleAnalysis.drivingLimitMinutes)}</dd></div>
-                            <div><dt>Wymagana przerwa</dt><dd>{formatMinutes(violation.ruleAnalysis.requiredBreakMinutes)}</dd></div>
-                            <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
-                            <div><dt>Jazda bez poprawnej przerwy</dt><dd>{formatMinutes(violation.ruleAnalysis.continuousDrivingMinutes)}</dd></div>
-                            <div><dt>Przekroczenie</dt><dd>{formatMinutes(violation.ruleAnalysis.exceededMinutes)}</dd></div>
+                            {hasDailyRestRuleAnalysis(violation) ? (
+                                <>
+                                    {violation.ruleAnalysis.analysisWindowStartUtc && violation.ruleAnalysis.analysisWindowEndUtc && (
+                                        <div><dt>Okno analizy</dt><dd>{formatDate(violation.ruleAnalysis.analysisWindowStartUtc)} - {formatDate(violation.ruleAnalysis.analysisWindowEndUtc)}</dd></div>
+                                    )}
+                                    {violation.ruleAnalysis.analysisWindowStartUtc && <div><dt>Początek okna</dt><dd>{formatDate(violation.ruleAnalysis.analysisWindowStartUtc)}</dd></div>}
+                                    {violation.ruleAnalysis.analysisWindowEndUtc && <div><dt>Koniec okna</dt><dd>{formatDate(violation.ruleAnalysis.analysisWindowEndUtc)}</dd></div>}
+                                    {violation.ruleAnalysis.requiredRestMinutes !== null && violation.ruleAnalysis.requiredRestMinutes !== undefined && <div><dt>Wymagany odpoczynek</dt><dd>{formatMinutes(violation.ruleAnalysis.requiredRestMinutes)}</dd></div>}
+                                    {violation.ruleAnalysis.longestRestMinutes !== null && violation.ruleAnalysis.longestRestMinutes !== undefined && <div><dt>Najdłuższy odpoczynek</dt><dd>{formatMinutes(violation.ruleAnalysis.longestRestMinutes)}</dd></div>}
+                                    {violation.ruleAnalysis.missingRestMinutes !== null && violation.ruleAnalysis.missingRestMinutes !== undefined && <div><dt>Brakuje</dt><dd>{formatMinutes(violation.ruleAnalysis.missingRestMinutes)}</dd></div>}
+                                    <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
+                                    <div><dt>Analiza szacunkowa</dt><dd>{violation.ruleAnalysis.isEstimated ? "Tak" : "Nie"}</dd></div>
+                                </>
+                            ) : (
+                                <>
+                                    <div><dt>Limit jazdy</dt><dd>{formatMinutes(violation.ruleAnalysis.drivingLimitMinutes)}</dd></div>
+                                    <div><dt>Wymagana przerwa</dt><dd>{formatMinutes(violation.ruleAnalysis.requiredBreakMinutes)}</dd></div>
+                                    <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
+                                    <div><dt>Jazda bez poprawnej przerwy</dt><dd>{formatMinutes(violation.ruleAnalysis.continuousDrivingMinutes)}</dd></div>
+                                    <div><dt>Przekroczenie</dt><dd>{formatMinutes(violation.ruleAnalysis.exceededMinutes)}</dd></div>
+                                </>
+                            )}
                         </dl>
+                        {getRuleAnalysisSteps(violation).length > 0 && (
+                            <div className="rule-analysis-steps">
+                                <h5>Przebieg oblicze?</h5>
+                                <ol>
+                                    {getRuleAnalysisSteps(violation).map((step) => (
+                                        <li className={step.detectsViolation ? "violation" : step.resetsCounter ? "reset" : undefined} key={String(step.order) + "-" + (step.timeUtc ?? step.description)}>
+                                            <span>{step.order}</span>
+                                            <div>
+                                                <strong>{step.timeUtc ? formatDate(step.timeUtc) : "Bez czasu"}</strong>
+                                                <p>{step.description}</p>
+                                                {step.counterMinutes !== null && step.counterMinutes !== undefined && (
+                                                    <small>Licznik: {formatMinutes(step.counterMinutes)}</small>
+                                                )}
+                                                {step.resetsCounter && <em>Reset licznika</em>}
+                                                {step.detectsViolation && <em>Naruszenie</em>}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        )}
                         {violation.ruleAnalysis.segments.length > 0 && (
                             <div className="rule-analysis-table-wrapper">
                                 <table className="rule-analysis-table">
@@ -1856,7 +1937,7 @@ function ViolationDetailsModal({
                                             <th>Typ</th>
                                             <th>Czas</th>
                                             <th>Wpływ na licznik</th>
-                                            <th>Licznik po segmencie</th>
+                                            {hasDailyRestRuleAnalysis(violation) ? <th>Kandydat odpoczynku</th> : <th>Licznik po segmencie</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1867,7 +1948,9 @@ function ViolationDetailsModal({
                                                 <td>{formatActivityLabel(segment.activityType)}</td>
                                                 <td>{formatMinutes(segment.durationMinutes)}</td>
                                                 <td>{formatRuleSegmentImpact(segment)}</td>
-                                                <td>{formatMinutes(segment.drivingCounterAfterSegment)}</td>
+                                                <td>{hasDailyRestRuleAnalysis(violation)
+                                                    ? (segment.countsAsRest ? formatMinutes(segment.restCandidateMinutes ?? segment.durationMinutes) : "-")
+                                                    : formatMinutes(segment.drivingCounterAfterSegment)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
