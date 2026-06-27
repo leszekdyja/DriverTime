@@ -11,6 +11,9 @@ import {
     getDriverActivitiesByCard,
     type DriverActivity as TimelineSourceActivity,
 } from "../services/driverActivitiesService";
+import {
+    recalculateDriverCompliance,
+} from "../services/complianceService";
 import { exportComplianceReportPdf } from "../services/pdfExportService";
 import {
     getDriverViolations,
@@ -237,6 +240,9 @@ export default function DriverDetailsPage() {
     const [isTimelineLoading, setIsTimelineLoading] = useState(true);
     const [timelineError, setTimelineError] = useState("");
     const [isGeneratingComplianceReport, setIsGeneratingComplianceReport] = useState(false);
+    const [isRecalculatingDriver, setIsRecalculatingDriver] = useState(false);
+    const [recalculateDriverMessage, setRecalculateDriverMessage] = useState("");
+    const [recalculateDriverError, setRecalculateDriverError] = useState("");
 
     useEffect(() => {
         async function loadDetails() {
@@ -354,6 +360,35 @@ export default function DriverDetailsPage() {
         }
     }
 
+
+
+    async function handleRecalculateDriver() {
+        if (!details) {
+            return;
+        }
+
+        setIsRecalculatingDriver(true);
+        setRecalculateDriverMessage("");
+        setRecalculateDriverError("");
+
+        try {
+            const result = await recalculateDriverCompliance(details.id);
+            setRecalculateDriverMessage(
+                `Przeliczono kierowcę. Usunięto stare: ${result.deletedViolationsCount}, aktualne: ${result.savedViolationsCount}.`,
+            );
+            setViolations(await getDriverViolations({ driverId: details.id }));
+        } catch (recalculationFailure) {
+            setRecalculateDriverError(
+                recalculationFailure instanceof Error
+                    ? recalculationFailure.message
+                    : "Nie udało się przeliczyć naruszeń kierowcy.",
+            );
+        } finally {
+            setIsRecalculatingDriver(false);
+        }
+    }
+
+
     return (
         <div className="driver-details-page">
             <Link className="driver-back-link" to="/drivers">
@@ -370,14 +405,32 @@ export default function DriverDetailsPage() {
                             <span className="driver-profile-label">Kierowca</span>
                             <h2>{formatDriverNameOrFallback(details.firstName, details.lastName)}</h2>
                             <p>{details.cardNumber || "Brak numeru karty"}</p>
-                            <button
-                                className="driver-report-button"
-                                type="button"
-                                onClick={() => void generateComplianceReport()}
-                                disabled={isGeneratingComplianceReport || isTimelineLoading || areViolationsLoading}
-                            >
-                                {isGeneratingComplianceReport ? "Generowanie raportu..." : "Raport zgodności"}
-                            </button>
+                            <div className="driver-profile-actions">
+                                <button
+                                    className="driver-report-button"
+                                    type="button"
+                                    onClick={() => void generateComplianceReport()}
+                                    disabled={isGeneratingComplianceReport || isTimelineLoading || areViolationsLoading || isRecalculatingDriver}
+                                >
+                                    {isGeneratingComplianceReport ? "Generowanie raportu..." : "Raport zgodności"}
+                                </button>
+                                <button
+                                    className="driver-recalculate-button"
+                                    type="button"
+                                    onClick={() => void handleRecalculateDriver()}
+                                    disabled={isRecalculatingDriver || isGeneratingComplianceReport || isTimelineLoading}
+                                >
+                                    {isRecalculatingDriver ? "Przeliczanie..." : "Przelicz kierowcę"}
+                                </button>
+                            </div>
+                            {(recalculateDriverMessage || recalculateDriverError) && (
+                                <div
+                                    className={`driver-recalculation-status ${recalculateDriverError ? "error" : "success"}`}
+                                    role={recalculateDriverError ? "alert" : "status"}
+                                >
+                                    {recalculateDriverError || recalculateDriverMessage}
+                                </div>
+                            )}
                         </div>
                         <dl className="driver-profile-data">
                             <Info label="Ważność karty" value={formatDate(details.cardExpiryDate)} />

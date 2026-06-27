@@ -26,6 +26,55 @@ public class ComplianceController : ControllerBase
         _currentUser = currentUser;
     }
 
+
+    [HttpPost("recalculate")]
+    public async Task<ActionResult<ComplianceRecalculationResponseDto>> RecalculateCompany(
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                message = "Wymagane jest zalogowanie użytkownika."
+            });
+        }
+
+        var result = await _complianceEvaluationService.RecalculateForCompanyAsync(
+            _currentUser.CompanyId,
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpPost("drivers/{driverId:guid}/recalculate")]
+    public async Task<ActionResult<ComplianceDriverRecalculationResultDto>> RecalculateDriver(
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized(new
+            {
+                message = "Wymagane jest zalogowanie użytkownika."
+            });
+        }
+
+        var result = await _complianceEvaluationService.RecalculateForDriverAsync(
+            _currentUser.CompanyId,
+            driverId,
+            cancellationToken);
+
+        if (result is null)
+        {
+            return NotFound(new
+            {
+                message = "Nie znaleziono kierowcy w bieżącej firmie."
+            });
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("drivers/{driverId:guid}/preview")]
     public async Task<ActionResult<CompliancePreviewResponseDto>> PreviewForDriver(
         Guid driverId,

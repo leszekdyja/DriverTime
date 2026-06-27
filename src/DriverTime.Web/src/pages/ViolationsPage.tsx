@@ -7,6 +7,7 @@ import ViolationTimelinePreview from "../components/violations/ViolationTimeline
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDrivers,
+    recalculateCompliance,
     type ComplianceDriver,
 } from "../services/complianceService";
 import { exportViolationsExcel } from "../services/excelExportService";
@@ -785,6 +786,9 @@ export default function ViolationsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
+    const [isRecalculating, setIsRecalculating] = useState(false);
+    const [recalculationMessage, setRecalculationMessage] = useState("");
+    const [recalculationError, setRecalculationError] = useState("");
     const [error, setError] = useState("");
     const [filterError, setFilterError] = useState("");
 
@@ -977,6 +981,41 @@ export default function ViolationsPage() {
         ).length;
     }, [readAlertIds, violationAlerts]);
 
+
+
+    function getCurrentViolationFilters(): ViolationFilters {
+        return {
+            driverId: selectedDriver,
+            fromDate: dateFrom,
+            toDate: dateTo,
+            severity: selectedSeverity,
+            type: violationTypeFilter,
+        };
+    }
+
+    async function handleRecalculateViolations() {
+        setIsRecalculating(true);
+        setRecalculationMessage("");
+        setRecalculationError("");
+        setError("");
+
+        try {
+            const result = await recalculateCompliance();
+            setRecalculationMessage(
+                `Przeliczono naruszenia dla ${result.recalculatedDriversCount} kierowców. Usunięto stare: ${result.deletedViolationsCount}, aktualne: ${result.savedViolationsCount}.`,
+            );
+            await loadViolationData(getCurrentViolationFilters());
+        } catch (recalculationFailure) {
+            setRecalculationError(
+                recalculationFailure instanceof Error
+                    ? recalculationFailure.message
+                    : "Nie udało się przeliczyć naruszeń.",
+            );
+        } finally {
+            setIsRecalculating(false);
+        }
+    }
+
     async function handlePdfExport() {
         setIsGeneratingPdf(true);
         setError("");
@@ -1081,10 +1120,18 @@ export default function ViolationsPage() {
                 {!isLoading && !error && (
                     <div className="violations-heading-actions">
                         <button
+                            className="violations-recalculate-button"
+                            type="button"
+                            onClick={() => void handleRecalculateViolations()}
+                            disabled={isRecalculating || isGeneratingPdf || isGeneratingExcel}
+                        >
+                            {isRecalculating ? "Przeliczanie..." : "Przelicz naruszenia"}
+                        </button>
+                        <button
                             className="violations-pdf-button"
                             type="button"
                             onClick={() => void handlePdfExport()}
-                            disabled={filteredViolations.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                            disabled={filteredViolations.length === 0 || isGeneratingPdf || isGeneratingExcel || isRecalculating}
                         >
                             {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
                         </button>
@@ -1092,13 +1139,23 @@ export default function ViolationsPage() {
                             className="violations-export-button"
                             type="button"
                             onClick={() => void handleExcelExport()}
-                            disabled={filteredViolations.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                            disabled={filteredViolations.length === 0 || isGeneratingPdf || isGeneratingExcel || isRecalculating}
                         >
                             {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
                         </button>
                     </div>
                 )}
             </section>
+
+            {(recalculationMessage || recalculationError) && (
+                <div
+                    className={`violations-recalculation-status ${recalculationError ? "error" : "success"}`}
+                    role={recalculationError ? "alert" : "status"}
+                >
+                    {recalculationError || recalculationMessage}
+                </div>
+            )}
+
 
             <section className="violations-summary" aria-label="Podsumowanie naruszeń">
                 <SummaryCard label="Po filtrach" value={summary.total} tone="total" description="Liczba widocznych naruszeń" />

@@ -57,6 +57,7 @@
     gap: 10px;
 }
 
+.violations-recalculate-button,
 .violations-pdf-button,
 .violations-export-button,
 .violations-filter-actions button,
@@ -95,6 +96,7 @@
     color: #344054;
 }
 
+.violations-recalculate-button:hover:not(:disabled),
 .violations-pdf-button:hover:not(:disabled),
 .violations-export-button:hover:not(:disabled),
 .violations-filter-actions button:hover:not(:disabled),
@@ -102,6 +104,7 @@
     transform: translateY(-1px);
 }
 
+.violations-recalculate-button:disabled,
 .violations-pdf-button:disabled,
 .violations-export-button:disabled,
 .violations-filter-actions button:disabled {
@@ -110,6 +113,28 @@
     transform: none;
 }
 
+
+.violations-recalculate-button {
+    background: linear-gradient(135deg, #7c2d12, #ea580c);
+    box-shadow: 0 8px 18px rgb(234 88 12 / 18%);
+}
+
+.violations-recalculation-status {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.violations-recalculation-status.error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #991b1b;
+}
 .violations-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

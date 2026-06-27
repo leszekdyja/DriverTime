@@ -25,17 +25,22 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         "INCOMPLETE_COUNTRY_DATA"
     ];
 
+    private const string ManualRecalculationTrigger = "manual-recalculate";
+
     private readonly DriverTimeDbContext _dbContext;
     private readonly IComplianceEngineService _complianceEngineService;
+    private readonly IComplianceRunHistoryService _complianceRunHistoryService;
     private readonly ILogger<ComplianceEvaluationService> _logger;
 
     public ComplianceEvaluationService(
         DriverTimeDbContext dbContext,
         IComplianceEngineService complianceEngineService,
+        IComplianceRunHistoryService complianceRunHistoryService,
         ILogger<ComplianceEvaluationService> logger)
     {
         _dbContext = dbContext;
         _complianceEngineService = complianceEngineService;
+        _complianceRunHistoryService = complianceRunHistoryService;
         _logger = logger;
     }
 
@@ -151,6 +156,136 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
         return violations.Count;
     }
 
+    public async Task<ComplianceDriverRecalculationResultDto?> RecalculateForDriverAsync(
+        Guid companyId,
+        Guid driverId,
+        CancellationToken cancellationToken = default)
+    {
+        var driverExists = await _dbContext.Drivers
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == driverId && x.CompanyId == companyId,
+                cancellationToken);
+
+        if (!driverExists)
+        {
+            _logger.LogInformation(
+                "Manual compliance recalculation skipped because driver {DriverId} was not found in company {CompanyId}.",
+                driverId,
+                companyId);
+
+            return null;
+        }
+
+        var preview = await _complianceEngineService.PreviewForDriverAsync(
+            companyId,
+            driverId,
+            includeTimeline: true,
+            cancellationToken: cancellationToken);
+
+        if (preview is null)
+        {
+            return null;
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var deletedCount = await DeletePersistedViolationsForDriverAsync(
+            companyId,
+            driverId,
+            cancellationToken);
+
+        var calculatedAt = DateTime.UtcNow;
+        var violations = preview.Violations
+            .Select(x => MapViolation(driverId, x, calculatedAt))
+            .ToList();
+
+        if (violations.Count > 0)
+        {
+            _dbContext.Violations.AddRange(violations);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _complianceRunHistoryService.SaveRunAsync(
+            companyId,
+            driverId,
+            preview,
+            ManualRecalculationTrigger,
+            cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Manual compliance recalculation completed for driver {DriverId}. CompanyId={CompanyId}, DeletedExisting={DeletedCount}, SavedViolations={SavedCount}.",
+            driverId,
+            companyId,
+            deletedCount,
+            violations.Count);
+
+        return new ComplianceDriverRecalculationResultDto
+        {
+            DriverId = driverId,
+            DeletedViolationsCount = deletedCount,
+            SavedViolationsCount = violations.Count,
+            Success = true,
+            Message = violations.Count == 0
+                ? "Przeliczono zgodność. Nie wykryto aktualnych naruszeń."
+                : "Przeliczono zgodność i zapisano aktualne naruszenia."
+        };
+    }
+
+    public async Task<ComplianceRecalculationResponseDto> RecalculateForCompanyAsync(
+        Guid companyId,
+        CancellationToken cancellationToken = default)
+    {
+        var driverIds = await _dbContext.Drivers
+            .AsNoTracking()
+            .Where(x => x.CompanyId == companyId)
+            .OrderBy(x => x.LastName)
+            .ThenBy(x => x.FirstName)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        var response = new ComplianceRecalculationResponseDto
+        {
+            DriversCount = driverIds.Count
+        };
+
+        foreach (var driverId in driverIds)
+        {
+            var result = await RecalculateForDriverAsync(
+                companyId,
+                driverId,
+                cancellationToken);
+
+            if (result is null)
+            {
+                continue;
+            }
+
+            response.Drivers.Add(result);
+            response.RecalculatedDriversCount++;
+            response.DeletedViolationsCount += result.DeletedViolationsCount;
+            response.SavedViolationsCount += result.SavedViolationsCount;
+        }
+
+        return response;
+    }
+
+    private Task<int> DeletePersistedViolationsForDriverAsync(
+        Guid companyId,
+        Guid driverId,
+        CancellationToken cancellationToken)
+    {
+        return _dbContext.Violations
+            .Where(x =>
+                x.DriverId == driverId &&
+                x.Driver != null &&
+                x.Driver.CompanyId == companyId)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
     internal static ReplacementRange? ResolveReplacementRange(
         CompliancePreviewResponseDto preview)
     {
@@ -190,7 +325,28 @@ public class ComplianceEvaluationService : IComplianceEvaluationService
             && violation.ViolationEnd > replacementRange.StartUtc;
     }
 
-    private static Violation MapViolation(
+    internal static bool ShouldDeleteExistingViolationForManualRecalculation(
+        Violation violation,
+        Guid companyId,
+        Guid driverId)
+    {
+        return violation.DriverId == driverId
+            && violation.Driver?.CompanyId == companyId;
+    }
+
+    internal static IReadOnlyList<Violation> BuildManualRecalculationSnapshot(
+        IEnumerable<Violation> existingViolations,
+        Guid companyId,
+        Guid driverId,
+        IEnumerable<Violation> currentViolations)
+    {
+        return existingViolations
+            .Where(x => !ShouldDeleteExistingViolationForManualRecalculation(x, companyId, driverId))
+            .Concat(currentViolations)
+            .ToList();
+    }
+
+    internal static Violation MapViolation(
         Guid driverId,
         ComplianceViolationPreviewDto violation,
         DateTime calculatedAt)

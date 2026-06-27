@@ -39,6 +39,22 @@ export type CompliancePreview = {
     debugSummary: ComplianceDebugSummary;
 };
 
+
+export type ComplianceDriverRecalculationResult = {
+    driverId: string;
+    deletedViolationsCount: number;
+    savedViolationsCount: number;
+    success: boolean;
+    message: string;
+};
+
+export type ComplianceRecalculationResponse = {
+    driversCount: number;
+    recalculatedDriversCount: number;
+    deletedViolationsCount: number;
+    savedViolationsCount: number;
+    drivers: ComplianceDriverRecalculationResult[];
+};
 export type ComplianceDriver = {
     id: string;
     firstName: string;
@@ -127,4 +143,34 @@ export async function getComplianceViolationsForDrivers(
     return results.flatMap((result) =>
         result.status === "fulfilled" ? result.value : [],
     );
+}
+
+export async function recalculateCompliance(): Promise<ComplianceRecalculationResponse> {
+    const response = await apiFetch("/api/compliance/recalculate", {
+        method: "POST",
+    });
+
+    if (!response.ok) {
+        throw new Error("Nie udało się przeliczyć naruszeń.");
+    }
+
+    return response.json() as Promise<ComplianceRecalculationResponse>;
+}
+
+export async function recalculateDriverCompliance(
+    driverId: string,
+): Promise<ComplianceDriverRecalculationResult> {
+    const response = await apiFetch(`/api/compliance/drivers/${driverId}/recalculate`, {
+        method: "POST",
+    });
+
+    if (response.status === 404) {
+        throw new Error("Nie znaleziono kierowcy w bieżącej firmie.");
+    }
+
+    if (!response.ok) {
+        throw new Error("Nie udało się przeliczyć naruszeń kierowcy.");
+    }
+
+    return response.json() as Promise<ComplianceDriverRecalculationResult>;
 }
