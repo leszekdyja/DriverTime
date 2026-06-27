@@ -34,6 +34,24 @@ public class ViolationDto
 
     public string MetadataJson { get; set; } = string.Empty;
 
+    public long? ActualValueMinutes { get; set; }
+
+    public long? RequiredValueMinutes { get; set; }
+
+    public long? DifferenceMinutes { get; set; }
+
+    public long? MissingMinutes { get; set; }
+
+    public long? ExcessMinutes { get; set; }
+
+    public long? CompensationMinutes { get; set; }
+
+    public DateTime? CompensationDeadlineUtc { get; set; }
+
+    public string BusinessSummary { get; set; } = string.Empty;
+
+    public string ScaleLabel { get; set; } = string.Empty;
+
     public ViolationBusinessDetailsDto? BusinessDetails { get; set; }
 }
 

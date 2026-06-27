@@ -458,6 +458,20 @@
     line-height: 1.55;
 }
 
+.violation-scale-label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 4px 9px;
+    border: 1px solid color-mix(in srgb, #dc2626 26%, var(--color-border));
+    border-radius: 999px;
+    background: color-mix(in srgb, #fee2e2 48%, var(--color-surface));
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
 .violations-error {
     display: grid;
     gap: 4px;

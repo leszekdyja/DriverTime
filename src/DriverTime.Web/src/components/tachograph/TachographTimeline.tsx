@@ -54,6 +54,14 @@ export type TachographViolation = {
     requiredValue?: string | number | null;
     excessValue?: string | number | null;
     missingValue?: string | number | null;
+    actualValueMinutes?: number | null;
+    requiredValueMinutes?: number | null;
+    excessMinutes?: number | null;
+    missingMinutes?: number | null;
+    compensationMinutes?: number | null;
+    compensationDeadlineUtc?: string | null;
+    businessSummary?: string | null;
+    scaleLabel?: string | null;
     actualDurationMinutes?: number | null;
     limitDurationMinutes?: number | null;
 };
@@ -512,15 +520,15 @@ function buildViolationMarkers(violations: TachographViolation[], day: string): 
                 label: getComplianceRuleLabel(violation.violationType, violation.code),
                 occurredAtUtc,
                 endUtc,
-                description: violation.description ?? null,
+                description: violation.businessSummary ?? violation.description ?? null,
                 leftPercent: getPercentForDate(markerTime, bounds.dayStartMs),
                 rangeLeftPercent: getPercentForDate(rangeStart, bounds.dayStartMs),
                 rangeWidthPercent,
                 recommendation: violation.recommendation ?? null,
-                actualValue: violation.actualValue ?? null,
-                requiredValue: violation.requiredValue ?? null,
-                excessValue: violation.excessValue ?? null,
-                missingValue: violation.missingValue ?? null,
+                actualValue: violation.actualValue ?? violation.actualValueMinutes ?? null,
+                requiredValue: violation.requiredValue ?? violation.requiredValueMinutes ?? null,
+                excessValue: violation.excessValue ?? violation.excessMinutes ?? null,
+                missingValue: violation.missingValue ?? violation.missingMinutes ?? null,
                 actualDurationMinutes: violation.actualDurationMinutes ?? null,
                 limitDurationMinutes: violation.limitDurationMinutes ?? null,
             };

@@ -283,6 +283,32 @@ function getViolationKey(violation: DriverViolation) {
     ].join("|");
 }
 
+function getViolationScaleLabel(violation: DriverViolation) {
+    const label = violation.scaleLabel?.trim();
+
+    if (label) {
+        return label;
+    }
+
+    if (violation.excessMinutes && violation.excessMinutes > 0) {
+        return `+${formatMinutes(violation.excessMinutes)}`;
+    }
+
+    if (violation.missingMinutes && violation.missingMinutes > 0) {
+        return `brakuje ${formatMinutes(violation.missingMinutes)}`;
+    }
+
+    if (violation.compensationMinutes && violation.compensationMinutes > 0) {
+        return `rekompensata ${formatMinutes(violation.compensationMinutes)}`;
+    }
+
+    if (violation.compensationDeadlineUtc) {
+        return `do ${formatDate(violation.compensationDeadlineUtc)}`;
+    }
+
+    return "-";
+}
+
 function getViolationDuration(violation: DriverViolation) {
     if (violation.actualDurationMinutes <= 0 && violation.limitDurationMinutes <= 0) {
         return "Brak danych";
@@ -355,9 +381,10 @@ function getBusinessDetailsRows(violation: DriverViolation) {
         details?.reducedWeeklyRestMinutes
         ?? getMetadataNumber(metadata, "reducedRestMinutes");
     const compensationDebtMinutes =
-        details?.compensationDebtMinutes
+        violation.compensationMinutes
+        ?? details?.compensationDebtMinutes
         ?? getMetadataNumber(metadata, "compensationDebtMinutes");
-    const compensationDeadlineUtc = details?.compensationDeadlineUtc;
+    const compensationDeadlineUtc = violation.compensationDeadlineUtc ?? details?.compensationDeadlineUtc;
     const countryIssueMessage =
         details?.countryIssueMessage?.trim()
         || (typeof metadata.message === "string" ? metadata.message : "");
@@ -375,12 +402,31 @@ function getBusinessDetailsRows(violation: DriverViolation) {
         details?.drivingLimitMinutes
         ?? getMetadataNumber(metadata, "limitMinutes");
     const drivingExceededMinutes =
-        details?.drivingExceededMinutes
+        violation.excessMinutes
+        ?? details?.drivingExceededMinutes
         ?? getMetadataNumber(metadata, "exceededMinutes");
     const breakType =
         details?.breakType?.trim()
         || (typeof metadata.breakType === "string" ? metadata.breakType : "");
     const rows: Array<[string, string]> = [];
+
+    if (!details) {
+        if (violation.actualValueMinutes !== null && violation.actualValueMinutes !== undefined) {
+            rows.push(["Wartość rzeczywista", formatMinutes(violation.actualValueMinutes)]);
+        }
+
+        if (violation.requiredValueMinutes !== null && violation.requiredValueMinutes !== undefined) {
+            rows.push(["Wartość wymagana", formatMinutes(violation.requiredValueMinutes)]);
+        }
+
+        if (violation.excessMinutes !== null && violation.excessMinutes !== undefined && violation.excessMinutes > 0) {
+            rows.push(["Przekroczenie", formatMinutes(violation.excessMinutes)]);
+        }
+
+        if (violation.missingMinutes !== null && violation.missingMinutes !== undefined && violation.missingMinutes > 0) {
+            rows.push(["Brakująca wartość", formatMinutes(violation.missingMinutes)]);
+        }
+    }
 
     if (actualRestMinutes !== null && actualRestMinutes !== undefined) {
         rows.push(["Rzeczywisty odpoczynek", formatMinutes(actualRestMinutes)]);
@@ -435,7 +481,7 @@ function getBusinessDetailsRows(violation: DriverViolation) {
     }
 
     return {
-        summary: details?.summary?.trim() || countryIssueMessage,
+        summary: violation.businessSummary?.trim() || details?.summary?.trim() || countryIssueMessage,
         rows,
     };
 }
@@ -971,6 +1017,7 @@ export default function ViolationsPage() {
                                     <th>Typ naruszenia</th>
                                     <th>Data</th>
                                     <th>Opis</th>
+                                    <th>Skala</th>
                                     <th>Poziom</th>
                                     <th>Status</th>
                                     <th>Szczegóły</th>
@@ -999,6 +1046,9 @@ export default function ViolationsPage() {
                                             <td data-label="Data">{formatDate(violation.occurredAtUtc)}</td>
                                             <td data-label="Opis" className="violation-description">
                                                 {violation.description}
+                                            </td>
+                                            <td data-label="Skala">
+                                                <span className="violation-scale-label">{getViolationScaleLabel(violation)}</span>
                                             </td>
                                             <td data-label="Poziom">
                                                 <StatusBadge label={getSeverityLabel(violation.severity)} tone={severityTones[severity]} />

@@ -19,6 +19,15 @@ export type DriverViolation = {
     limitDurationMinutes: number;
     metadata?: Record<string, number | string | null>;
     metadataJson?: string;
+    actualValueMinutes?: number | null;
+    requiredValueMinutes?: number | null;
+    differenceMinutes?: number | null;
+    missingMinutes?: number | null;
+    excessMinutes?: number | null;
+    compensationMinutes?: number | null;
+    compensationDeadlineUtc?: string | null;
+    businessSummary?: string;
+    scaleLabel?: string;
     businessDetails?: ViolationBusinessDetails | null;
 };
 
