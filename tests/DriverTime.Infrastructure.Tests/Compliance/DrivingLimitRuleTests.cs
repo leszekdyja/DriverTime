@@ -639,8 +639,10 @@ public class DrivingLimitRuleTests
 
         Assert.AreEqual(1, result.Violations.Count);
         var metadata = result.Violations[0].Metadata;
-        Assert.IsTrue(metadata.ContainsKey("analyzedSegments"));
-        Assert.IsTrue(metadata.ContainsKey("drivingCounterAfterSegment"));
+        Assert.IsFalse(metadata.ContainsKey("analyzedSegments"));
+        Assert.IsTrue(metadata.ContainsKey("continuousDrivingMinutes"));
+        Assert.IsTrue(metadata.ContainsKey("receivedBreakMinutes"));
+        Assert.IsTrue(metadata.ContainsKey("exceededMinutes"));
         Assert.IsTrue(metadata.ContainsKey("firstSplitBreakAccepted"));
         Assert.IsTrue(metadata.ContainsKey("firstSplitBreakMinutes"));
         Assert.IsTrue(metadata.ContainsKey("secondSplitBreakAccepted"));
@@ -649,20 +651,18 @@ public class DrivingLimitRuleTests
         Assert.IsTrue(metadata.ContainsKey("violationDetectedAt"));
         Assert.IsTrue(metadata.ContainsKey("debugTrace"));
 
-        var analyzedSegments = metadata["analyzedSegments"] as List<Dictionary<string, object>>;
-        Assert.IsNotNull(analyzedSegments);
-        Assert.AreEqual(5, analyzedSegments.Count);
-
-        var workSegment = analyzedSegments.Single(x => (string)x["ActivityType"] == ActivityTypeNormalizer.Work);
-        Assert.AreEqual(180L, workSegment["drivingCounterAfterSegment"]);
-        Assert.AreEqual(true, workSegment["firstSplitBreakAccepted"]);
-        Assert.AreEqual(15L, workSegment["firstSplitBreakMinutes"]);
-        Assert.AreEqual(false, workSegment["secondSplitBreakAccepted"]);
-        Assert.AreEqual(false, workSegment["splitBreakCompleted"]);
-        Assert.AreEqual("NONE", workSegment["resetReason"]);
+        Assert.AreEqual(300L, metadata["continuousDrivingMinutes"]);
+        Assert.AreEqual(15L, metadata["receivedBreakMinutes"]);
+        Assert.AreEqual(30L, metadata["exceededMinutes"]);
+        Assert.AreEqual(true, metadata["firstSplitBreakAccepted"]);
+        Assert.AreEqual(15L, metadata["firstSplitBreakMinutes"]);
+        Assert.AreEqual(false, metadata["secondSplitBreakAccepted"]);
+        Assert.AreEqual(false, metadata["splitBreakCompleted"]);
+        Assert.AreEqual("NONE", metadata["resetReason"]);
 
         var trace = metadata["debugTrace"] as List<string>;
         Assert.IsNotNull(trace);
+        Assert.IsTrue(trace.Count <= 20);
         Assert.IsTrue(trace.Any(x => x.Contains("triggered violation", StringComparison.OrdinalIgnoreCase)));
         Assert.AreEqual(new DateTime(2026, 6, 8, 13, 20, 0, DateTimeKind.Utc), metadata["violationDetectedAt"]);
     }

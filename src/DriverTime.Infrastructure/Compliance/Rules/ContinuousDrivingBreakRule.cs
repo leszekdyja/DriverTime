@@ -268,7 +268,6 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                 ["breakType"] = breakType,
                 ["splitBreakFirstPartMinutes"] = FirstSplitBreakMinutes,
                 ["splitBreakSecondPartMinutes"] = SecondSplitBreakMinutes,
-                ["analyzedSegments"] = CloneSegments(diagnosticSegments),
                 ["drivingCounterAfterSegment"] = GetLong(lastSegment, "drivingCounterAfterSegment"),
                 ["firstSplitBreakAccepted"] = GetBool(lastSegment, "firstSplitBreakAccepted"),
                 ["firstSplitBreakMinutes"] = GetLong(lastSegment, "firstSplitBreakMinutes"),
@@ -276,7 +275,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                 ["splitBreakCompleted"] = GetBool(lastSegment, "splitBreakCompleted"),
                 ["resetReason"] = GetString(lastSegment, "resetReason"),
                 ["violationDetectedAt"] = periodEndUtc,
-                ["debugTrace"] = debugTrace.ToList()
+                ["debugTrace"] = LimitDebugTrace(debugTrace)
             }
         });
     }
@@ -314,11 +313,10 @@ public class ContinuousDrivingBreakRule : IComplianceRule
         debugTrace.Add($"{activity.StartUtc:o}..{activity.EndUtc:o}: {traceMessage}");
     }
 
-    private static List<Dictionary<string, object>> CloneSegments(
-        IReadOnlyList<Dictionary<string, object>> diagnosticSegments)
+    private static List<string> LimitDebugTrace(IReadOnlyList<string> debugTrace)
     {
-        return diagnosticSegments
-            .Select(segment => segment.ToDictionary(x => x.Key, x => x.Value))
+        return debugTrace
+            .TakeLast(20)
             .ToList();
     }
 
