@@ -21,6 +21,11 @@ public interface IDddImportMonitoringService
         string errorMessage,
         CancellationToken cancellationToken = default);
 
+    Task MarkDuplicateAsync(
+        Guid id,
+        string message,
+        CancellationToken cancellationToken = default);
+
     Task SetStoredFilePathAsync(
         Guid id,
         string storedFilePath,

@@ -89,6 +89,11 @@
     background-color: #f0fdf4;
 }
 
+.upload-item.duplicate {
+    border-color: #facc15;
+    background-color: #fefce8;
+}
+
 .upload-item.error,
 .upload-item.unsupported {
     border-color: #fca5a5;
@@ -132,6 +137,10 @@
 
 .upload-item.success .upload-item-heading span {
     color: #166534;
+}
+
+.upload-item.duplicate .upload-item-heading span {
+    color: #854d0e;
 }
 
 .remove-file-button {

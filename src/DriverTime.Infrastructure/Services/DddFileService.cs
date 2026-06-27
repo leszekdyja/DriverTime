@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using DriverTime.Application.Compliance;
+using DriverTime.Application.DDD.Exceptions;
 using DriverTime.Application.DDD.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
@@ -7,6 +8,7 @@ using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -76,6 +78,15 @@ public class DddFileService : IDddFileService
 
             return result;
         }
+        catch (DuplicateDddFileException exception)
+        {
+            await _importMonitoringService.MarkDuplicateAsync(
+                monitoringEntry.Id,
+                exception.Message);
+            TryDeleteFile(retryFilePath);
+
+            throw;
+        }
         catch (Exception exception)
         {
             await _importMonitoringService.MarkFailedAsync(
@@ -134,6 +145,16 @@ public class DddFileService : IDddFileService
             TryDeleteFile(entry.StoredFilePath);
 
             return true;
+        }
+        catch (DuplicateDddFileException exception)
+        {
+            await _importMonitoringService.MarkDuplicateAsync(
+                monitoringId,
+                exception.Message,
+                cancellationToken);
+            TryDeleteFile(entry.StoredFilePath);
+
+            return false;
         }
         catch (Exception exception)
         {
@@ -271,7 +292,7 @@ public class DddFileService : IDddFileService
         if (await _dbContext.DddFiles.AnyAsync(x =>
             x.CompanyId == companyId && x.FileHash == fileHash))
         {
-            throw new InvalidOperationException("Ten plik DDD zostal juz zaimportowany.");
+            throw new DuplicateDddFileException();
         }
 
         var parseResult = await _dddParserGateway.ParseAsync(filePath);
@@ -340,7 +361,14 @@ public class DddFileService : IDddFileService
         await AddMissingVehiclesAsync(companyId, parseResult.VehicleUses);
         _dbContext.DddFiles.Add(dddFile);
 
-        await _dbContext.SaveChangesAsync();
+        driver = await SaveImportChangesHandlingDuplicatesAsync(
+            companyId,
+            cardNumber,
+            parseResult.Driver,
+            driver,
+            dddFile,
+            driverCreated);
+        driverCreated = dddFile.DriverCreatedDuringImport;
 
         parseResult.ImportId = dddFile.Id;
         parseResult.DriverCreated = driverCreated;
@@ -353,6 +381,97 @@ public class DddFileService : IDddFileService
         await _importMonitoringService.MarkCompletedAsync(monitoringId);
 
         return parseResult;
+    }
+
+    private async Task<Driver> SaveImportChangesHandlingDuplicatesAsync(
+        Guid companyId,
+        string cardNumber,
+        ParsedDriverDto parsedDriver,
+        Driver driver,
+        DddFile dddFile,
+        bool driverCreated)
+    {
+        try
+        {
+            await _dbContext.SaveChangesAsync();
+            return driver;
+        }
+        catch (DbUpdateException exception) when (IsDuplicateDddFileHash(exception))
+        {
+            throw new DuplicateDddFileException();
+        }
+        catch (DbUpdateException exception) when (driverCreated && IsDuplicateDriverCardNumber(exception))
+        {
+            _logger.LogInformation(
+                "DDD import detected concurrent driver creation for company {CompanyId}, card {CardNumber}. Reusing existing driver.",
+                companyId,
+                cardNumber);
+
+            DetachEntity(driver);
+
+            var existingDriver = await _dbContext.Drivers
+                .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.CardNumber == cardNumber);
+
+            if (existingDriver is null)
+            {
+                throw;
+            }
+
+            ApplyExistingDriverAfterConcurrentInsert(dddFile, existingDriver, parsedDriver);
+
+            try
+            {
+                await _dbContext.SaveChangesAsync();
+                return existingDriver;
+            }
+            catch (DbUpdateException retryException) when (IsDuplicateDddFileHash(retryException))
+            {
+                throw new DuplicateDddFileException();
+            }
+        }
+    }
+
+    internal static void ApplyExistingDriverAfterConcurrentInsert(
+        DddFile dddFile,
+        Driver existingDriver,
+        ParsedDriverDto parsedDriver)
+    {
+        UpdateMissingDriverData(existingDriver, parsedDriver);
+        dddFile.DriverId = existingDriver.Id;
+        dddFile.DriverFirstName = existingDriver.FirstName;
+        dddFile.DriverLastName = existingDriver.LastName;
+        dddFile.DriverCreatedDuringImport = false;
+    }
+
+    private void DetachEntity(object entity)
+    {
+        var entry = _dbContext.Entry(entity);
+
+        if (entry.State != EntityState.Detached)
+        {
+            entry.State = EntityState.Detached;
+        }
+    }
+
+    internal static bool IsDuplicateDddFileHash(DbUpdateException exception) =>
+        IsUniqueConstraintViolation(exception, "IX_DddFiles_CompanyId_FileHash");
+
+    internal static bool IsDuplicateDriverCardNumber(DbUpdateException exception) =>
+        IsUniqueConstraintViolation(exception, "IX_Drivers_CompanyId_CardNumber");
+
+    internal static bool IsDuplicateDddFileHashConstraint(string? constraintName) =>
+        string.Equals(constraintName, "IX_DddFiles_CompanyId_FileHash", StringComparison.Ordinal);
+
+    internal static bool IsDuplicateDriverCardNumberConstraint(string? constraintName) =>
+        string.Equals(constraintName, "IX_Drivers_CompanyId_CardNumber", StringComparison.Ordinal);
+
+    private static bool IsUniqueConstraintViolation(
+        DbUpdateException exception,
+        string constraintName)
+    {
+        return exception.InnerException is PostgresException postgresException
+            && postgresException.SqlState == PostgresErrorCodes.UniqueViolation
+            && string.Equals(postgresException.ConstraintName, constraintName, StringComparison.Ordinal);
     }
 
     private async Task DetectViolationsAfterImportAsync(Guid importId)

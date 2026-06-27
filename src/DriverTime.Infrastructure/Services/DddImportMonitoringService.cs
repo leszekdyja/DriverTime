@@ -84,6 +84,20 @@ public class DddImportMonitoringService : IDddImportMonitoringService
             cancellationToken);
     }
 
+    public Task MarkDuplicateAsync(
+        Guid id,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        return UpdateStatusAsync(
+            id,
+            DddImportMonitoringStatus.Duplicate,
+            startedAtUtc: null,
+            finishedAtUtc: DateTime.UtcNow,
+            errorMessage: TruncateError(message),
+            cancellationToken);
+    }
+
     public Task SetStoredFilePathAsync(
         Guid id,
         string storedFilePath,

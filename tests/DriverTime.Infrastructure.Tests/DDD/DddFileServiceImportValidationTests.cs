@@ -163,4 +163,56 @@ public class DddFileServiceImportValidationTests
         Assert.IsNull(savedVehicleUse.EndOdometerKm);
         Assert.IsNull(savedVehicleUse.DistanceKm);
     }
+
+    [TestMethod]
+    public void IsDuplicateDddFileHashConstraint_WithFileHashIndex_ReturnsTrue()
+    {
+        Assert.IsTrue(DddFileService.IsDuplicateDddFileHashConstraint("IX_DddFiles_CompanyId_FileHash"));
+        Assert.IsFalse(DddFileService.IsDuplicateDddFileHashConstraint("IX_Drivers_CompanyId_CardNumber"));
+    }
+
+    [TestMethod]
+    public void IsDuplicateDriverCardNumberConstraint_WithDriverCardIndex_ReturnsTrue()
+    {
+        Assert.IsTrue(DddFileService.IsDuplicateDriverCardNumberConstraint("IX_Drivers_CompanyId_CardNumber"));
+        Assert.IsFalse(DddFileService.IsDuplicateDriverCardNumberConstraint("IX_DddFiles_CompanyId_FileHash"));
+    }
+
+    [TestMethod]
+    public void ApplyExistingDriverAfterConcurrentInsert_ReusesExistingDriverForImport()
+    {
+        var existingDriver = new Driver
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = Guid.NewGuid(),
+            CardNumber = "CARD-123",
+            FirstName = "Jan",
+            LastName = "Kowalski"
+        };
+        var dddFile = new DddFile
+        {
+            Id = Guid.NewGuid(),
+            DriverId = Guid.NewGuid(),
+            DriverFirstName = "",
+            DriverLastName = "",
+            DriverCreatedDuringImport = true
+        };
+        var parsedDriver = new ParsedDriverDto
+        {
+            FirstName = "Jan",
+            LastName = "Kowalski",
+            CardNumber = "CARD-123"
+        };
+
+        DddFileService.ApplyExistingDriverAfterConcurrentInsert(
+            dddFile,
+            existingDriver,
+            parsedDriver);
+
+        Assert.AreEqual(existingDriver.Id, dddFile.DriverId);
+        Assert.AreEqual("Jan", dddFile.DriverFirstName);
+        Assert.AreEqual("Kowalski", dddFile.DriverLastName);
+        Assert.IsFalse(dddFile.DriverCreatedDuringImport);
+    }
+
 }

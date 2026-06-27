@@ -43,6 +43,7 @@ function getStatusClass(status: string) {
 
     if (normalized === "completed") return "completed";
     if (normalized === "failed") return "failed";
+    if (normalized === "duplicate") return "duplicate";
     if (normalized === "processing") return "processing";
 
     return "pending";

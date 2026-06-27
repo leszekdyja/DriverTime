@@ -107,3 +107,8 @@
         align-items: flex-start;
     }
 }
+
+.import-monitoring-status.duplicate {
+    background: #fef3c7;
+    color: #92400e;
+}

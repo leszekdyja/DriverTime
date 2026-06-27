@@ -3,7 +3,7 @@ import { apiFetch } from "./apiClient";
 export type ImportMonitoringEntry = {
     id: string;
     fileName: string;
-    status: "Pending" | "Processing" | "Completed" | "Failed" | string;
+    status: "Pending" | "Processing" | "Completed" | "Failed" | "Duplicate" | string;
     errorMessage: string;
     retryCount: number;
     lastRetryAtUtc: string | null;
