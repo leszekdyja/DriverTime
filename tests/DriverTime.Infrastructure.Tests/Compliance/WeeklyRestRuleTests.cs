@@ -66,7 +66,8 @@ public class WeeklyRestRuleTests
         var timeline = new[]
         {
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T16:00:00Z"),
-            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-09T15:30:00Z", "2026-06-09T20:00:00Z")
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-09T15:30:00Z", "2026-06-09T20:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-09T20:00:00Z", "2026-06-15T00:00:00Z")
         };
 
         var result = _reducedRule.Evaluate(driverId, timeline);
@@ -133,7 +134,8 @@ public class WeeklyRestRuleTests
         {
             Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T16:00:00Z"),
             Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-08T16:00:00Z", "2026-06-10T13:00:00Z"),
-            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-10T13:00:00Z", "2026-06-10T16:00:00Z")
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-10T13:00:00Z", "2026-06-10T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-10T16:00:00Z", "2026-06-15T00:00:00Z")
         };
 
         var regularResult = _regularRule.Evaluate(driverId, timeline);
@@ -161,6 +163,42 @@ public class WeeklyRestRuleTests
 
         Assert.AreEqual(0, reducedResult.Violations.Count);
         Assert.AreEqual(0, regularResult.Violations.Count);
+    }
+
+    [TestMethod]
+    public void ReducedWeeklyRest_WithIncompleteIsoWeekAfterReducedRest_DoesNotReturnViolationForOpenWeek()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-12T10:00:00Z", "2026-06-12T14:12:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-12T14:12:00Z", "2026-06-14T06:54:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-14T06:54:00Z", "2026-06-14T08:26:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-15T08:00:00Z", "2026-06-15T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T08:00:00Z", "2026-06-17T10:00:00Z")
+        };
+
+        var result = _reducedRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void ReducedWeeklyRest_WithClosedIsoWeekWithoutTwentyFourHourRest_ReturnsViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Availability, "2026-06-08T16:00:00Z", "2026-06-15T00:00:00Z")
+        };
+
+        var result = _reducedRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("REDUCED_WEEKLY_REST", result.Violations[0].Code);
+        Assert.AreEqual(DateTime.Parse("2026-06-08T00:00:00Z").ToUniversalTime(), result.Violations[0].PeriodStartUtc);
+        Assert.AreEqual(DateTime.Parse("2026-06-15T00:00:00Z").ToUniversalTime(), result.Violations[0].PeriodEndUtc);
     }
 
     [TestMethod]

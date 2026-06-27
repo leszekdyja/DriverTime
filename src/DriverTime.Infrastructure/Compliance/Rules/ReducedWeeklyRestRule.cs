@@ -33,6 +33,10 @@ public class ReducedWeeklyRestRule : IComplianceRule
             .OrderBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
+        var analysisEndUtc = validTimeline
+            .Select(x => x.EndUtc)
+            .DefaultIfEmpty()
+            .Max();
         var activeWeeks = GetActiveWeekRanges(validTimeline);
         var restPeriods = WeeklyRestTimelineHelper.BuildContinuousRestPeriods(validTimeline);
         var weeklyRests = restPeriods
@@ -45,7 +49,13 @@ public class ReducedWeeklyRestRule : IComplianceRule
 
         foreach (var weekStartUtc in activeWeeks)
         {
-            if (weeklyRests.Any(x => x.StartUtc < weekStartUtc.AddDays(7) && x.EndUtc > weekStartUtc))
+            var weekEndUtc = weekStartUtc.AddDays(7);
+            if (weekEndUtc > analysisEndUtc)
+            {
+                continue;
+            }
+
+            if (weeklyRests.Any(x => x.StartUtc < weekEndUtc && x.EndUtc > weekStartUtc))
             {
                 continue;
             }
@@ -63,7 +73,7 @@ public class ReducedWeeklyRestRule : IComplianceRule
                 Severity = "High",
                 Description = $"Odpoczynek tygodniowy w tygodniu rozpoczynajacym sie {weekStartUtc:yyyy-MM-dd} byl krotszy niz wymagane minimum 24 godziny. Najdluzszy odpoczynek wyniosl {FormatDuration(longestRest)}.",
                 PeriodStartUtc = weekStartUtc,
-                PeriodEndUtc = weekStartUtc.AddDays(7),
+                PeriodEndUtc = weekEndUtc,
                 ActualMinutes = actualRestMinutes,
                 LimitMinutes = WeeklyRestTimelineHelper.MinimumReducedWeeklyRestMinutes,
                 Metadata = new Dictionary<string, object>
