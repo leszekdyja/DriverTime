@@ -76,6 +76,8 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
                 continue;
             }
 
+            // EntryType=Unknown is not evidence that the start or end country is missing.
+            // Precise MISSING_START_COUNTRY/MISSING_END_COUNTRY warnings require a reliable opposite entry.
             var hasStartEntry = validEntries.Any(x => IsStartEntry(x.EntryType));
             var hasEndEntry = validEntries.Any(x => IsEndEntry(x.EntryType));
 

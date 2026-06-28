@@ -256,6 +256,22 @@ public class DrivingLimitRuleTests
         Assert.AreEqual(0, result.Violations.Count);
     }
 
+
+    [TestMethod]
+    public void DailyDrivingLimitViolation_DoesNotRequireRuleExecutionTrace()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T18:01:00Z")
+        };
+
+        var result = _dailyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.IsNull(result.Violations[0].ExecutionTrace);
+    }
+
     [TestMethod]
     public void ContinuousDrivingBreak_DoesNotCountDrivingCoveredByNonDrivingActivities()
     {
@@ -621,6 +637,55 @@ public class DrivingLimitRuleTests
     }
 
 
+
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithViolation_GeneratesDomainRuleExecutionTrace()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T10:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T10:00:00Z", "2026-06-08T10:20:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T10:20:00Z", "2026-06-08T13:00:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.AreEqual("CONTINUOUS_DRIVING_BREAK", trace.RuleCode);
+        Assert.AreEqual("Przerwa po 4 godz. 30 min jazdy", trace.RuleName);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.IsTrue(trace.Summary.Contains("kierowca prowadzi?", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Summary.Contains("Limit", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Steps.Any(x => x.Order == 1 && x.Description.Contains("Rozpocz?to analiz?", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Segments.Any(x => x.RestCandidateMinutes == 20 && !x.IsResetPoint));
+        Assert.IsTrue(trace.Steps.Any(x => x.IsViolationPoint));
+        Assert.IsTrue(trace.Segments.Any(x => x.IsViolationPoint && x.DrivingMinutesAfterSegment == 280));
+    }
+
+    [TestMethod]
+    public void ContinuousDrivingBreak_WithViolationAfterPreviousFortyFiveMinuteBreak_TraceContainsResetStep()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T06:00:00Z", "2026-06-08T08:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-08T08:00:00Z", "2026-06-08T08:45:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:45:00Z", "2026-06-08T13:16:00Z")
+        };
+
+        var result = _continuousRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.IsTrue(trace.Steps.Any(x => x.IsResetPoint && x.Description.Contains("zresetowano licznik", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Segments.Any(x => x.IsResetPoint && x.RestCandidateMinutes == 45));
+        Assert.IsTrue(trace.Steps.Any(x => x.IsViolationPoint));
+    }
 
     [TestMethod]
     public void ContinuousDrivingBreak_WithViolation_AddsDiagnosticMetadata()

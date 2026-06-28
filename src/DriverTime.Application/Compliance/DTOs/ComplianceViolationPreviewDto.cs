@@ -1,3 +1,5 @@
+using DriverTime.Domain.Compliance;
+
 namespace DriverTime.Application.Compliance.DTOs;
 
 public class ComplianceViolationPreviewDto
@@ -19,4 +21,7 @@ public class ComplianceViolationPreviewDto
     public long LimitMinutes { get; set; }
 
     public Dictionary<string, object> Metadata { get; set; } = new();
+
+    public RuleExecutionTrace? ExecutionTrace { get; set; }
 }
+

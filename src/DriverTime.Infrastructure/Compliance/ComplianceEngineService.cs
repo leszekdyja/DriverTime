@@ -114,7 +114,8 @@ public class ComplianceEngineService : IComplianceEngineService
                 PeriodEndUtc = x.PeriodEndUtc,
                 ActualMinutes = x.ActualMinutes,
                 LimitMinutes = x.LimitMinutes,
-                Metadata = x.Metadata
+                Metadata = x.Metadata,
+                ExecutionTrace = x.ExecutionTrace
             })
             .ToList();
 

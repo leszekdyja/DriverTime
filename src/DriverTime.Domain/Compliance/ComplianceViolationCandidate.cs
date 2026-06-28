@@ -19,4 +19,7 @@ public class ComplianceViolationCandidate
     public long LimitMinutes { get; set; }
 
     public Dictionary<string, object> Metadata { get; set; } = new();
+
+    public RuleExecutionTrace? ExecutionTrace { get; set; }
 }
+
