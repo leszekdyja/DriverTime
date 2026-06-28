@@ -304,10 +304,10 @@ public class VehiclesController : ControllerBase
             {
                 ActivityId = x.activity.Id,
                 DddFileId = x.activity.DddFileId,
-                DriverId = x.activity.DddFile.DriverId,
-                DriverName = x.activity.DddFile.Driver == null
-                    ? string.Empty
-                    : FormatDriverName(x.activity.DddFile.Driver.FirstName, x.activity.DddFile.Driver.LastName),
+                DriverId = x.vehicleUse.DddFile.DriverId,
+                DriverName = x.vehicleUse.DddFile.Driver == null
+                    ? null
+                    : FormatDriverName(x.vehicleUse.DddFile.Driver.FirstName, x.vehicleUse.DddFile.Driver.LastName),
                 ActivityType = x.activity.ActivityType,
                 StartUtc = x.activity.StartUtc < x.vehicleUse.StartUtc
                     ? x.vehicleUse.StartUtc
@@ -383,7 +383,7 @@ public class VehiclesController : ControllerBase
 
         public Guid? DriverId { get; set; }
 
-        public string DriverName { get; set; } = string.Empty;
+        public string? DriverName { get; set; }
 
         public string ActivityType { get; set; } = string.Empty;
 

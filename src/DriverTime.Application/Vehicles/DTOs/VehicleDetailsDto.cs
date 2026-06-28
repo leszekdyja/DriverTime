@@ -59,7 +59,7 @@ public class VehicleActivityDto
 
     public Guid? DriverId { get; set; }
 
-    public string DriverName { get; set; } = string.Empty;
+    public string? DriverName { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;
 

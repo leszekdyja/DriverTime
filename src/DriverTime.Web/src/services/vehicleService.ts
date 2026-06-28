@@ -33,7 +33,7 @@ export type VehicleActivity = {
     id: string;
     dddFileId: string;
     driverId: string | null;
-    driverName: string;
+    driverName: string | null;
     activityType: string;
     startUtc: string;
     endUtc: string;
