@@ -1,1 +1,369 @@
-@import "../tachograph/TachographTimeline.css";
+﻿.tachograph-timeline-pro {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.18), transparent 28%),
+        linear-gradient(180deg, #111827 0%, #0f172a 58%, #0b1220 100%);
+    color: #e5e7eb;
+    box-shadow: 0 22px 46px rgba(2, 6, 23, 0.22);
+}
+
+.tachograph-empty {
+    padding: 22px;
+    border: 1px dashed rgba(148, 163, 184, 0.36);
+    border-radius: 10px;
+    color: #cbd5e1;
+    text-align: center;
+}
+
+.tachograph-pro-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.tachograph-pro-header span {
+    color: #93c5fd;
+    font-size: 11px;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.tachograph-pro-header h4 {
+    margin: 4px 0 0;
+    color: #f8fafc;
+    font-size: 18px;
+}
+
+.tachograph-pro-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.tachograph-pro-meta strong,
+.tachograph-pro-meta span {
+    min-height: 30px;
+    padding: 6px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.74);
+    color: #e5e7eb;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.tachograph-pro-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 2px;
+}
+
+.tachograph-pro-grid {
+    min-width: 980px;
+}
+
+.tachograph-time-scale,
+.tachograph-day-row {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 14px;
+}
+
+.tachograph-time-scale {
+    align-items: end;
+    margin-bottom: 7px;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.tachograph-time-axis {
+    position: relative;
+    height: 22px;
+}
+
+.tachograph-time-axis span {
+    position: absolute;
+    bottom: 0;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.tachograph-week-rows {
+    display: grid;
+    gap: 8px;
+}
+
+.tachograph-day-row {
+    align-items: stretch;
+}
+
+.tachograph-day-label {
+    display: grid;
+    align-content: center;
+    gap: 3px;
+    min-height: 62px;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.72);
+}
+
+.tachograph-day-label strong {
+    color: #f8fafc;
+    font-size: 15px;
+    text-transform: capitalize;
+}
+
+.tachograph-day-label span {
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.tachograph-day-label small {
+    color: #86efac;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.tachograph-day-track {
+    position: relative;
+    min-height: 62px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.62);
+    overflow: hidden;
+}
+
+.tachograph-grid-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.tachograph-grid-lines i {
+    position: absolute;
+    inset-block: 0;
+    width: 1px;
+    background: rgba(148, 163, 184, 0.16);
+}
+
+.tachograph-grid-lines i.major {
+    width: 2px;
+    background: rgba(226, 232, 240, 0.34);
+}
+
+.tachograph-segments-row {
+    position: absolute;
+    inset: 13px 0 17px;
+}
+
+.tachograph-pro-segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2px;
+    overflow: hidden;
+    border-radius: 7px;
+    box-shadow: 0 5px 16px rgba(2, 6, 23, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.tachograph-pro-segment span {
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 6px;
+    color: rgba(255, 255, 255, 0.96);
+    font-size: 11px;
+    font-weight: 900;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(2, 6, 23, 0.44);
+    white-space: nowrap;
+}
+
+.tachograph-pro-segment.driving,
+.tachograph-pro-legend i.driving,
+.tachograph-navigator span.driving {
+    background: linear-gradient(180deg, #4ade80, #16a34a);
+}
+
+.tachograph-pro-segment.rest,
+.tachograph-pro-legend i.rest,
+.tachograph-navigator span.rest {
+    background: linear-gradient(180deg, #60a5fa, #2563eb);
+}
+
+.tachograph-pro-segment.work,
+.tachograph-pro-legend i.work,
+.tachograph-navigator span.work {
+    background: linear-gradient(180deg, #fbbf24, #f97316);
+}
+
+.tachograph-pro-segment.availability,
+.tachograph-pro-legend i.availability,
+.tachograph-navigator span.availability {
+    background: linear-gradient(180deg, #c084fc, #8b5cf6);
+}
+
+.tachograph-pro-segment.unknown,
+.tachograph-pro-legend i.unknown,
+.tachograph-navigator span.unknown {
+    background: linear-gradient(180deg, #94a3b8, #64748b);
+}
+
+.tachograph-no-data {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 750;
+    transform: translateY(-50%);
+}
+
+.tachograph-marker-row {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.tachograph-pro-marker {
+    position: absolute;
+    bottom: 4px;
+    z-index: 3;
+    max-width: 82px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    color: #f8fafc;
+    cursor: help;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 18px;
+    pointer-events: auto;
+    text-overflow: ellipsis;
+    transform: translateX(-50%);
+    white-space: nowrap;
+}
+
+.tachograph-pro-marker.country,
+.tachograph-pro-legend i.country {
+    background: #0f766e;
+}
+
+.tachograph-pro-marker.vehicle,
+.tachograph-pro-legend i.vehicle {
+    background: #1d4ed8;
+}
+
+.tachograph-pro-marker.card {
+    background: #7c3aed;
+}
+
+.tachograph-pro-marker.violation,
+.tachograph-pro-legend i.violation {
+    background: #dc2626;
+}
+
+.tachograph-pro-marker.violation {
+    width: 24px;
+    border-color: rgba(248, 113, 113, 0.7);
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.16);
+    cursor: pointer;
+}
+
+.tachograph-pro-footer {
+    display: grid;
+    gap: 10px;
+}
+
+.tachograph-pro-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.tachograph-pro-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tachograph-pro-legend i {
+    display: inline-grid;
+    width: 16px;
+    height: 16px;
+    place-items: center;
+    border-radius: 4px;
+    color: white;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 950;
+    line-height: 1;
+}
+
+.tachograph-navigator {
+    position: relative;
+    height: 34px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.58);
+    overflow: hidden;
+}
+
+.tachograph-navigator::before {
+    position: absolute;
+    inset: 7px 0;
+    background: rgba(148, 163, 184, 0.1);
+    content: "";
+}
+
+.tachograph-navigator span {
+    position: absolute;
+    top: 10px;
+    height: 14px;
+    min-width: 1px;
+    border-radius: 2px;
+}
+
+@media (max-width: 760px) {
+    .tachograph-timeline-pro {
+        padding: 12px;
+    }
+
+    .tachograph-pro-header {
+        flex-direction: column;
+    }
+
+    .tachograph-pro-meta {
+        justify-content: flex-start;
+    }
+
+    .tachograph-time-scale,
+    .tachograph-day-row {
+        grid-template-columns: 112px minmax(0, 1fr);
+    }
+
+    .tachograph-pro-grid {
+        min-width: 900px;
+    }
+}

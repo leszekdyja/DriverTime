@@ -469,20 +469,14 @@ export default function DriverDetailsPage() {
                                 description="Wykres tachografowy pojawi się po imporcie aktywności kierowcy."
                             />
                         ) : (
-                            <div className="tachograph-days">
-                                {timelineDays.map((day) => (
-                                    <TachographTimeline
-                                        activities={timelineActivities}
-                                        day={day.date}
-                                        key={day.date}
-                                        label={day.label}
-                                        countryEntries={details.countryEntries}
-                                        vehicleUses={details.vehicleUses}
-                                        violations={violations}
-                                        onViolationClick={handleTimelineViolationClick}
-                                    />
-                                ))}
-                            </div>
+                            <TachographTimeline
+                                activities={timelineActivities}
+                                days={timelineDays}
+                                countryEntries={details.countryEntries}
+                                vehicleUses={details.vehicleUses}
+                                violations={violations}
+                                onViolationClick={handleTimelineViolationClick}
+                            />
                         )}
                     </section>
                     <DetailsSection title="Historia importów" empty={details.recentImports.length === 0}>

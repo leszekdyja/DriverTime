@@ -487,17 +487,11 @@ function VehicleTachographTimelineSection({
                     description="Wykres tachografowy pojawi się po imporcie aktywności powiązanych z tym pojazdem."
                 />
             ) : (
-                <div className="tachograph-days">
-                    {timelineDays.map((day) => (
-                        <TachographTimeline
-                            activities={activities}
-                            day={day.date}
-                            key={day.date}
-                            label={day.label}
-                            vehicleUses={vehicleUses}
-                        />
-                    ))}
-                </div>
+                <TachographTimeline
+                    activities={activities}
+                    days={timelineDays}
+                    vehicleUses={vehicleUses}
+                />
             )}
         </section>
     );

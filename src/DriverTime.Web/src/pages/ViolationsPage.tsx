@@ -1813,15 +1813,11 @@ function ViolationDetailsModal({
                             <div className="dispatcher-event-context dispatcher-event-tachograph-context" aria-label="Kontekst zdarzenia">
                                 <span>Kontekst zdarzenia</span>
                                 <div className="dispatcher-event-tachograph-days">
-                                    {timelineDays.map((day) => (
-                                        <TachographTimeline
-                                            activities={timelineActivities}
-                                            day={day.date}
-                                            key={day.date}
-                                            label={day.label}
-                                            violations={violationPeriod.hasExactRange ? [violation] : []}
-                                        />
-                                    ))}
+                                    <TachographTimeline
+                                        activities={timelineActivities}
+                                        days={timelineDays}
+                                        violations={violationPeriod.hasExactRange ? [violation] : []}
+                                    />
                                 </div>
                             </div>
                         )}
@@ -2019,15 +2015,11 @@ function ViolationDetailsModal({
                         <p className="violation-timeline-note">Brak daty, dla której można zbudować oś czasu.</p>
                     ) : (
                         <div className="violation-timeline-days">
-                            {timelineDays.map((day) => (
-                                <TachographTimeline
-                                    activities={timelineActivities}
-                                    day={day.date}
-                                    key={day.date}
-                                    label={day.label}
-                                    violations={violationPeriod.hasExactRange ? [violation] : []}
-                                />
-                            ))}
+                            <TachographTimeline
+                                activities={timelineActivities}
+                                days={timelineDays}
+                                violations={violationPeriod.hasExactRange ? [violation] : []}
+                            />
                         </div>
                     )}
                 </section>
