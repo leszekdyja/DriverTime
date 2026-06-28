@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from
 import { useSearchParams } from "react-router-dom";
 
 import StatusBadge from "../components/StatusBadge";
-import TachographTimeline from "../components/tachograph/TachographTimeline";
-import ViolationTimelinePreview from "../components/violations/ViolationTimelinePreview";
+import TachographTimeline from "../components/timeline/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDrivers,
@@ -1663,6 +1662,22 @@ function hasDailyRestRuleAnalysis(violation: DriverViolation) {
     return violation.ruleAnalysis?.ruleCode?.toUpperCase().includes("DAILY_REST") ?? false;
 }
 
+function hasDrivingLimitRuleAnalysis(violation: DriverViolation) {
+    const ruleCode = violation.ruleAnalysis?.ruleCode?.toUpperCase() ?? "";
+
+    return ruleCode.includes("DAILY_DRIVING") || ruleCode.includes("WEEKLY_DRIVING");
+}
+
+function getDrivingLimitWindowLabel(violation: DriverViolation) {
+    const ruleCode = violation.ruleAnalysis?.ruleCode?.toUpperCase() ?? "";
+
+    if (ruleCode.includes("BI_WEEKLY_DRIVING") || ruleCode.includes("BIWEEKLY_DRIVING")) {
+        return "Okres dwutygodniowy";
+    }
+
+    return ruleCode.includes("WEEKLY_DRIVING") ? "Tydzie? ISO" : "Okno dzienne";
+}
+
 function getRuleAnalysisSteps(violation: DriverViolation) {
     return violation.ruleAnalysis?.steps?.length
         ? violation.ruleAnalysis.steps
@@ -1794,12 +1809,21 @@ function ViolationDetailsModal({
                                 ))}
                             </div>
                         )}
-                        {!isTimelineLoading && !timelineError && (
-                            <ViolationTimelinePreview
-                                activities={timelineActivities}
-                                occurredAtUtc={violation.occurredAtUtc}
-                                periodEndUtc={violation.periodEndUtc}
-                            />
+                        {!isTimelineLoading && !timelineError && timelineDays.length > 0 && (
+                            <div className="dispatcher-event-context dispatcher-event-tachograph-context" aria-label="Kontekst zdarzenia">
+                                <span>Kontekst zdarzenia</span>
+                                <div className="dispatcher-event-tachograph-days">
+                                    {timelineDays.map((day) => (
+                                        <TachographTimeline
+                                            activities={timelineActivities}
+                                            day={day.date}
+                                            key={day.date}
+                                            label={day.label}
+                                            violations={violationPeriod.hasExactRange ? [violation] : []}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
                         )}
                         <div className="dispatcher-assistant-flags" aria-label="Ocena operacyjna">
                             <span>{formatDispatcherFlag(violation.dispatcherRecommendation.canDrive, "✓ Można jechać", "🚫 Nie planuj jazdy")}</span>
@@ -1893,6 +1917,17 @@ function ViolationDetailsModal({
                                     {violation.ruleAnalysis.requiredRestMinutes !== null && violation.ruleAnalysis.requiredRestMinutes !== undefined && <div><dt>Wymagany odpoczynek</dt><dd>{formatMinutes(violation.ruleAnalysis.requiredRestMinutes)}</dd></div>}
                                     {violation.ruleAnalysis.longestRestMinutes !== null && violation.ruleAnalysis.longestRestMinutes !== undefined && <div><dt>Najdłuższy odpoczynek</dt><dd>{formatMinutes(violation.ruleAnalysis.longestRestMinutes)}</dd></div>}
                                     {violation.ruleAnalysis.missingRestMinutes !== null && violation.ruleAnalysis.missingRestMinutes !== undefined && <div><dt>Brakuje</dt><dd>{formatMinutes(violation.ruleAnalysis.missingRestMinutes)}</dd></div>}
+                                    <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
+                                    <div><dt>Analiza szacunkowa</dt><dd>{violation.ruleAnalysis.isEstimated ? "Tak" : "Nie"}</dd></div>
+                                </>
+                            ) : hasDrivingLimitRuleAnalysis(violation) ? (
+                                <>
+                                    {violation.ruleAnalysis.analysisWindowStartUtc && violation.ruleAnalysis.analysisWindowEndUtc && (
+                                        <div><dt>{getDrivingLimitWindowLabel(violation)}</dt><dd>{formatDate(violation.ruleAnalysis.analysisWindowStartUtc)} - {formatDate(violation.ruleAnalysis.analysisWindowEndUtc)}</dd></div>
+                                    )}
+                                    <div><dt>Limit jazdy</dt><dd>{formatMinutes(violation.ruleAnalysis.drivingLimitMinutes)}</dd></div>
+                                    <div><dt>Czas jazdy</dt><dd>{formatMinutes(violation.ruleAnalysis.continuousDrivingMinutes)}</dd></div>
+                                    <div><dt>Przekroczenie</dt><dd>{formatMinutes(violation.ruleAnalysis.exceededMinutes)}</dd></div>
                                     <div><dt>Moment wykrycia</dt><dd>{formatDate(violation.ruleAnalysis.violationDetectedAtUtc)}</dd></div>
                                     <div><dt>Analiza szacunkowa</dt><dd>{violation.ruleAnalysis.isEstimated ? "Tak" : "Nie"}</dd></div>
                                 </>

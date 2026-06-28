@@ -11,7 +11,7 @@ import {
 } from "recharts";
 
 import StatusBadge from "../components/StatusBadge";
-import TachographTimeline from "../components/tachograph/TachographTimeline";
+import TachographTimeline from "../components/timeline/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getVehicleDownloads,

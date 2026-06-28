@@ -1,3 +1,4 @@
+using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Compliance;
 
 namespace DriverTime.Application.Compliance.DTOs;
@@ -23,5 +24,8 @@ public class ComplianceViolationPreviewDto
     public Dictionary<string, object> Metadata { get; set; } = new();
 
     public RuleExecutionTrace? ExecutionTrace { get; set; }
+
+    public ViolationRuleAnalysisDto? RuleAnalysis { get; set; }
 }
+
 

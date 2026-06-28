@@ -1,5 +1,5 @@
 import { apiFetch } from "./apiClient";
-import type { DriverViolation } from "./violationsService";
+import type { DriverViolation, ViolationRuleAnalysis } from "./violationsService";
 import { getComplianceRuleLabel } from "../utils/complianceLabels";
 
 export type ComplianceTimelineEntry = {
@@ -20,6 +20,7 @@ export type ComplianceViolationPreview = {
     actualMinutes: number;
     limitMinutes: number;
     metadata: Record<string, number | string | null>;
+    ruleAnalysis?: ViolationRuleAnalysis | null;
 };
 
 export type ComplianceDebugSummary = {
@@ -120,6 +121,7 @@ export function mapComplianceViolation(
         actualDurationMinutes: violation.actualMinutes,
         limitDurationMinutes: violation.limitMinutes,
         metadata: violation.metadata,
+        ruleAnalysis: violation.ruleAnalysis ?? null,
     };
 }
 

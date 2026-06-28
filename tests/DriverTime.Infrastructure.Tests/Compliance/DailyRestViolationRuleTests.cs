@@ -107,6 +107,63 @@ public class DailyRestViolationRuleTests
         Assert.AreEqual("MissingContinuousReducedDailyRest", result.Violations[0].Metadata["reason"]);
     }
 
+
+    [TestMethod]
+    public void Evaluate_WithMissingReducedDailyRest_GeneratesDomainRuleExecutionTrace()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T00:00:00Z", "2026-06-17T01:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T06:00:00Z", "2026-06-17T07:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T12:00:00Z", "2026-06-17T13:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-17T18:00:00Z", "2026-06-17T19:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-18T00:30:00Z", "2026-06-18T01:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.AreEqual("DAILY_REST", trace.RuleCode);
+        Assert.AreEqual("Odpoczynek dzienny", trace.RuleName);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.AreEqual(new DateTime(2026, 6, 17, 0, 0, 0, DateTimeKind.Utc), trace.AnalysisWindowStartUtc);
+        Assert.AreEqual(new DateTime(2026, 6, 18, 0, 0, 0, DateTimeKind.Utc), trace.AnalysisWindowEndUtc);
+        Assert.IsTrue(trace.Summary.Contains("najd?u?szy odpoczynek", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Summary.Contains("5 godz.", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Summary.Contains("9 godz.", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Summary.Contains("4 godz.", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Steps.Any(x => x.Description.Contains("Start okna analizy 24h", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Steps.Any(x => x.Description.Contains("Dodano odpoczynek", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Steps.Any(x => x.Description.Contains("Zaktualizowano najd?u?szy odpoczynek", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Steps.Any(x => x.IsViolationPoint && x.Description.Contains("Wykryto naruszenie", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Segments.Any(x => x.ActivityType == "REST_GAP" && x.RestCandidateMinutes == 300));
+    }
+
+    [TestMethod]
+    public void Evaluate_WithReducedDailyRest_GeneratesTraceWithNineHourReducedRestStep()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-17T08:00:00Z", "2026-06-17T16:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-18T01:00:00Z", "2026-06-18T08:00:00Z")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.IsTrue(trace.Steps.Any(x => x.IsResetPoint && x.Description.Contains("odpoczynek skr?cony", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Steps.Any(x => x.IsViolationPoint));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Wymagany odpoczynek"));
+        Assert.AreEqual("Nie", trace.Metrics["Analiza szacunkowa"]);
+    }
+
     [TestMethod]
     public void Evaluate_WithThreePlusNineHourSplitRestInOrder_ReturnsNoViolation()
     {

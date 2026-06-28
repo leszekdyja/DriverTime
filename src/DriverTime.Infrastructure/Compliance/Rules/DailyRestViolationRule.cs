@@ -106,7 +106,8 @@ public class DailyRestViolationRule : IComplianceRule
                     endUtc: longestRest.EndUtc,
                     analysisWindowEndUtc: windowEnd,
                     longestRest: longestRest,
-                    reason: "ReducedDailyRest"));
+                    reason: "ReducedDailyRest",
+                    orderedActivities: ordered));
 
                 var nextDuty = longestRest.EndUtc <= currentPeriodStart
                     ? GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart)
@@ -134,7 +135,8 @@ public class DailyRestViolationRule : IComplianceRule
                 endUtc: GetViolationEndUtc(dutyActivities, currentPeriodStart, windowEnd),
                 analysisWindowEndUtc: windowEnd,
                 longestRest: longestRest,
-                reason: "MissingContinuousReducedDailyRest"));
+                reason: "MissingContinuousReducedDailyRest",
+                orderedActivities: ordered));
 
             var nextPeriodStart = dutyActivities
                 .FirstOrDefault(x => x.StartUtc >= windowEnd);
@@ -167,7 +169,8 @@ public class DailyRestViolationRule : IComplianceRule
         DateTime endUtc,
         DateTime analysisWindowEndUtc,
         RestPeriod longestRest,
-        string reason)
+        string reason,
+        IReadOnlyList<TimelineActivity> orderedActivities)
     {
         var longestRestMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
         var requiredRestMinutes = reason == "MissingContinuousReducedDailyRest"
@@ -175,6 +178,15 @@ public class DailyRestViolationRule : IComplianceRule
             : RegularDailyRestMinutes;
         var missingRestMinutes = Math.Max(requiredRestMinutes - longestRestMinutes, 0);
         var finalDescription = BuildDescription(reason, startUtc, analysisWindowEndUtc, longestRest.Duration);
+        var trace = BuildRuleExecutionTrace(
+            orderedActivities,
+            startUtc,
+            analysisWindowEndUtc,
+            endUtc,
+            longestRest,
+            requiredRestMinutes,
+            missingRestMinutes,
+            reason);
 
         return new ComplianceViolationCandidate
         {
@@ -186,6 +198,7 @@ public class DailyRestViolationRule : IComplianceRule
             PeriodEndUtc = endUtc,
             ActualMinutes = longestRestMinutes,
             LimitMinutes = RegularDailyRestMinutes,
+            ExecutionTrace = trace,
             Metadata = new Dictionary<string, object>
             {
                 ["restMinutes"] = longestRestMinutes,
@@ -205,6 +218,259 @@ public class DailyRestViolationRule : IComplianceRule
                 ["reason"] = reason
             }
         };
+    }
+
+
+    private static RuleExecutionTrace BuildRuleExecutionTrace(
+        IReadOnlyList<TimelineActivity> orderedActivities,
+        DateTime analysisWindowStartUtc,
+        DateTime analysisWindowEndUtc,
+        DateTime detectedAtUtc,
+        RestPeriod longestRest,
+        long requiredRestMinutes,
+        long missingRestMinutes,
+        string reason)
+    {
+        var longestRestMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
+        var trace = new RuleExecutionTrace
+        {
+            RuleCode = RuleCode,
+            RuleName = "Odpoczynek dzienny",
+            AnalysisWindowStartUtc = analysisWindowStartUtc,
+            AnalysisWindowEndUtc = analysisWindowEndUtc,
+            DetectedAtUtc = detectedAtUtc,
+            IsEstimated = false,
+            Summary = $"W analizowanym oknie 24h najd?u?szy odpoczynek wyni?s? {FormatDuration(longestRest.Duration)}. Wymagane minimum to {FormatDuration(TimeSpan.FromMinutes(requiredRestMinutes))}. Brakuje {FormatDuration(TimeSpan.FromMinutes(missingRestMinutes))}.",
+            Metrics = new Dictionary<string, string>
+            {
+                ["Okno analizy"] = $"{FormatDateTime(analysisWindowStartUtc)} - {FormatDateTime(analysisWindowEndUtc)}",
+                ["Wymagany odpoczynek"] = FormatDuration(TimeSpan.FromMinutes(requiredRestMinutes)),
+                ["Najd?u?szy odpoczynek"] = FormatDuration(longestRest.Duration),
+                ["Brakuje"] = FormatDuration(TimeSpan.FromMinutes(missingRestMinutes)),
+                ["Moment wykrycia"] = FormatDateTime(detectedAtUtc),
+                ["Analiza szacunkowa"] = "Nie"
+            }
+        };
+
+        var stepOrder = 1;
+        AddTraceStep(
+            trace,
+            ref stepOrder,
+            analysisWindowStartUtc,
+            "Start okna analizy 24h dla odpoczynku dziennego.",
+            counterMinutes: 0,
+            isResetPoint: false,
+            isViolationPoint: false,
+            note: "Silnik sprawdza najd?u?szy ci?g?y odpoczynek w tym oknie.");
+
+        var firstDuty = orderedActivities
+            .Where(IsDutyActivity)
+            .Where(x => x.StartUtc < analysisWindowEndUtc && x.EndUtc > analysisWindowStartUtc)
+            .OrderBy(x => x.StartUtc)
+            .FirstOrDefault();
+        if (firstDuty is not null)
+        {
+            AddTraceStep(
+                trace,
+                ref stepOrder,
+                Max(firstDuty.StartUtc, analysisWindowStartUtc),
+                "Rozpocz?cie okresu pracy w analizowanym oknie.",
+                counterMinutes: 0,
+                isResetPoint: false,
+                isViolationPoint: false,
+                note: firstDuty.ActivityType);
+        }
+
+        var longestRestSoFar = TimeSpan.Zero;
+        foreach (var segment in BuildTraceSegments(orderedActivities, analysisWindowStartUtc, analysisWindowEndUtc, longestRest, requiredRestMinutes))
+        {
+            trace.Segments.Add(segment);
+
+            var restCandidateMinutes = segment.RestCandidateMinutes;
+            var isRestSegment = restCandidateMinutes.HasValue;
+            var description = isRestSegment
+                ? $"Dodano odpoczynek {FormatDuration(TimeSpan.FromMinutes(restCandidateMinutes.GetValueOrDefault()))}."
+                : $"Dodano segment aktywno?ci {segment.ActivityType} {FormatDuration(TimeSpan.FromMinutes(segment.DurationMinutes))}.";
+            AddTraceStep(
+                trace,
+                ref stepOrder,
+                segment.EndUtc,
+                description,
+                counterMinutes: segment.RestCandidateMinutes,
+                isResetPoint: segment.IsResetPoint,
+                isViolationPoint: false,
+                note: segment.Note);
+
+            if (isRestSegment && restCandidateMinutes.GetValueOrDefault() > (long)Math.Round(longestRestSoFar.TotalMinutes))
+            {
+                longestRestSoFar = TimeSpan.FromMinutes(restCandidateMinutes.GetValueOrDefault());
+                AddTraceStep(
+                    trace,
+                    ref stepOrder,
+                    segment.EndUtc,
+                    $"Zaktualizowano najd?u?szy odpoczynek do {FormatDuration(longestRestSoFar)}.",
+                    counterMinutes: segment.RestCandidateMinutes,
+                    isResetPoint: segment.IsResetPoint,
+                    isViolationPoint: false,
+                    note: "Najd?u?szy kandydat odpoczynku w bie??cym oknie.");
+            }
+        }
+
+        if (longestRest.Duration >= RegularDailyRest)
+        {
+            AddTraceStep(
+                trace,
+                ref stepOrder,
+                longestRest.EndUtc,
+                "Wykryto odpoczynek spe?niaj?cy regularne minimum 11 godzin.",
+                counterMinutes: longestRestMinutes,
+                isResetPoint: true,
+                isViolationPoint: false,
+                note: "Regularny odpoczynek dzienny spe?nia wymaganie.");
+        }
+        else if (longestRest.Duration >= ReducedDailyRest)
+        {
+            AddTraceStep(
+                trace,
+                ref stepOrder,
+                longestRest.EndUtc,
+                "Wykryto odpoczynek skr?cony minimum 9 godzin, ale kr?tszy ni? regularne 11 godzin.",
+                counterMinutes: longestRestMinutes,
+                isResetPoint: true,
+                isViolationPoint: reason == "ReducedDailyRest",
+                note: "Odpoczynek skr?cony wymaga kontroli limitu skr?ce?.");
+        }
+
+        if (missingRestMinutes > 0)
+        {
+            AddTraceStep(
+                trace,
+                ref stepOrder,
+                detectedAtUtc,
+                "Wykryto naruszenie odpoczynku dziennego.",
+                counterMinutes: longestRestMinutes,
+                isResetPoint: false,
+                isViolationPoint: true,
+                note: $"Brakuje {FormatDuration(TimeSpan.FromMinutes(missingRestMinutes))}.");
+        }
+
+        AddTraceStep(
+            trace,
+            ref stepOrder,
+            detectedAtUtc,
+            "Ko?cowe podsumowanie analizy odpoczynku dziennego.",
+            counterMinutes: longestRestMinutes,
+            isResetPoint: false,
+            isViolationPoint: missingRestMinutes > 0,
+            note: trace.Summary);
+
+        return trace;
+    }
+
+    private static List<RuleExecutionTraceSegment> BuildTraceSegments(
+        IReadOnlyList<TimelineActivity> orderedActivities,
+        DateTime windowStartUtc,
+        DateTime windowEndUtc,
+        RestPeriod longestRest,
+        long requiredRestMinutes)
+    {
+        var segments = new List<RuleExecutionTraceSegment>();
+        var inWindow = orderedActivities
+            .Where(x => x.StartUtc < windowEndUtc && x.EndUtc > windowStartUtc)
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+
+        DateTime? previousEnd = null;
+        foreach (var activity in inWindow)
+        {
+            var clippedStart = Max(activity.StartUtc, windowStartUtc);
+            var clippedEnd = Min(activity.EndUtc, windowEndUtc);
+            if (clippedStart >= clippedEnd)
+            {
+                continue;
+            }
+
+            if (previousEnd.HasValue && previousEnd.Value < clippedStart)
+            {
+                segments.Add(CreateTraceSegment(
+                    previousEnd.Value,
+                    clippedStart,
+                    "REST_GAP",
+                    longestRest,
+                    requiredRestMinutes,
+                    "Realna luka mi?dzy aktywno?ciami traktowana jako odpoczynek."));
+            }
+
+            var activityType = ActivityTypeNormalizer.Normalize(activity.ActivityType);
+            segments.Add(CreateTraceSegment(
+                clippedStart,
+                clippedEnd,
+                activityType,
+                longestRest,
+                requiredRestMinutes,
+                IsRestCompatible(activity)
+                    ? "Zarejestrowany odpoczynek w oknie analizy."
+                    : "Aktywno?? przerywa odpoczynek dzienny."));
+
+            previousEnd = !previousEnd.HasValue || clippedEnd > previousEnd.Value
+                ? clippedEnd
+                : previousEnd;
+        }
+
+        return segments;
+    }
+
+    private static RuleExecutionTraceSegment CreateTraceSegment(
+        DateTime startUtc,
+        DateTime endUtc,
+        string activityType,
+        RestPeriod longestRest,
+        long requiredRestMinutes,
+        string note)
+    {
+        var durationMinutes = (long)Math.Round((endUtc - startUtc).TotalMinutes);
+        var isRest = activityType == ActivityTypeNormalizer.Rest || activityType == "REST_GAP";
+        long? restCandidateMinutes = isRest ? durationMinutes : null;
+        var isLongestRest = isRest && startUtc >= longestRest.StartUtc && endUtc <= longestRest.EndUtc;
+        var isResetPoint = isRest && durationMinutes >= requiredRestMinutes;
+
+        return new RuleExecutionTraceSegment
+        {
+            StartUtc = startUtc,
+            EndUtc = endUtc,
+            ActivityType = activityType,
+            DurationMinutes = durationMinutes,
+            DrivingMinutesAfterSegment = 0,
+            RestCandidateMinutes = restCandidateMinutes,
+            IsResetPoint = isResetPoint,
+            IsViolationPoint = false,
+            Note = isLongestRest
+                ? $"{note} To cz??? najd?u?szego odpoczynku w oknie."
+                : note
+        };
+    }
+
+    private static void AddTraceStep(
+        RuleExecutionTrace trace,
+        ref int order,
+        DateTime? timestampUtc,
+        string description,
+        long? counterMinutes,
+        bool isResetPoint,
+        bool isViolationPoint,
+        string note)
+    {
+        trace.Steps.Add(new RuleExecutionTraceStep
+        {
+            Order = order++,
+            TimestampUtc = timestampUtc,
+            Description = description,
+            CounterMinutes = counterMinutes,
+            IsResetPoint = isResetPoint,
+            IsViolationPoint = isViolationPoint,
+            Note = note
+        });
     }
 
     private static IReadOnlyList<RestPeriod> BuildContinuousRestPeriods(IReadOnlyList<TimelineActivity> ordered)

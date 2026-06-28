@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import TachographTimeline from "../components/tachograph/TachographTimeline";
+import TachographTimeline from "../components/timeline/TachographTimeline";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     getDriverDetails,

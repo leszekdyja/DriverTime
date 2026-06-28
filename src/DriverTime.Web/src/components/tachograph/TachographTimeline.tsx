@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
-import "./TachographTimeline.css";
 
 export type TachographActivity = {
     id: string;
@@ -147,18 +146,18 @@ const hourMarkers = Array.from({ length: 25 }, (_, hour) => hour);
 
 const activityLabels: Record<string, string> = {
     DRIVING: "Jazda",
-    WORK: "Praca",
-    AVAILABILITY: "Dyspozycyjność",
+    WORK: "Inna praca",
+    AVAILABILITY: "Dyspozycyjno\u015b\u0107",
     REST: "Odpoczynek",
-    UNKNOWN: "Nieznane",
+    UNKNOWN: "Brak danych",
 };
 
 const activityLegend = [
-    { type: "DRIVING", label: activityLabels.DRIVING },
-    { type: "WORK", label: activityLabels.WORK },
-    { type: "AVAILABILITY", label: activityLabels.AVAILABILITY },
-    { type: "REST", label: activityLabels.REST },
-    { type: "UNKNOWN", label: activityLabels.UNKNOWN },
+    { type: "DRIVING", label: activityLabels.DRIVING, icon: "\u25b6" },
+    { type: "REST", label: activityLabels.REST, icon: "\u25ae" },
+    { type: "WORK", label: activityLabels.WORK, icon: "\u25c6" },
+    { type: "AVAILABILITY", label: activityLabels.AVAILABILITY, icon: "\u25cc" },
+    { type: "UNKNOWN", label: activityLabels.UNKNOWN, icon: "\u00b7" },
 ];
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -229,6 +228,20 @@ function formatDuration(seconds: number) {
     }
 
     return `${hours} godz. ${minutes} min`;
+}
+
+function buildDaySummary(segments: TimelineSegment[]) {
+    const totals = new Map<string, number>();
+
+    for (const segment of segments) {
+        const kind = getActivityKind(segment.activityType);
+        totals.set(kind, (totals.get(kind) ?? 0) + segment.durationSeconds);
+    }
+
+    return activityLegend.map((item) => ({
+        ...item,
+        seconds: totals.get(item.type) ?? 0,
+    }));
 }
 
 function parseDate(value?: string | null) {
@@ -639,6 +652,7 @@ export default function TachographTimeline({
     const violationMarkers = buildViolationMarkers(violations, day);
     const activeViolation = violationMarkers.find((marker) => marker.id === activeViolationId) ?? null;
     const activeViolationRows = activeViolation ? getViolationDetailRows(activeViolation) : [];
+    const daySummary = buildDaySummary(segments);
 
     useEffect(() => {
         if (!activeViolationId || violationMarkers.some((marker) => marker.id === activeViolationId)) {
@@ -709,7 +723,7 @@ export default function TachographTimeline({
                 <div className="tachograph-legend" aria-label="Legenda aktywności">
                     {activityLegend.map((item) => (
                         <span className="tachograph-legend-item" key={item.type}>
-                            <i className={`tachograph-legend-dot ${getActivityClass(item.type)}`} />
+                            <i className={`tachograph-legend-dot ${getActivityClass(item.type)}`} aria-hidden="true">{item.icon}</i>
                             {item.label}
                         </span>
                     ))}
@@ -789,7 +803,13 @@ export default function TachographTimeline({
                                 tabIndex={0}
                                 aria-label={formatActivityTooltip(segment)}
                                 data-tooltip={formatActivityTooltip(segment)}
-                            />
+                            >
+                                {segment.widthPercent >= 7 && (
+                                    <span className="tachograph-segment-label">
+                                        {formatDuration(segment.durationSeconds)}
+                                    </span>
+                                )}
+                            </span>
                         ))}
                     </div>
 
@@ -878,6 +898,18 @@ export default function TachographTimeline({
                         </span>
                     ))}
                 </div>
+            </div>
+
+            <div className="tachograph-day-summary" aria-label="Podsumowanie dnia">
+                <span>Podsumowanie dnia</span>
+                <dl>
+                    {daySummary.map((item) => (
+                        <div key={item.type}>
+                            <dt><i className={`tachograph-legend-dot ${getActivityClass(item.type)}`} aria-hidden="true">{item.icon}</i>{item.label}</dt>
+                            <dd>{formatDuration(item.seconds)}</dd>
+                        </div>
+                    ))}
+                </dl>
             </div>
         </div>
     );

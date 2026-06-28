@@ -11,6 +11,12 @@ internal static class WeeklyDrivingTimelineHelper
         return GetDrivingByPeriod(timeline, GetIsoWeekStart, periodStart => periodStart.AddDays(7));
     }
 
+    public static IReadOnlyDictionary<DateTime, IReadOnlyList<TimelineActivity>> GetDrivingSegmentsByIsoWeek(
+        IReadOnlyList<TimelineActivity> timeline)
+    {
+        return GetDrivingSegmentsByPeriod(timeline, GetIsoWeekStart, periodStart => periodStart.AddDays(7));
+    }
+
     public static IReadOnlyDictionary<DateTime, TimeSpan> GetDrivingByUtcDay(
         IReadOnlyList<TimelineActivity> timeline)
     {
@@ -36,6 +42,17 @@ internal static class WeeklyDrivingTimelineHelper
     }
 
     private static IReadOnlyDictionary<DateTime, TimeSpan> GetDrivingByPeriod(
+        IReadOnlyList<TimelineActivity> timeline,
+        Func<DateTime, DateTime> getPeriodStart,
+        Func<DateTime, DateTime> getPeriodEnd)
+    {
+        return GetDrivingSegmentsByPeriod(timeline, getPeriodStart, getPeriodEnd)
+            .ToDictionary(
+                x => x.Key,
+                x => x.Value.Aggregate(TimeSpan.Zero, (sum, segment) => sum + segment.Duration));
+    }
+
+    private static IReadOnlyDictionary<DateTime, IReadOnlyList<TimelineActivity>> GetDrivingSegmentsByPeriod(
         IReadOnlyList<TimelineActivity> timeline,
         Func<DateTime, DateTime> getPeriodStart,
         Func<DateTime, DateTime> getPeriodEnd)
@@ -71,8 +88,16 @@ internal static class WeeklyDrivingTimelineHelper
 
         return segmentsByPeriod.ToDictionary(
             x => x.Key,
-            x => MergeDrivingSegments(x.Value)
-                .Aggregate(TimeSpan.Zero, (sum, segment) => sum + (segment.EndUtc - segment.StartUtc)));
+            x => (IReadOnlyList<TimelineActivity>)MergeDrivingSegments(x.Value)
+                .Select(segment => new TimelineActivity
+                {
+                    SourceActivityId = segment.SourceActivityId,
+                    DriverId = segment.DriverId,
+                    ActivityType = ActivityTypeNormalizer.Driving,
+                    StartUtc = segment.StartUtc,
+                    EndUtc = segment.EndUtc
+                })
+                .ToList());
     }
 
     private static bool IsDriving(TimelineActivity activity) =>

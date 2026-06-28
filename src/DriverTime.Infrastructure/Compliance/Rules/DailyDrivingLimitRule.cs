@@ -68,6 +68,9 @@ public class DailyDrivingLimitRule : IComplianceRule
                 0,
                 (long)Math.Round((period.TotalDriving - limit).TotalMinutes));
 
+            var totalDrivingMinutes = (long)Math.Round(period.TotalDriving.TotalMinutes);
+            var limitMinutes = (long)Math.Round(limit.TotalMinutes);
+
             result.Violations.Add(new ComplianceViolationCandidate
             {
                 Code = RuleCode,
@@ -76,12 +79,13 @@ public class DailyDrivingLimitRule : IComplianceRule
                 Description = BuildMessage(period.TotalDriving, exceededExtendedLimit),
                 PeriodStartUtc = period.PeriodStartUtc,
                 PeriodEndUtc = period.PeriodEndUtc,
-                ActualMinutes = (long)Math.Round(period.TotalDriving.TotalMinutes),
-                LimitMinutes = (long)limit.TotalMinutes,
+                ActualMinutes = totalDrivingMinutes,
+                LimitMinutes = limitMinutes,
+                ExecutionTrace = BuildRuleExecutionTrace(period, limit, exceededMinutes, extensionNumber, exceededExtendedLimit),
                 Metadata = new Dictionary<string, object>
                 {
-                    ["totalDrivingMinutes"] = (long)Math.Round(period.TotalDriving.TotalMinutes),
-                    ["limitMinutes"] = (long)Math.Round(limit.TotalMinutes),
+                    ["totalDrivingMinutes"] = totalDrivingMinutes,
+                    ["limitMinutes"] = limitMinutes,
                     ["standardDailyLimitMinutes"] = (long)Math.Round(StandardDailyLimit.TotalMinutes),
                     ["extendedDailyLimitMinutes"] = (long)Math.Round(ExtendedDailyLimit.TotalMinutes),
                     ["dailyRestResetMinutes"] = (long)Math.Round(DailyRestReset.TotalMinutes),
@@ -106,6 +110,111 @@ public class DailyDrivingLimitRule : IComplianceRule
         return result;
     }
 
+
+    private static RuleExecutionTrace BuildRuleExecutionTrace(
+        DailyDrivingSummary period,
+        TimeSpan limit,
+        long exceededMinutes,
+        int extensionNumber,
+        bool exceededExtendedLimit)
+    {
+        var limitMinutes = (long)Math.Round(limit.TotalMinutes);
+        var totalDrivingMinutes = (long)Math.Round(period.TotalDriving.TotalMinutes);
+        var trace = new RuleExecutionTrace
+        {
+            RuleCode = RuleCode,
+            RuleName = "Limit jazdy dziennej",
+            AnalysisWindowStartUtc = period.PeriodStartUtc,
+            AnalysisWindowEndUtc = period.PeriodEndUtc,
+            DetectedAtUtc = period.PeriodEndUtc,
+            IsEstimated = false,
+            Summary = $"W analizowanej dobie kierowcy czas jazdy wyniósł {FormatDuration(period.TotalDriving)}. Limit {FormatDuration(limit)} został przekroczony o {FormatDuration(TimeSpan.FromMinutes(exceededMinutes))}.",
+            Metrics = new Dictionary<string, string>
+            {
+                ["Okno dzienne"] = $"{FormatDateTime(period.PeriodStartUtc)} - {FormatDateTime(period.PeriodEndUtc)}",
+                ["Limit jazdy"] = FormatDuration(limit),
+                ["Czas jazdy"] = FormatDuration(period.TotalDriving),
+                ["Przekroczenie"] = FormatDuration(TimeSpan.FromMinutes(exceededMinutes)),
+                ["Numer wydłużenia w tygodniu"] = extensionNumber.ToString(CultureInfo.InvariantCulture),
+                ["Rodzaj limitu"] = exceededExtendedLimit ? "10 godzin" : "9 godzin"
+            }
+        };
+
+        var order = 1;
+        AddTraceStep(
+            trace,
+            ref order,
+            period.PeriodStartUtc,
+            "Start analizy dziennego limitu jazdy.",
+            counterMinutes: 0,
+            isViolationPoint: false,
+            note: "Okres kierowcy liczony od aktywności do odpoczynku dziennego minimum 9 godzin.");
+
+        var drivingCounter = 0L;
+        foreach (var segment in period.DrivingSegments.OrderBy(x => x.StartUtc).ThenBy(x => x.EndUtc))
+        {
+            var durationMinutes = (long)Math.Round(segment.Duration.TotalMinutes);
+            drivingCounter += durationMinutes;
+            var isViolationPoint = drivingCounter > limitMinutes;
+            var note = isViolationPoint
+                ? "Ten segment powoduje przekroczenie dziennego limitu jazdy."
+                : "Segment jazdy wliczony do dziennej sumy jazdy.";
+
+            trace.Segments.Add(new RuleExecutionTraceSegment
+            {
+                StartUtc = segment.StartUtc,
+                EndUtc = segment.EndUtc,
+                ActivityType = ActivityTypeNormalizer.Driving,
+                DurationMinutes = durationMinutes,
+                DrivingMinutesAfterSegment = drivingCounter,
+                IsViolationPoint = isViolationPoint,
+                Note = note
+            });
+
+            AddTraceStep(
+                trace,
+                ref order,
+                segment.EndUtc,
+                isViolationPoint
+                    ? $"Dodano segment jazdy {FormatDuration(segment.Duration)} i wykryto przekroczenie limitu."
+                    : $"Dodano segment jazdy {FormatDuration(segment.Duration)}.",
+                drivingCounter,
+                isViolationPoint,
+                note);
+        }
+
+        AddTraceStep(
+            trace,
+            ref order,
+            period.PeriodEndUtc,
+            "Końcowe podsumowanie dziennego limitu jazdy.",
+            totalDrivingMinutes,
+            isViolationPoint: true,
+            note: trace.Summary);
+
+        return trace;
+    }
+
+    private static void AddTraceStep(
+        RuleExecutionTrace trace,
+        ref int order,
+        DateTime? timestampUtc,
+        string description,
+        long? counterMinutes,
+        bool isViolationPoint,
+        string note)
+    {
+        trace.Steps.Add(new RuleExecutionTraceStep
+        {
+            Order = order++,
+            TimestampUtc = timestampUtc,
+            Description = description,
+            CounterMinutes = counterMinutes,
+            IsViolationPoint = isViolationPoint,
+            Note = note
+        });
+    }
+
     private static IReadOnlyList<DailyDrivingSummary> BuildDriverDayDrivingPeriods(
         IReadOnlyList<TimelineActivity> timeline)
     {
@@ -119,6 +228,7 @@ public class DailyDrivingLimitRule : IComplianceRule
         DateTime? periodEndUtc = null;
         DateTime? previousEndUtc = null;
         var totalDriving = TimeSpan.Zero;
+        var drivingSegments = new List<TimelineActivity>();
 
         foreach (var activity in ordered)
         {
@@ -126,18 +236,20 @@ public class DailyDrivingLimitRule : IComplianceRule
                 previousEndUtc.HasValue &&
                 activity.StartUtc - previousEndUtc.Value >= DailyRestReset)
             {
-                AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving);
+                AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving, drivingSegments);
                 periodStartUtc = null;
                 periodEndUtc = null;
                 totalDriving = TimeSpan.Zero;
+                drivingSegments = new List<TimelineActivity>();
             }
 
             if (IsDailyRestReset(activity))
             {
-                AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving);
+                AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving, drivingSegments);
                 periodStartUtc = null;
                 periodEndUtc = null;
                 totalDriving = TimeSpan.Zero;
+                drivingSegments = new List<TimelineActivity>();
                 previousEndUtc = Max(previousEndUtc, activity.EndUtc);
                 continue;
             }
@@ -149,10 +261,11 @@ public class DailyDrivingLimitRule : IComplianceRule
             if (IsDriving(activity))
             {
                 totalDriving += activity.Duration;
+                drivingSegments.Add(activity);
             }
         }
 
-        AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving);
+        AddPeriodIfDriving(periods, periodStartUtc, periodEndUtc, totalDriving, drivingSegments);
 
         return periods;
     }
@@ -161,7 +274,8 @@ public class DailyDrivingLimitRule : IComplianceRule
         ICollection<DailyDrivingSummary> periods,
         DateTime? periodStartUtc,
         DateTime? periodEndUtc,
-        TimeSpan totalDriving)
+        TimeSpan totalDriving,
+        IReadOnlyList<TimelineActivity> drivingSegments)
     {
         if (!periodStartUtc.HasValue ||
             !periodEndUtc.HasValue ||
@@ -174,7 +288,8 @@ public class DailyDrivingLimitRule : IComplianceRule
             periodStartUtc.Value,
             periodEndUtc.Value,
             GetIsoWeekStart(periodStartUtc.Value),
-            totalDriving));
+            totalDriving,
+            drivingSegments.ToList()));
     }
 
     private static bool IsDailyRestReset(TimelineActivity activity) =>
@@ -206,12 +321,15 @@ public class DailyDrivingLimitRule : IComplianceRule
         var formattedDuration = FormatDuration(totalDriving);
 
         return exceededExtendedLimit
-            ? $"Dzienny czas jazdy wyniosl {formattedDuration} i przekroczyl limit 10 godzin."
-            : $"Dzienny czas jazdy wyniosl {formattedDuration} i przekroczyl limit dwoch wydluzen do 10 godzin w tygodniu.";
+            ? $"Dzienny czas jazdy wyniósł {formattedDuration} i przekroczy? limit 10 godzin."
+            : $"Dzienny czas jazdy wyniósł {formattedDuration} i przekroczył limit dw?ch wyd?u?e? do 10 godzin w tygodniu.";
     }
 
     private static string FormatDuration(TimeSpan duration) =>
         $"{(int)duration.TotalHours} godz. {duration.Minutes} min";
+
+    private static string FormatDateTime(DateTime value) =>
+        value.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
 
     private static DateTime GetIsoWeekStart(DateTime value)
     {
@@ -230,5 +348,6 @@ public class DailyDrivingLimitRule : IComplianceRule
         DateTime PeriodStartUtc,
         DateTime PeriodEndUtc,
         DateTime WeekStartUtc,
-        TimeSpan TotalDriving);
+        TimeSpan TotalDriving,
+        IReadOnlyList<TimelineActivity> DrivingSegments);
 }

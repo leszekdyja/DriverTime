@@ -1,5 +1,6 @@
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Compliance.DTOs;
+using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
 using DriverTime.Infrastructure.Persistence;
@@ -115,7 +116,8 @@ public class ComplianceEngineService : IComplianceEngineService
                 ActualMinutes = x.ActualMinutes,
                 LimitMinutes = x.LimitMinutes,
                 Metadata = x.Metadata,
-                ExecutionTrace = x.ExecutionTrace
+                ExecutionTrace = x.ExecutionTrace,
+                RuleAnalysis = BuildRuleAnalysis(x)
             })
             .ToList();
 
@@ -147,6 +149,128 @@ public class ComplianceEngineService : IComplianceEngineService
             Timeline = timelineEntries,
             Violations = violations,
             DebugSummary = BuildDebugSummary(visibleTimeline)
+        };
+    }
+
+    internal static ViolationRuleAnalysisDto? BuildRuleAnalysis(ComplianceViolationCandidate violation)
+    {
+        if (violation.ExecutionTrace is null)
+        {
+            return null;
+        }
+
+        var trace = violation.ExecutionTrace;
+        var traceDto = MapTrace(trace);
+        var analysis = new ViolationRuleAnalysisDto
+        {
+            RuleName = trace.RuleName,
+            RuleCode = trace.RuleCode,
+            ViolationDetectedAtUtc = trace.DetectedAtUtc ?? violation.PeriodEndUtc,
+            AnalysisWindowStartUtc = trace.AnalysisWindowStartUtc,
+            AnalysisWindowEndUtc = trace.AnalysisWindowEndUtc,
+            IsEstimated = trace.IsEstimated,
+            BusinessSummary = trace.Summary,
+            ExecutionTrace = traceDto,
+            Steps = traceDto.Steps,
+            Segments = trace.Segments.Select(MapTraceSegment).ToList()
+        };
+
+        if (trace.RuleCode.Equals("CONTINUOUS_DRIVING_BREAK", StringComparison.OrdinalIgnoreCase))
+        {
+            analysis.DrivingLimitMinutes = GetMetadataLong(violation.Metadata, "limitMinutes") ?? violation.LimitMinutes;
+            analysis.RequiredBreakMinutes = GetMetadataLong(violation.Metadata, "requiredBreakMinutes") ?? 45;
+            analysis.ContinuousDrivingMinutes = GetMetadataLong(violation.Metadata, "continuousDrivingMinutes") ?? violation.ActualMinutes;
+            analysis.ExceededMinutes = GetMetadataLong(violation.Metadata, "exceededMinutes") ?? Math.Max(analysis.ContinuousDrivingMinutes - analysis.DrivingLimitMinutes, 0);
+        }
+        else if (trace.RuleCode.Equals("DAILY_REST", StringComparison.OrdinalIgnoreCase))
+        {
+            analysis.RequiredRestMinutes = GetMetadataLong(violation.Metadata, "requiredRestMinutes");
+            analysis.LongestRestMinutes = GetMetadataLong(violation.Metadata, "longestRestMinutes") ?? violation.ActualMinutes;
+            analysis.MissingRestMinutes = GetMetadataLong(violation.Metadata, "missingRestMinutes");
+        }
+        else if (trace.RuleCode.Equals("DAILY_DRIVING_LIMIT", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("DAILY_DRIVING", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("WEEKLY_DRIVING_LIMIT", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("WEEKLY_DRIVING", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("BI_WEEKLY_DRIVING_LIMIT", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("BIWEEKLY_DRIVING_LIMIT", StringComparison.OrdinalIgnoreCase) ||
+            trace.RuleCode.Equals("BIWEEKLY_DRIVING", StringComparison.OrdinalIgnoreCase))
+        {
+            analysis.DrivingLimitMinutes = GetMetadataLong(violation.Metadata, "limitMinutes") ?? violation.LimitMinutes;
+            analysis.ContinuousDrivingMinutes = GetMetadataLong(violation.Metadata, "totalDrivingMinutes") ?? violation.ActualMinutes;
+            analysis.ExceededMinutes = GetMetadataLong(violation.Metadata, "exceededMinutes") ?? Math.Max(analysis.ContinuousDrivingMinutes - analysis.DrivingLimitMinutes, 0);
+        }
+
+        return analysis;
+    }
+
+    private static RuleExecutionTraceDto MapTrace(RuleExecutionTrace trace)
+    {
+        return new RuleExecutionTraceDto
+        {
+            RuleCode = trace.RuleCode,
+            RuleName = trace.RuleName,
+            AnalysisWindowStartUtc = trace.AnalysisWindowStartUtc,
+            AnalysisWindowEndUtc = trace.AnalysisWindowEndUtc,
+            DetectedAtUtc = trace.DetectedAtUtc,
+            IsEstimated = trace.IsEstimated,
+            Summary = trace.Summary,
+            Metrics = trace.Metrics.ToDictionary(x => x.Key, x => x.Value),
+            Steps = trace.Steps.Select(x => new RuleExecutionTraceStepDto
+            {
+                Order = x.Order,
+                TimeUtc = x.TimestampUtc,
+                Description = x.Description,
+                CounterMinutes = x.CounterMinutes,
+                ResetsCounter = x.IsResetPoint,
+                DetectsViolation = x.IsViolationPoint
+            }).ToList(),
+            Segments = trace.Segments.Select(x => new RuleExecutionTraceSegmentDto
+            {
+                StartUtc = x.StartUtc,
+                EndUtc = x.EndUtc,
+                ActivityType = x.ActivityType,
+                DurationMinutes = x.DurationMinutes,
+                DrivingMinutesAfterSegment = x.DrivingMinutesAfterSegment,
+                RestCandidateMinutes = x.RestCandidateMinutes,
+                IsResetPoint = x.IsResetPoint,
+                IsViolationPoint = x.IsViolationPoint,
+                Note = x.Note
+            }).ToList()
+        };
+    }
+
+    private static ViolationRuleAnalysisSegmentDto MapTraceSegment(RuleExecutionTraceSegment segment)
+    {
+        return new ViolationRuleAnalysisSegmentDto
+        {
+            StartUtc = segment.StartUtc,
+            EndUtc = segment.EndUtc,
+            ActivityType = segment.ActivityType,
+            DurationMinutes = segment.DurationMinutes,
+            IncreasesDrivingCounter = segment.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase),
+            ResetsCounter = segment.IsResetPoint,
+            DrivingCounterAfterSegment = segment.DrivingMinutesAfterSegment,
+            CountsAsRest = segment.RestCandidateMinutes.HasValue,
+            RestCandidateMinutes = segment.RestCandidateMinutes
+        };
+    }
+
+    private static long? GetMetadataLong(IReadOnlyDictionary<string, object> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || value is null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            long longValue => longValue,
+            int intValue => intValue,
+            double doubleValue => (long)Math.Round(doubleValue),
+            decimal decimalValue => (long)Math.Round(decimalValue),
+            string text when long.TryParse(text, out var parsed) => parsed,
+            _ => null
         };
     }
 

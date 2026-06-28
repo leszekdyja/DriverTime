@@ -108,6 +108,35 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
+    public void WeeklyDrivingLimitViolation_GeneratesNativeRuleExecutionTrace()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-10T09:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Rest, "2026-06-10T09:00:00Z", "2026-06-12T09:00:00Z")
+        };
+
+        var result = _weeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.AreEqual("WEEKLY_DRIVING_LIMIT", trace.RuleCode);
+        Assert.AreEqual("Limit jazdy tygodniowej", trace.RuleName);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.AreEqual(DateTime.Parse("2026-06-08T00:00:00Z").ToUniversalTime(), trace.AnalysisWindowStartUtc);
+        Assert.AreEqual(DateTime.Parse("2026-06-15T00:00:00Z").ToUniversalTime(), trace.AnalysisWindowEndUtc);
+        Assert.IsTrue(trace.Metrics.ContainsKey("Limit jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Czas jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Przekroczenie"));
+        Assert.IsTrue(trace.Summary.Contains("czas jazdy", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Segments.All(x => x.ActivityType == ActivityTypeNormalizer.Driving));
+        Assert.IsTrue(trace.Segments.Any(x => x.IsViolationPoint));
+        Assert.AreEqual(57 * 60, trace.Segments.Last().DrivingMinutesAfterSegment);
+    }
+
+    [TestMethod]
     public void WeeklyDrivingLimit_IgnoresNonDrivingActivities()
     {
         var driverId = Guid.NewGuid();
@@ -197,6 +226,40 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
+    public void BiWeeklyDrivingLimitViolation_GeneratesNativeRuleExecutionTrace()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T00:00:00Z", "2026-06-10T00:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-15T00:00:00Z", "2026-06-16T19:00:00Z")
+        };
+
+        var result = _biWeeklyRule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.AreEqual("BI_WEEKLY_DRIVING_LIMIT", trace.RuleCode);
+        Assert.AreEqual("Limit jazdy w dw?ch kolejnych tygodniach", trace.RuleName);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.AreEqual(DateTime.Parse("2026-06-08T00:00:00Z").ToUniversalTime(), trace.AnalysisWindowStartUtc);
+        Assert.AreEqual(DateTime.Parse("2026-06-22T00:00:00Z").ToUniversalTime(), trace.AnalysisWindowEndUtc);
+        Assert.IsTrue(trace.Metrics.ContainsKey("Limit jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Czas jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Przekroczenie"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Pierwszy tydzie?"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Drugi tydzie?"));
+        Assert.IsTrue(trace.Summary.Contains("czas jazdy", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Segments.All(x => x.ActivityType == ActivityTypeNormalizer.Driving));
+        Assert.AreEqual(2, trace.Segments.Count);
+        Assert.IsTrue(trace.Segments.Any(x => x.Note.Contains("pierwszym tygodniu", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Segments.Any(x => x.Note.Contains("drugim tygodniu", StringComparison.Ordinal)));
+        Assert.IsTrue(trace.Segments.Any(x => x.IsViolationPoint));
+        Assert.AreEqual(91 * 60, trace.Segments.Last().DrivingMinutesAfterSegment);
+    }
+
+    [TestMethod]
     public void BiWeeklyDrivingLimit_IgnoresNonDrivingActivities()
     {
         var driverId = Guid.NewGuid();
@@ -258,18 +321,31 @@ public class DrivingLimitRuleTests
 
 
     [TestMethod]
-    public void DailyDrivingLimitViolation_DoesNotRequireRuleExecutionTrace()
+    public void DailyDrivingLimitViolation_GeneratesNativeRuleExecutionTrace()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
         {
-            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T18:01:00Z")
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T08:00:00Z", "2026-06-08T12:00:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-06-08T12:00:00Z", "2026-06-08T12:30:00Z"),
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-06-08T12:30:00Z", "2026-06-08T18:31:00Z")
         };
 
         var result = _dailyRule.Evaluate(driverId, timeline);
 
         Assert.AreEqual(1, result.Violations.Count);
-        Assert.IsNull(result.Violations[0].ExecutionTrace);
+        var trace = result.Violations[0].ExecutionTrace;
+        Assert.IsNotNull(trace);
+        Assert.AreEqual("DAILY_DRIVING_LIMIT", trace.RuleCode);
+        Assert.AreEqual("Limit jazdy dziennej", trace.RuleName);
+        Assert.IsFalse(trace.IsEstimated);
+        Assert.IsTrue(trace.Metrics.ContainsKey("Limit jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Czas jazdy"));
+        Assert.IsTrue(trace.Metrics.ContainsKey("Przekroczenie"));
+        Assert.IsTrue(trace.Summary.Contains("czas jazdy", StringComparison.Ordinal));
+        Assert.IsTrue(trace.Segments.All(x => x.ActivityType == ActivityTypeNormalizer.Driving));
+        Assert.IsTrue(trace.Segments.Any(x => x.IsViolationPoint));
+        Assert.AreEqual(601, trace.Segments.Last().DrivingMinutesAfterSegment);
     }
 
     [TestMethod]
