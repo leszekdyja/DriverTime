@@ -529,6 +529,7 @@ function VehicleTachographTimelineSection({
                     activities={activities}
                     days={timelineDays}
                     vehicleUses={vehicleUses}
+                    // TODO: Pass countryEntries when vehicle details API exposes them.
                 />
             )}
         </section>

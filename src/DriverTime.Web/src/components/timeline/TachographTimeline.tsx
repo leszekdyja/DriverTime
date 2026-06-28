@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -142,13 +142,13 @@ const breakResetSeconds = 45 * 60;
 const dailyRestSeconds = 9 * 60 * 60;
 const weeklyRestSeconds = 24 * 60 * 60;
 const regularWeeklyRestSeconds = 45 * 60 * 60;
-const hourLabels = Array.from({ length: 13 }, (_, index) => index * 2);
+const hourLabels = Array.from({ length: 9 }, (_, index) => index * 3);
 const gridHours = Array.from({ length: 25 }, (_, hour) => hour);
 
 const activityMeta: Record<ActivityKind, { label: string; icon: string; className: string }> = {
     DRIVING: { label: "Jazda", icon: "▶", className: "driving" },
     REST: { label: "Odpoczynek", icon: "▮", className: "rest" },
-    WORK: { label: "Inna praca", icon: "◆", className: "work" },
+    WORK: { label: "Praca", icon: "◆", className: "work" },
     AVAILABILITY: { label: "Dyspozycyjność", icon: "◌", className: "availability" },
     UNKNOWN: { label: "Brak danych", icon: "·", className: "unknown" },
 };
@@ -461,20 +461,6 @@ function buildDayTotals(segments: Segment[]) {
     return totals;
 }
 
-function buildNavigatorSegments(rows: Array<{ row: DayRow; segments: Segment[] }>) {
-    const rangeStart = rows[0] ? dayStart(rows[0].row.date) : null;
-    const rangeEnd = rows.at(-1) ? addDays(dayStart(rows.at(-1)!.row.date), 1) : null;
-    if (!rangeStart || !rangeEnd || rangeEnd <= rangeStart) return [];
-    const durationMs = rangeEnd.getTime() - rangeStart.getTime();
-
-    return rows.flatMap(({ segments }) => segments.map((segment) => ({
-        id: segment.key,
-        className: activityMeta[segment.type].className,
-        left: ((segment.start.getTime() - rangeStart.getTime()) / durationMs) * 100,
-        width: Math.max(0.1, ((segment.end.getTime() - segment.start.getTime()) / durationMs) * 100),
-    })));
-}
-
 function calculateDrivingSinceLastBreak(activities: TachographActivity[], selectedSegment: Segment) {
     let counterSeconds = 0;
     const ordered = activities
@@ -535,10 +521,10 @@ export default function TachographTimeline({ activities, day, days, label, count
     const [selectedSegmentKey, setSelectedSegmentKey] = useState<string | null>(null);
     const rows = useMemo(() => buildRows(days, day, activities, violations), [activities, day, days, violations]);
     const rowModels = useMemo(() => rows.map((row) => ({ row, segments: buildSegmentsForDay(activities, row.date, countryEntries, vehicleUses, violations), markers: buildMarkersForDay(row.date, countryEntries, vehicleUses, violations, cardReadings) })), [activities, cardReadings, countryEntries, rows, vehicleUses, violations]);
-    const navigatorSegments = buildNavigatorSegments(rowModels);
+
     const selectedSegment = rowModels.flatMap((model) => model.segments).find((segment) => segment.key === selectedSegmentKey) ?? null;
     const dateRange = rows.length > 1 ? formatRangeLabel(rows) : rows[0]?.label ?? label ?? "";
-    const showNavigator = rows.length > 1 && navigatorSegments.length > 0;
+
 
     if (rows.length === 0) {
         return <section className="tachograph-timeline-pro" aria-label="Oś czasu tachografu"><div className="tachograph-empty">Brak aktywności w wybranym zakresie</div></section>;
@@ -562,7 +548,7 @@ export default function TachographTimeline({ activities, day, days, label, count
                                     <div className="tachograph-day-row" key={row.date}>
                                         <div className="tachograph-day-label"><strong>{row.dayName}</strong><span>{row.shortDate}</span><small>Jazda {formatDuration(drivingSeconds)}</small></div>
                                         <div className="tachograph-day-track">
-                                            <div className="tachograph-grid-lines" aria-hidden="true">{gridHours.map((hour) => <i className={hour % 4 === 0 ? "major" : undefined} key={hour} style={{ left: `${(hour / 24) * 100}%` }} />)}</div>
+                                            <div className="tachograph-grid-lines" aria-hidden="true">{gridHours.map((hour) => <i className={hour % 6 === 0 ? "major" : undefined} key={hour} style={{ left: `${(hour / 24) * 100}%` }} />)}</div>
                                             <div className="tachograph-segments-row">
                                                 {segments.length === 0 && <span className="tachograph-no-data">Brak danych</span>}
                                                 {segments.map((segment) => (
@@ -581,7 +567,7 @@ export default function TachographTimeline({ activities, day, days, label, count
                                             </div>
                                             <div className="tachograph-marker-row">
                                                 {markers.map((marker) => (
-                                                    <button className={`tachograph-pro-marker ${marker.kind}`} key={marker.id} style={{ left: `${marker.left}%` }} title={marker.title} type="button" onClick={() => marker.kind === "violation" && marker.violationId && onViolationClick?.(marker.violationId)}>{marker.label}</button>
+                                                    <button className={`tachograph-pro-marker ${marker.kind}`} key={marker.id} style={{ left: `${marker.left}%` }} title={marker.title} aria-label={marker.title} type="button" onClick={() => marker.kind === "violation" && marker.violationId && onViolationClick?.(marker.violationId)}>{marker.label}</button>
                                                 ))}
                                             </div>
                                         </div>
@@ -621,12 +607,6 @@ export default function TachographTimeline({ activities, day, days, label, count
                     {orderedActivityKinds.map((kind) => <span key={kind}><i className={activityMeta[kind].className}>{activityMeta[kind].icon}</i>{activityMeta[kind].label}</span>)}
                     <span><i className="country">PL</i>Kraj</span><span><i className="vehicle">V</i>Pojazd</span><span><i className="violation">!</i>Naruszenie</span>
                 </div>
-                {showNavigator && (
-                    <div className="tachograph-navigator-block">
-                        <span>Przegląd zakresu</span>
-                        <div className="tachograph-navigator" aria-label="Mini-przegląd zakresu">{navigatorSegments.map((segment) => <span key={segment.id} className={segment.className} style={{ left: `${segment.left}%`, width: `${segment.width}%` }} />)}</div>
-                    </div>
-                )}
             </footer>
         </section>
     );
