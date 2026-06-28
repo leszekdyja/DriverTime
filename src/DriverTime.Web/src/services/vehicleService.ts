@@ -99,6 +99,17 @@ export async function getVehicles(): Promise<Vehicle[]> {
     return response.json() as Promise<Vehicle[]>;
 }
 
+export async function deleteVehicle(id: string): Promise<void> {
+    const response = await apiFetch(`/api/vehicles/${id}`, { method: "DELETE" });
+
+    if (response.status === 404) {
+        throw new Error("Nie znaleziono pojazdu w Twojej firmie.");
+    }
+
+    if (!response.ok) {
+        throw new Error("Nie udało się usunąć pojazdu.");
+    }
+}
 export async function getVehicle(id: string, range?: VehicleDetailsDateRange): Promise<VehicleDetails> {
     const params = new URLSearchParams();
 

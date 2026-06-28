@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
-import { getVehicles, type Vehicle } from "../services/vehicleService";
+import { deleteVehicle, getVehicles, type Vehicle } from "../services/vehicleService";
 import "../styles/drivers.css";
 
 export default function VehiclesPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [message, setMessage] = useState("");
+    const [isMessageError, setIsMessageError] = useState(false);
+    const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const loadVehicles = useCallback(async () => {
         setIsLoading(true);
@@ -27,6 +31,31 @@ export default function VehiclesPage() {
             setIsLoading(false);
         }
     }, []);
+
+    async function confirmDeleteVehicle() {
+        if (!vehicleToDelete) return;
+
+        setIsDeleting(true);
+        setMessage("");
+        setIsMessageError(false);
+
+        try {
+            await deleteVehicle(vehicleToDelete.id);
+            const deletedRegistration = vehicleToDelete.registrationNumber;
+            setVehicleToDelete(null);
+            await loadVehicles();
+            setMessage(`Pojazd ${deletedRegistration} został usunięty. Historia użyć i importów została zachowana.`);
+        } catch (deleteError) {
+            setIsMessageError(true);
+            setMessage(
+                deleteError instanceof Error
+                    ? deleteError.message
+                    : "Wystąpił błąd podczas usuwania pojazdu.",
+            );
+        } finally {
+            setIsDeleting(false);
+        }
+    }
 
     useEffect(() => {
         void loadVehicles();
@@ -51,6 +80,12 @@ export default function VehiclesPage() {
                 {error ? (
                     <p className="drivers-message error" role="alert">
                         {error}
+                    </p>
+                ) : null}
+
+                {message ? (
+                    <p className={`drivers-message${isMessageError ? " error" : " success"}`} role={isMessageError ? "alert" : "status"}>
+                        {message}
                     </p>
                 ) : null}
 
@@ -91,9 +126,18 @@ export default function VehiclesPage() {
                                             )}
                                         </td>
                                         <td>
-                                            <Link className="driver-details-link" to={`/vehicles/${vehicle.id}`}>
-                                                Szczegóły
-                                            </Link>
+                                            <div className="driver-row-actions">
+                                                <Link className="driver-details-link" to={`/vehicles/${vehicle.id}`}>
+                                                    Szczegóły
+                                                </Link>
+                                                <button
+                                                    className="driver-delete-button"
+                                                    type="button"
+                                                    onClick={() => setVehicleToDelete(vehicle)}
+                                                >
+                                                    Usuń
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -102,6 +146,38 @@ export default function VehiclesPage() {
                     </div>
                 ) : null}
             </section>
+
+            {vehicleToDelete && (
+                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => !isDeleting && setVehicleToDelete(null)}>
+                    <section
+                        className="driver-delete-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="vehicle-delete-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h3 id="vehicle-delete-title">Usuń pojazd</h3>
+                        <p>Czy na pewno chcesz usunąć pojazd {vehicleToDelete.registrationNumber}?</p>
+                        <div className="driver-delete-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => setVehicleToDelete(null)}
+                                disabled={isDeleting}
+                            >
+                                Anuluj
+                            </button>
+                            <button
+                                className="danger"
+                                type="button"
+                                onClick={() => void confirmDeleteVehicle()}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? "Usuwanie..." : "Usuń pojazd"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,4 +1,4 @@
-using DriverTime.Application.Interfaces;
+﻿using DriverTime.Application.Interfaces;
 using DriverTime.Application.Vehicles;
 using DriverTime.Application.Vehicles.DTOs;
 using DriverTime.Domain.Entities;
@@ -41,6 +41,43 @@ public class VehiclesController : ControllerBase
         return Ok(vehicles);
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var vehicle = await _dbContext.Vehicles
+            .Where(x => x.Id == id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (vehicle is null || !VehicleDeletionPolicy.CanDelete(vehicle, _currentUser.CompanyId))
+        {
+            return NotFound();
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var linkedActivities = await _dbContext.DriverActivities
+            .Where(x => EF.Property<Guid?>(x, "VehicleId") == id)
+            .ToListAsync(cancellationToken);
+
+        foreach (var activity in linkedActivities)
+        {
+            _dbContext.Entry(activity).Property("VehicleId").CurrentValue = null;
+        }
+
+        _dbContext.Vehicles.Remove(vehicle);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<VehicleDetailsDto>> GetById(
         Guid id,
@@ -56,7 +93,7 @@ public class VehiclesController : ControllerBase
         var dateRange = VehicleDetailsDateRange.Create(from, to);
         if (!dateRange.IsValid)
         {
-            return BadRequest("Parametr from musi być wcześniejszy lub równy to.");
+            return BadRequest("Parametr from musi byÄ‡ wczeĹ›niejszy lub rĂłwny to.");
         }
 
         var vehicle = await BuildCompanyVehiclesQuery()
@@ -193,7 +230,7 @@ public class VehiclesController : ControllerBase
         var dateRange = VehicleDetailsDateRange.Create(from, to);
         if (!dateRange.IsValid)
         {
-            return BadRequest("Parametr from musi być wcześniejszy lub równy to.");
+            return BadRequest("Parametr from musi byÄ‡ wczeĹ›niejszy lub rĂłwny to.");
         }
 
         var vehicle = await BuildCompanyVehiclesQuery()
@@ -501,3 +538,4 @@ public class VehiclesController : ControllerBase
         public int? DistanceKm { get; set; }
     }
 }
+
