@@ -125,6 +125,7 @@ type Segment = {
     countryStart: string | null;
     countryEnd: string | null;
     distanceKm: number | null;
+    distanceSource: "activity" | "vehicleUse" | null;
     startOdometerKm: number | null;
     endOdometerKm: number | null;
     averageSpeedKmh: number | null;
@@ -251,9 +252,6 @@ function getActivityDistanceKm(activity: TachographActivity) {
     return null;
 }
 
-function isSameInstant(left: Date | null, right: Date | null) {
-    return Boolean(left && right && left.getTime() === right.getTime());
-}
 
 function getVehicleUseRegistration(vehicleUse: TachographVehicleUse) {
     return vehicleUse.registrationNumber ?? vehicleUse.vehicleRegistration ?? vehicleUse.vehicleRegistrationNumber ?? vehicleUse.vehicle_registration ?? "Pojazd";
@@ -292,14 +290,13 @@ function getVehicleUseDistanceKm(vehicleUse: TachographVehicleUse | null) {
     return null;
 }
 
-function canUseVehicleUseDistanceForSegment(segmentStart: Date, segmentEnd: Date, activityStart: Date, activityEnd: Date, vehicleUse: TachographVehicleUse | null) {
+function canUseVehicleUseDistanceForSegment(segmentStart: Date, segmentEnd: Date, vehicleUse: TachographVehicleUse | null) {
     if (!vehicleUse) return false;
 
     const vehicleUseStart = getVehicleUseStart(vehicleUse);
-    const vehicleUseEnd = getVehicleUseEnd(vehicleUse);
-    const isWholeActivitySegment = segmentStart.getTime() === activityStart.getTime() && segmentEnd.getTime() === activityEnd.getTime();
+    const vehicleUseEnd = getVehicleUseEnd(vehicleUse) ?? segmentEnd;
 
-    return isWholeActivitySegment && isSameInstant(vehicleUseStart, activityStart) && isSameInstant(vehicleUseEnd, activityEnd);
+    return Boolean(vehicleUseStart && overlaps(segmentStart, segmentEnd, vehicleUseStart, vehicleUseEnd));
 }
 
 function formatVehicleMarkerLabel(registration: string) {
@@ -466,13 +463,15 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
             const type = getActivityKind(activity.activityType);
             const vehicleRegistration = getVehicleRegistration(activity);
             const vehicleUse = findVehicleUse(segmentStart, segmentEnd, vehicleUses, vehicleRegistration);
-            const canUseVehicleUseDistance = type === "DRIVING" && canUseVehicleUseDistanceForSegment(segmentStart, segmentEnd, activityStart, activityEnd, vehicleUse);
-            const startOdometerKm = type === "DRIVING" ? getActivityStartOdometer(activity) ?? (canUseVehicleUseDistance ? vehicleUse?.startOdometerKm ?? null : null) : null;
-            const endOdometerKm = type === "DRIVING" ? getActivityEndOdometer(activity) ?? (canUseVehicleUseDistance ? vehicleUse?.endOdometerKm ?? null : null) : null;
+            const canUseVehicleUseDistance = type === "DRIVING" && canUseVehicleUseDistanceForSegment(segmentStart, segmentEnd, vehicleUse);
             const isWholeActivitySegment = segmentStart.getTime() === activityStart.getTime() && segmentEnd.getTime() === activityEnd.getTime();
             const activityDistanceKm = type === "DRIVING" && isWholeActivitySegment ? getActivityDistanceKm(activity) : null;
-            const distanceKm = activityDistanceKm ?? (canUseVehicleUseDistance ? getVehicleUseDistanceKm(vehicleUse) : null);
-            const averageSpeedKmh = type === "DRIVING" ? activity.averageSpeedKmh ?? (distanceKm && seconds > 0 ? distanceKm / (seconds / 3600) : null) : null;
+            const vehicleUseDistanceKm = canUseVehicleUseDistance ? getVehicleUseDistanceKm(vehicleUse) : null;
+            const distanceKm = activityDistanceKm ?? vehicleUseDistanceKm;
+            const distanceSource = activityDistanceKm !== null && activityDistanceKm !== undefined ? "activity" : vehicleUseDistanceKm !== null && vehicleUseDistanceKm !== undefined ? "vehicleUse" : null;
+            const startOdometerKm = type === "DRIVING" ? getActivityStartOdometer(activity) ?? (distanceSource === "vehicleUse" ? vehicleUse?.startOdometerKm ?? null : null) : null;
+            const endOdometerKm = type === "DRIVING" ? getActivityEndOdometer(activity) ?? (distanceSource === "vehicleUse" ? vehicleUse?.endOdometerKm ?? null : null) : null;
+            const averageSpeedKmh = type === "DRIVING" ? activity.averageSpeedKmh ?? (activityDistanceKm && seconds > 0 ? activityDistanceKm / (seconds / 3600) : null) : null;
             const countryStart = activity.countryStart ?? activity.startCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "start");
             const countryEnd = activity.countryEnd ?? activity.endCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "end");
 
@@ -493,6 +492,7 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
                 countryStart,
                 countryEnd,
                 distanceKm,
+                distanceSource,
                 startOdometerKm,
                 endOdometerKm,
                 averageSpeedKmh,
@@ -604,9 +604,18 @@ function getSegmentRows(segment: Segment) {
     if (segment.countryEnd) rows.push(["Kraj zakończenia", segment.countryEnd]);
     if (segment.cardNumber) rows.push(["Numer karty", segment.cardNumber]);
     if (segment.type === "DRIVING") {
-        rows.push(["Odległość", segment.distanceKm !== null && segment.distanceKm !== undefined ? `${formatNumber(segment.distanceKm, 1)} km` : "Brak danych"]);
-        if (segment.startOdometerKm !== null && segment.startOdometerKm !== undefined) rows.push(["Licznik początkowy", `${formatNumber(segment.startOdometerKm)} km`]);
-        if (segment.endOdometerKm !== null && segment.endOdometerKm !== undefined) rows.push(["Licznik końcowy", `${formatNumber(segment.endOdometerKm)} km`]);
+        if (segment.distanceSource === "activity") {
+            rows.push(["Odległość segmentu", segment.distanceKm !== null && segment.distanceKm !== undefined ? `${formatNumber(segment.distanceKm, 1)} km` : "Brak danych"]);
+            if (segment.startOdometerKm !== null && segment.startOdometerKm !== undefined) rows.push(["Licznik początkowy segmentu", `${formatNumber(segment.startOdometerKm)} km`]);
+            if (segment.endOdometerKm !== null && segment.endOdometerKm !== undefined) rows.push(["Licznik końcowy segmentu", `${formatNumber(segment.endOdometerKm)} km`]);
+        } else if (segment.distanceSource === "vehicleUse") {
+            rows.push(["Dystans pojazdu w tym użyciu", segment.distanceKm !== null && segment.distanceKm !== undefined ? `${formatNumber(segment.distanceKm, 1)} km` : "Brak danych"]);
+            if (segment.startOdometerKm !== null && segment.startOdometerKm !== undefined) rows.push(["Licznik początkowy użycia pojazdu", `${formatNumber(segment.startOdometerKm)} km`]);
+            if (segment.endOdometerKm !== null && segment.endOdometerKm !== undefined) rows.push(["Licznik końcowy użycia pojazdu", `${formatNumber(segment.endOdometerKm)} km`]);
+            rows.push(["Informacja", "Dystans pochodzi z użycia pojazdu, nie z pojedynczej aktywności."]);
+        } else {
+            rows.push(["Dystans", "Brak danych"]);
+        }
     }
     if (segment.type === "DRIVING" && segment.averageSpeedKmh !== null && segment.averageSpeedKmh !== undefined && Number.isFinite(segment.averageSpeedKmh)) rows.push(["Średnia prędkość", `${formatNumber(segment.averageSpeedKmh, 1)} km/h`]);
 
