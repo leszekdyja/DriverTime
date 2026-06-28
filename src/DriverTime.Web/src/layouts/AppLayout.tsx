@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+﻿import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 
 import { useAuth } from "../auth/useAuth";
@@ -11,11 +11,12 @@ const navigationItems = [
     { to: "/drivers", label: "Kierowcy", icon: "drivers" },
     { to: "/card-reader", label: "Odczyt karty", icon: "cardReader" },
     { to: "/vehicles", label: "Pojazdy", icon: "vehicles" },
+    { to: "/planning", label: "Planowanie", icon: "planning" },
     { to: "/downloads", label: "Odczyty", icon: "downloads" },
     { to: "/reports", label: "Raporty", icon: "reports" },
     { to: "/violations", label: "Naruszenia", icon: "alerts" },
     { to: "/imports", label: "Importy DDD", icon: "imports" },
-    { to: "/import-monitoring", label: "Monitoring importów", icon: "monitoring" },
+    { to: "/import-monitoring", label: "Monitoring importĂłw", icon: "monitoring" },
     { to: "/company-settings", label: "Ustawienia firmy", icon: "company" },
     { to: "/account", label: "Moje konto", icon: "account" },
 ];
@@ -94,7 +95,7 @@ export default function AppLayout() {
                             className="theme-toggle"
                             type="button"
                             onClick={toggleTheme}
-                            aria-label={isDark ? "Przełącz na jasny motyw" : "Przełącz na ciemny motyw"}
+                            aria-label={isDark ? "PrzeĹ‚Ä…cz na jasny motyw" : "PrzeĹ‚Ä…cz na ciemny motyw"}
                             aria-pressed={isDark}
                         >
                             <span className="theme-toggle-track" aria-hidden="true">
@@ -102,7 +103,7 @@ export default function AppLayout() {
                             </span>
                             <span>{isDark ? "Ciemny" : "Jasny"}</span>
                         </button>
-                        <Link className="profile-placeholder" aria-label="Profil użytkownika" to="/account">
+                        <Link className="profile-placeholder" aria-label="Profil uĹĽytkownika" to="/account">
                             <span className="profile-avatar">{initials}</span>
                             <div>
                                 <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
@@ -129,6 +130,7 @@ function NavigationIcon({ name }: { name: string }) {
         drivers: <><circle cx="9" cy="8" r="4" /><path d="M3 21v-2a6 6 0 0 1 12 0v2" /><path d="M16 4.5a4 4 0 0 1 0 7" /><path d="M18 15a6 6 0 0 1 3 5" /></>,
         cardReader: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 9h5" /><path d="M7 13h10" /><path d="M16 9h1" /></>,
         vehicles: <><path d="M5 17h14" /><path d="M7 17v2" /><path d="M17 17v2" /><path d="M6 13l2-5h8l2 5" /><path d="M4 13h16v4H4z" /><circle cx="8" cy="15" r="1" /><circle cx="16" cy="15" r="1" /></>,
+        planning: <><path d="M4 5h16" /><path d="M4 12h16" /><path d="M4 19h16" /><path d="M8 3v18" /><path d="M16 3v18" /></>,
         downloads: <><path d="M12 3v10" /><path d="m8 9 4 4 4-4" /><path d="M5 21h14" /><path d="M7 17h10" /></>,
         reports: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /><path d="M2 21h22" /></>,
         alerts: <><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v5" /><path d="M12 17.5h.01" /></>,
@@ -140,3 +142,4 @@ function NavigationIcon({ name }: { name: string }) {
 
     return <span className="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24">{paths[name]}</svg></span>;
 }
+

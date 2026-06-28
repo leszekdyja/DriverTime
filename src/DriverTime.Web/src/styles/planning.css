@@ -1,0 +1,146 @@
+﻿.planning-page {
+    max-width: 1480px;
+}
+
+.planning-page > .drivers-message {
+    margin-top: 18px;
+}
+
+.planning-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(340px, 0.85fr);
+    gap: 22px;
+    margin-top: 28px;
+    align-items: start;
+}
+
+.planning-panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.planning-table {
+    min-width: 900px;
+}
+
+.planning-primary-button,
+.planning-secondary-button,
+.planning-link-button {
+    min-height: 40px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.planning-primary-button {
+    border: 0;
+    background: var(--color-primary);
+    color: white;
+}
+
+.planning-primary-button:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+}
+
+.planning-secondary-button,
+.planning-link-button {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.planning-link-button {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.planning-link-button:hover,
+.planning-secondary-button:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+}
+
+.planning-form-panel {
+    gap: 18px;
+}
+
+.planning-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.planning-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.planning-form textarea {
+    min-height: 96px;
+    resize: vertical;
+    padding: 9px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+    font: inherit;
+}
+
+.planning-form textarea:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+.planning-form-actions button.planning-secondary-button {
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.planning-details-box {
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-muted);
+}
+
+.planning-details-box h4 {
+    margin: 0 0 10px;
+}
+
+.planning-details-box p {
+    margin: 6px 0;
+    color: var(--color-text);
+}
+
+@media (max-width: 1180px) {
+    .planning-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .planning-panel-heading,
+    .planning-form-row {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+    }
+
+    .planning-panel-heading .driver-row-actions,
+    .planning-form-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .planning-primary-button,
+    .planning-secondary-button,
+    .planning-link-button,
+    .planning-form-actions button {
+        width: 100%;
+    }
+}

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+﻿import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
@@ -18,6 +18,7 @@ import ImportMonitoringPage from "./pages/ImportMonitoringPage";
 import ImportsPage from "./pages/ImportsPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import PlanningPage from "./pages/PlanningPage";
 import ReportsPage from "./pages/ReportsPage";
 import VehicleDetailsPage from "./pages/VehicleDetailsPage";
 import VehiclesPage from "./pages/VehiclesPage";
@@ -43,6 +44,7 @@ export default function App() {
                                 <Route path="card-reader" element={<CardReaderPage />} />
                                 <Route path="downloads" element={<DownloadsPage />} />
                                 <Route path="vehicles" element={<VehiclesPage />} />
+                                <Route path="planning" element={<PlanningPage />} />
                                 <Route path="vehicles/:vehicleId" element={<VehicleDetailsPage />} />
                                 <Route path="reports" element={<ReportsPage />} />
                                 <Route path="violations" element={<ViolationsPage />} />
@@ -57,3 +59,4 @@ export default function App() {
         </ThemeProvider>
     );
 }
+

@@ -40,6 +40,12 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<CardReadSession> CardReadSessions => Set<CardReadSession>();
 
+    public DbSet<PlanningDuty> PlanningDuties => Set<PlanningDuty>();
+
+    public DbSet<PlanningDutyLine> PlanningDutyLines => Set<PlanningDutyLine>();
+
+    public DbSet<PlanningDutyStop> PlanningDutyStops => Set<PlanningDutyStop>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -273,6 +279,58 @@ public class DriverTimeDbContext : DbContext
                 .HasMaxLength(8000);
         });
 
+
+        modelBuilder.Entity<PlanningDuty>(entity =>
+        {
+            entity.ToTable("PlanningDuties");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DutyNumber, x.ValidFrom });
+
+            entity.Property(x => x.DutyNumber).HasMaxLength(50);
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.VehicleRequirement).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.SourceFileName).HasMaxLength(500);
+            entity.Property(x => x.DistanceKm).HasPrecision(10, 2);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.PlanningDuties)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Lines)
+                .WithOne(x => x.PlanningDuty)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Stops)
+                .WithOne(x => x.PlanningDuty)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningDutyLine>(entity =>
+        {
+            entity.ToTable("PlanningDutyLines");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.PlanningDutyId);
+
+            entity.Property(x => x.LineCode).HasMaxLength(50);
+            entity.Property(x => x.Variant).HasMaxLength(100);
+            entity.Property(x => x.DistanceKm).HasPrecision(10, 2);
+        });
+
+        modelBuilder.Entity<PlanningDutyStop>(entity =>
+        {
+            entity.ToTable("PlanningDutyStops");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PlanningDutyId, x.Sequence });
+
+            entity.Property(x => x.StopName).HasMaxLength(200);
+            entity.Property(x => x.TripGroup).HasMaxLength(100);
+            entity.Property(x => x.LineCode).HasMaxLength(50);
+            entity.Property(x => x.Km).HasPrecision(10, 2);
+        });
         modelBuilder.Entity<CardReadSession>(entity =>
         {
             entity.ToTable("CardReadSessions");
@@ -303,3 +361,4 @@ public class DriverTimeDbContext : DbContext
         });
     }
 }
+

@@ -1,4 +1,4 @@
-using DriverTime.Domain.Entities;
+﻿using DriverTime.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace DriverTime.Infrastructure.Persistence;
@@ -17,4 +17,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<VehicleUse> VehicleUses => Set<VehicleUse>();
 
     public DbSet<CountryEntry> CountryEntries => Set<CountryEntry>();
+
+    public DbSet<PlanningDuty> PlanningDuties => Set<PlanningDuty>();
+
+    public DbSet<PlanningDutyLine> PlanningDutyLines => Set<PlanningDutyLine>();
+
+    public DbSet<PlanningDutyStop> PlanningDutyStops => Set<PlanningDutyStop>();
 }

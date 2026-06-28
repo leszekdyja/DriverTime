@@ -1,8 +1,9 @@
-using DriverTime.Application.Companies.Services;
+﻿using DriverTime.Application.Companies.Services;
 using DriverTime.Application.CardReader;
 using DriverTime.Application.Compliance;
 using DriverTime.Application.Downloads;
 using DriverTime.Application.Interfaces;
+using DriverTime.Application.Planning.Services;
 using DriverTime.Infrastructure.BackgroundJobs;
 using DriverTime.Infrastructure.Compliance;
 using DriverTime.Infrastructure.Compliance.Rules;
@@ -49,6 +50,8 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverService, DriverService>();
 
+        services.AddScoped<IPlanningDutyService, PlanningDutyService>();
+
         services.AddScoped<IDashboardService, DashboardService>();
 
         services.AddScoped<IDownloadScheduleService, DownloadScheduleService>();
@@ -92,3 +95,4 @@ public static class DependencyInjection
         return services;
     }
 }
+

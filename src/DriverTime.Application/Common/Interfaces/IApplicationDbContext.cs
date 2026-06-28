@@ -1,4 +1,4 @@
-using DriverTime.Domain.Entities;
+﻿using DriverTime.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace DriverTime.Application.Common.Interfaces;
@@ -27,5 +27,12 @@ public interface IApplicationDbContext
 
     DbSet<AuditLog> AuditLogs { get; }
 
+    DbSet<PlanningDuty> PlanningDuties { get; }
+
+    DbSet<PlanningDutyLine> PlanningDutyLines { get; }
+
+    DbSet<PlanningDutyStop> PlanningDutyStops { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+

@@ -1,4 +1,4 @@
-using DriverTime.Domain.Common;
+﻿using DriverTime.Domain.Common;
 
 namespace DriverTime.Domain.Entities;
 
@@ -27,7 +27,10 @@ public class Company : BaseEntity
 
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
 
+    public ICollection<PlanningDuty> PlanningDuties { get; set; } = new List<PlanningDuty>();
+
     public ICollection<ImportFile> ImportFiles { get; set; } = new List<ImportFile>();
 
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }
+
