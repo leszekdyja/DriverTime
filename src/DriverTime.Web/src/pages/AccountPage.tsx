@@ -29,6 +29,7 @@ function formatRole(role?: string) {
 
 export default function AccountPage() {
     const [profile, setProfile] = useState<AccountProfile>(emptyProfile);
+    const [lastSavedEmail, setLastSavedEmail] = useState("");
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -42,7 +43,9 @@ export default function AccountPage() {
     useEffect(() => {
         async function loadProfile() {
             try {
-                setProfile(await getAccountProfile());
+                const loadedProfile = await getAccountProfile();
+                setProfile(loadedProfile);
+                setLastSavedEmail(loadedProfile.email.trim().toLowerCase());
             } catch (error) {
                 setLoadError(error instanceof Error ? error.message : "Nie udało się pobrać profilu.");
             } finally {
@@ -75,9 +78,16 @@ export default function AccountPage() {
         setProfileMessage({ type: "", text: "" });
 
         try {
+            const emailChanged = normalized.email !== lastSavedEmail;
             const saved = await updateAccountProfile(normalized);
             setProfile(saved);
-            setProfileMessage({ type: "success", text: "Profil został zapisany." });
+            setLastSavedEmail(saved.email.trim().toLowerCase());
+            setProfileMessage({
+                type: "success",
+                text: emailChanged
+                    ? "Adres e-mail został zmieniony. Od następnego logowania używaj nowego adresu e-mail."
+                    : "Profil został zapisany.",
+            });
             window.dispatchEvent(new CustomEvent("drivertime:profile-updated", { detail: saved }));
         } catch (error) {
             setProfileMessage({

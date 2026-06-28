@@ -47,6 +47,11 @@ export type VehicleDetails = Vehicle & {
     activities: VehicleActivity[];
 };
 
+export type VehicleDetailsDateRange = {
+    from?: string;
+    to?: string;
+};
+
 export type VehicleDailyUsage = {
     date: string;
     usesCount: number;
@@ -91,8 +96,19 @@ export async function getVehicles(): Promise<Vehicle[]> {
     return response.json() as Promise<Vehicle[]>;
 }
 
-export async function getVehicle(id: string): Promise<VehicleDetails> {
-    const response = await apiFetch(`/api/vehicles/${id}`);
+export async function getVehicle(id: string, range?: VehicleDetailsDateRange): Promise<VehicleDetails> {
+    const params = new URLSearchParams();
+
+    if (range?.from) {
+        params.set("from", range.from);
+    }
+
+    if (range?.to) {
+        params.set("to", range.to);
+    }
+
+    const query = params.toString();
+    const response = await apiFetch(`/api/vehicles/${id}${query ? `?${query}` : ""}`);
 
     if (response.status === 404) {
         throw new Error("Nie znaleziono pojazdu.");
@@ -105,8 +121,19 @@ export async function getVehicle(id: string): Promise<VehicleDetails> {
     return response.json() as Promise<VehicleDetails>;
 }
 
-export async function getVehicleAnalytics(id: string): Promise<VehicleAnalytics> {
-    const response = await apiFetch(`/api/vehicles/${id}/analytics`);
+export async function getVehicleAnalytics(id: string, range?: VehicleDetailsDateRange): Promise<VehicleAnalytics> {
+    const params = new URLSearchParams();
+
+    if (range?.from) {
+        params.set("from", range.from);
+    }
+
+    if (range?.to) {
+        params.set("to", range.to);
+    }
+
+    const query = params.toString();
+    const response = await apiFetch(`/api/vehicles/${id}/analytics${query ? `?${query}` : ""}`);
 
     if (response.status === 404) {
         throw new Error("Nie znaleziono analityki pojazdu.");

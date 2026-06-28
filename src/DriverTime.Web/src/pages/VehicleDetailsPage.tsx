@@ -55,6 +55,9 @@ const chartDayFormatter = new Intl.DateTimeFormat("pl-PL", {
     month: "2-digit",
 });
 
+const vehicleTimelineRangeOptions = [7, 28, 56, 90] as const;
+type VehicleTimelineRangeDays = typeof vehicleTimelineRangeOptions[number];
+
 
 function formatDate(value: string | null) {
     if (!value) return "Brak danych";
@@ -122,6 +125,16 @@ function addDays(date: Date, days: number) {
 }
 
 
+function getVehicleDetailsRange(rangeDays: VehicleTimelineRangeDays) {
+    const today = getUtcDayStart(new Date());
+    const from = addDays(today, -(rangeDays - 1));
+
+    return {
+        from: toUtcDayKey(from),
+        to: toUtcDayKey(today),
+    };
+}
+
 function buildTimelineDays(activities: VehicleActivity[]): TimelineDay[] {
     const days = new Map<string, Date>();
 
@@ -164,6 +177,7 @@ export default function VehicleDetailsPage() {
     const [error, setError] = useState("");
     const [analyticsError, setAnalyticsError] = useState("");
     const [downloadError, setDownloadError] = useState("");
+    const [timelineRangeDays, setTimelineRangeDays] = useState<VehicleTimelineRangeDays>(56);
 
     const chartData = useMemo(
         () => analytics?.dailyUsageLast30Days.map((item) => ({
@@ -174,9 +188,11 @@ export default function VehicleDetailsPage() {
         [analytics],
     );
 
+    const timelineActivities = details?.activities ?? [];
+
     const timelineDays = useMemo(
-        () => buildTimelineDays(details?.activities ?? []),
-        [details?.activities],
+        () => buildTimelineDays(timelineActivities),
+        [timelineActivities],
     );
 
     useEffect(() => {
@@ -191,7 +207,7 @@ export default function VehicleDetailsPage() {
             setError("");
 
             try {
-                setDetails(await getVehicle(vehicleId));
+                setDetails(await getVehicle(vehicleId, getVehicleDetailsRange(timelineRangeDays)));
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
@@ -204,7 +220,7 @@ export default function VehicleDetailsPage() {
         }
 
         void loadDetails();
-    }, [vehicleId]);
+    }, [vehicleId, timelineRangeDays]);
 
     useEffect(() => {
         async function loadAnalytics() {
@@ -320,7 +336,13 @@ export default function VehicleDetailsPage() {
                         isLoading={isDownloadLoading}
                     />
 
-                    <VehicleTachographTimelineSection activities={details.activities} timelineDays={timelineDays} vehicleUses={details.vehicleUses} />
+                    <VehicleTachographTimelineSection
+                        activities={timelineActivities}
+                        timelineDays={timelineDays}
+                        vehicleUses={details.vehicleUses}
+                        rangeDays={timelineRangeDays}
+                        onRangeDaysChange={setTimelineRangeDays}
+                    />
 
                     <VehicleAnalyticsSection
                         analytics={analytics}
@@ -467,10 +489,14 @@ function VehicleTachographTimelineSection({
     activities,
     timelineDays,
     vehicleUses,
+    rangeDays,
+    onRangeDaysChange,
 }: {
     activities: VehicleActivity[];
     timelineDays: TimelineDay[];
     vehicleUses: VehicleUseHistory[];
+    rangeDays: VehicleTimelineRangeDays;
+    onRangeDaysChange: (rangeDays: VehicleTimelineRangeDays) => void;
 }) {
     return (
         <section className="driver-details-section tachograph-section">
@@ -478,6 +504,18 @@ function VehicleTachographTimelineSection({
                 <div>
                     <h3>Wykres tachografowy pojazdu</h3>
                     <p>Dzienny widok 00:00-24:00 z aktywności kierowców powiązanych z użyciem pojazdu.</p>
+                </div>
+                <div className="timeline-range-control" aria-label="Zakres osi czasu pojazdu">
+                    {vehicleTimelineRangeOptions.map((option) => (
+                        <button
+                            className={option === rangeDays ? "active" : undefined}
+                            key={option}
+                            type="button"
+                            onClick={() => onRangeDaysChange(option)}
+                        >
+                            {option} dni
+                        </button>
+                    ))}
                 </div>
             </div>
 

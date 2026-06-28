@@ -36,6 +36,8 @@ const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     timeZone: "UTC",
 });
 
+const tachographDefaultDays = 7;
+
 
 
 type TimelineDay = {
@@ -124,10 +126,10 @@ function buildTimelineActivityRange(activities: { startUtc: string; endUtc: stri
         return null;
     }
 
-    const firstStart = new Date(Math.min(...validRanges.map((activity) => activity.start.getTime())));
     const lastEnd = new Date(Math.max(...validRanges.map((activity) => activity.end.getTime())));
-    const rangeStart = getUtcDayStart(firstStart);
-    const rangeEnd = addDays(getUtcDayStart(lastEnd), 1);
+    const lastVisibleDay = getUtcDayStart(new Date(lastEnd.getTime() - 1));
+    const rangeEnd = addDays(lastVisibleDay, 1);
+    const rangeStart = addDays(rangeEnd, -tachographDefaultDays);
 
     return {
         from: rangeStart.toISOString(),
@@ -198,34 +200,33 @@ function DailyRestViolationDetails({ violation }: { violation: DriverViolation }
 }
 
 function buildTimelineDays(activities: TimelineSourceActivity[]): TimelineDay[] {
-    const days = new Map<string, Date>();
+    const validRanges = activities
+        .map((activity) => ({
+            start: new Date(activity.startUtc),
+            end: new Date(activity.endUtc),
+        }))
+        .filter(({ start, end }) =>
+            !Number.isNaN(start.getTime()) &&
+            !Number.isNaN(end.getTime()) &&
+            end > start,
+        );
 
-    for (const activity of activities) {
-        const activityStart = new Date(activity.startUtc);
-        const activityEnd = new Date(activity.endUtc);
-
-        if (
-            Number.isNaN(activityStart.getTime()) ||
-            Number.isNaN(activityEnd.getTime()) ||
-            activityEnd <= activityStart
-        ) {
-            continue;
-        }
-
-        let dayCursor = getUtcDayStart(activityStart);
-
-        while (dayCursor < activityEnd) {
-            days.set(toUtcDayKey(dayCursor), dayCursor);
-            dayCursor = addDays(dayCursor, 1);
-        }
+    if (validRanges.length === 0) {
+        return [];
     }
 
-    return Array.from(days.entries())
-        .map(([date, dayStart]) => ({
-            date,
+    const lastEnd = new Date(Math.max(...validRanges.map((activity) => activity.end.getTime())));
+    const lastVisibleDay = getUtcDayStart(new Date(lastEnd.getTime() - 1));
+    const firstVisibleDay = addDays(lastVisibleDay, -(tachographDefaultDays - 1));
+
+    return Array.from({ length: tachographDefaultDays }, (_, index) => {
+        const dayStart = addDays(firstVisibleDay, index);
+
+        return {
+            date: toUtcDayKey(dayStart),
             label: dayFormatter.format(dayStart),
-        }))
-        .sort((left, right) => right.date.localeCompare(left.date));
+        };
+    });
 }
 
 export default function DriverDetailsPage() {
@@ -451,7 +452,7 @@ export default function DriverDetailsPage() {
                         <div className="daily-activity-heading">
                             <div>
                                 <h3>Wykres tachografowy</h3>
-                                <p>Nowy widok dzienny 00:00-24:00 z godzinową skalą i tooltipami segmentów.</p>
+                                <p>Ostatnie 7 dni aktywności w widoku 00:00-24:00, z godzinową skalą i analizą segmentów.</p>
                             </div>
                         </div>
 

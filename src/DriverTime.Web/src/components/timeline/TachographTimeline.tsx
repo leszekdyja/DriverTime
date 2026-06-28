@@ -266,6 +266,26 @@ function formatNumber(value: number, fractionDigits = 0) {
     return new Intl.NumberFormat("pl-PL", { maximumFractionDigits: fractionDigits }).format(value);
 }
 
+function formatRangeLabel(rows: DayRow[]) {
+    const firstRow = rows[0];
+    const lastRow = rows.at(-1);
+
+    if (!firstRow || !lastRow) return "";
+
+    const firstDate = dayStart(firstRow.date);
+    const lastDate = dayStart(lastRow.date);
+    const sameMonth =
+        firstDate.getUTCFullYear() === lastDate.getUTCFullYear() &&
+        firstDate.getUTCMonth() === lastDate.getUTCMonth();
+
+    if (sameMonth) {
+        const monthAndYear = fullDateFormatter.format(lastDate).replace(/^\d+\s+/, "");
+        return `${firstDate.getUTCDate()}?${lastDate.getUTCDate()} ${monthAndYear}`;
+    }
+
+    return `${fullDateFormatter.format(firstDate)} – ${fullDateFormatter.format(lastDate)}`;
+}
+
 function buildRows(propsDays: TachographTimelineDay[] | undefined, day: string | undefined, activities: TachographActivity[], violations: TachographViolation[]) {
     const map = new Map<string, string | undefined>();
 
@@ -357,8 +377,8 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
             const type = getActivityKind(activity.activityType);
             const vehicleRegistration = getVehicleRegistration(activity);
             const vehicleUse = findVehicleUse(segmentStart, segmentEnd, vehicleUses, vehicleRegistration);
-            const distanceKm = activity.distanceKm ?? vehicleUse?.distanceKm ?? null;
-            const averageSpeedKmh = activity.averageSpeedKmh ?? (distanceKm && seconds > 0 ? distanceKm / (seconds / 3600) : null);
+            const distanceKm = type === "DRIVING" ? activity.distanceKm ?? null : null;
+            const averageSpeedKmh = type === "DRIVING" ? activity.averageSpeedKmh ?? (distanceKm && seconds > 0 ? distanceKm / (seconds / 3600) : null) : null;
             const countryStart = activity.countryStart ?? activity.startCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "start");
             const countryEnd = activity.countryEnd ?? activity.endCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "end");
 
@@ -494,8 +514,8 @@ function getSegmentRows(segment: Segment) {
     if (segment.countryStart) rows.push(["Kraj rozpoczęcia", segment.countryStart]);
     if (segment.countryEnd) rows.push(["Kraj zakończenia", segment.countryEnd]);
     if (segment.cardNumber) rows.push(["Numer karty", segment.cardNumber]);
-    if (segment.distanceKm !== null && segment.distanceKm !== undefined) rows.push(["Odległość", `${formatNumber(segment.distanceKm, 1)} km`]);
-    if (segment.averageSpeedKmh !== null && segment.averageSpeedKmh !== undefined && Number.isFinite(segment.averageSpeedKmh)) rows.push(["Średnia prędkość", `${formatNumber(segment.averageSpeedKmh, 1)} km/h`]);
+    if (segment.type === "DRIVING" && segment.distanceKm !== null && segment.distanceKm !== undefined) rows.push(["Odległość", `${formatNumber(segment.distanceKm, 1)} km`]);
+    if (segment.type === "DRIVING" && segment.averageSpeedKmh !== null && segment.averageSpeedKmh !== undefined && Number.isFinite(segment.averageSpeedKmh)) rows.push(["Średnia prędkość", `${formatNumber(segment.averageSpeedKmh, 1)} km/h`]);
 
     return rows;
 }
@@ -517,7 +537,8 @@ export default function TachographTimeline({ activities, day, days, label, count
     const rowModels = useMemo(() => rows.map((row) => ({ row, segments: buildSegmentsForDay(activities, row.date, countryEntries, vehicleUses, violations), markers: buildMarkersForDay(row.date, countryEntries, vehicleUses, violations, cardReadings) })), [activities, cardReadings, countryEntries, rows, vehicleUses, violations]);
     const navigatorSegments = buildNavigatorSegments(rowModels);
     const selectedSegment = rowModels.flatMap((model) => model.segments).find((segment) => segment.key === selectedSegmentKey) ?? null;
-    const dateRange = rows.length > 1 ? `${rows[0]?.shortDate ?? ""} - ${rows.at(-1)?.shortDate ?? ""}` : rows[0]?.label ?? label ?? "";
+    const dateRange = rows.length > 1 ? formatRangeLabel(rows) : rows[0]?.label ?? label ?? "";
+    const showNavigator = rows.length > 1 && navigatorSegments.length > 0;
 
     if (rows.length === 0) {
         return <section className="tachograph-timeline-pro" aria-label="Oś czasu tachografu"><div className="tachograph-empty">Brak aktywności w wybranym zakresie</div></section>;
@@ -600,7 +621,12 @@ export default function TachographTimeline({ activities, day, days, label, count
                     {orderedActivityKinds.map((kind) => <span key={kind}><i className={activityMeta[kind].className}>{activityMeta[kind].icon}</i>{activityMeta[kind].label}</span>)}
                     <span><i className="country">PL</i>Kraj</span><span><i className="vehicle">V</i>Pojazd</span><span><i className="violation">!</i>Naruszenie</span>
                 </div>
-                <div className="tachograph-navigator" aria-label="Mini-przegląd zakresu">{navigatorSegments.map((segment) => <span key={segment.id} className={segment.className} style={{ left: `${segment.left}%`, width: `${segment.width}%` }} />)}</div>
+                {showNavigator && (
+                    <div className="tachograph-navigator-block">
+                        <span>Przegląd zakresu</span>
+                        <div className="tachograph-navigator" aria-label="Mini-przegląd zakresu">{navigatorSegments.map((segment) => <span key={segment.id} className={segment.className} style={{ left: `${segment.left}%`, width: `${segment.width}%` }} />)}</div>
+                    </div>
+                )}
             </footer>
         </section>
     );

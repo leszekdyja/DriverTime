@@ -43,11 +43,19 @@ public class VehiclesController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<VehicleDetailsDto>> GetById(
         Guid id,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
         CancellationToken cancellationToken)
     {
         if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
         {
             return Unauthorized();
+        }
+
+        var dateRange = VehicleDetailsDateRange.Create(from, to);
+        if (!dateRange.IsValid)
+        {
+            return BadRequest("Parametr from musi być wcześniejszy lub równy to.");
         }
 
         var vehicle = await BuildCompanyVehiclesQuery()
@@ -60,7 +68,9 @@ public class VehiclesController : ControllerBase
         }
 
         var normalizedRegistration = NormalizeVehicleRegistration(vehicle.RegistrationNumber);
-        var vehicleUses = BuildVehicleUsesQuery(normalizedRegistration);
+        var vehicleUses = BuildVehicleUsesQuery(normalizedRegistration, dateRange);
+        var rangeFromUtc = dateRange.FromUtc;
+        var rangeToExclusiveUtc = dateRange.ToExclusiveUtc;
 
         var details = new VehicleDetailsDto
         {
@@ -69,7 +79,9 @@ public class VehiclesController : ControllerBase
             Vin = vehicle.Vin,
             Active = vehicle.Active,
             LastActivityAtUtc = await vehicleUses
-                .Select(x => (DateTime?)x.EndUtc)
+                .Select(x => (DateTime?)(rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
+                    ? rangeToExclusiveUtc.Value
+                    : x.EndUtc))
                 .MaxAsync(cancellationToken),
             DddImportsCount = await vehicleUses
                 .Select(x => x.DddFileId)
@@ -88,8 +100,12 @@ public class VehiclesController : ControllerBase
                         ? string.Empty
                         : FormatDriverName(x.DddFile.Driver.FirstName, x.DddFile.Driver.LastName),
                     RegistrationNumber = x.RegistrationNumber,
-                    StartUtc = x.StartUtc,
-                    EndUtc = x.EndUtc
+                    StartUtc = rangeFromUtc.HasValue && x.StartUtc < rangeFromUtc.Value
+                        ? rangeFromUtc.Value
+                        : x.StartUtc,
+                    EndUtc = rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
+                        ? rangeToExclusiveUtc.Value
+                        : x.EndUtc
                 })
                 .ToListAsync(cancellationToken),
             Drivers = await vehicleUses
@@ -107,15 +123,19 @@ public class VehiclesController : ControllerBase
                     FirstName = group.Key.FirstName,
                     LastName = group.Key.LastName,
                     CardNumber = group.Key.CardNumber,
-                    FirstUsedAtUtc = group.Min(x => x.StartUtc),
-                    LastUsedAtUtc = group.Max(x => x.EndUtc),
+                    FirstUsedAtUtc = group.Min(x => rangeFromUtc.HasValue && x.StartUtc < rangeFromUtc.Value
+                        ? rangeFromUtc.Value
+                        : x.StartUtc),
+                    LastUsedAtUtc = group.Max(x => rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
+                        ? rangeToExclusiveUtc.Value
+                        : x.EndUtc),
                     UsageCount = group.Count()
                 })
                 .OrderByDescending(x => x.LastUsedAtUtc)
                 .ToListAsync(cancellationToken)
         };
 
-        details.Activities = await BuildVehicleActivitiesQuery(normalizedRegistration)
+        details.Activities = await BuildVehicleActivitiesQuery(normalizedRegistration, dateRange)
             .OrderByDescending(x => x.StartUtc)
             .Select(x => new VehicleActivityDto
             {
@@ -135,11 +155,19 @@ public class VehiclesController : ControllerBase
     [HttpGet("{id:guid}/analytics")]
     public async Task<ActionResult<VehicleAnalyticsDto>> GetAnalytics(
         Guid id,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
         CancellationToken cancellationToken)
     {
         if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
         {
             return Unauthorized();
+        }
+
+        var dateRange = VehicleDetailsDateRange.Create(from, to);
+        if (!dateRange.IsValid)
+        {
+            return BadRequest("Parametr from musi być wcześniejszy lub równy to.");
         }
 
         var vehicle = await BuildCompanyVehiclesQuery()
@@ -156,7 +184,10 @@ public class VehiclesController : ControllerBase
         var last7DaysStart = nowUtc.AddDays(-7);
         var last30DaysStart = nowUtc.Date.AddDays(-29);
 
-        var vehicleUses = await BuildVehicleUsesQuery(normalizedRegistration)
+        var rangeFromUtc = dateRange.FromUtc;
+        var rangeToExclusiveUtc = dateRange.ToExclusiveUtc;
+
+        var vehicleUses = await BuildVehicleUsesQuery(normalizedRegistration, dateRange)
             .Select(x => new VehicleUseAnalyticsSource
             {
                 DddFileId = x.DddFileId,
@@ -164,8 +195,12 @@ public class VehiclesController : ControllerBase
                 DriverFirstName = x.DddFile.Driver == null ? string.Empty : x.DddFile.Driver.FirstName,
                 DriverLastName = x.DddFile.Driver == null ? string.Empty : x.DddFile.Driver.LastName,
                 DriverCardNumber = x.DddFile.Driver == null ? string.Empty : x.DddFile.Driver.CardNumber,
-                StartUtc = x.StartUtc,
-                EndUtc = x.EndUtc
+                StartUtc = rangeFromUtc.HasValue && x.StartUtc < rangeFromUtc.Value
+                    ? rangeFromUtc.Value
+                    : x.StartUtc,
+                EndUtc = rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
+                    ? rangeToExclusiveUtc.Value
+                    : x.EndUtc
             })
             .ToListAsync(cancellationToken);
 
@@ -254,12 +289,14 @@ public class VehiclesController : ControllerBase
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5);
     }
 
-    private IQueryable<VehicleUse> BuildVehicleUsesQuery(string normalizedRegistration)
+    private IQueryable<VehicleUse> BuildVehicleUsesQuery(
+        string normalizedRegistration,
+        VehicleDetailsDateRange? dateRange = null)
     {
         var nowUtc = DateTime.UtcNow;
         var latestAllowedUtc = nowUtc.AddDays(1);
 
-        return _dbContext.VehicleUses
+        var query = _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
@@ -272,26 +309,28 @@ public class VehiclesController : ControllerBase
                 && EF.Functions.Like(
                     normalizedRegistration,
                     "%" + x.RegistrationNumber.Replace(" ", "").ToUpper()));
+
+        if (dateRange?.FromUtc is DateTime fromUtc)
+        {
+            query = query.Where(x => x.EndUtc > fromUtc);
+        }
+
+        if (dateRange?.ToExclusiveUtc is DateTime toExclusiveUtc)
+        {
+            query = query.Where(x => x.StartUtc < toExclusiveUtc);
+        }
+
+        return query;
     }
 
-    private IQueryable<VehicleActivitySource> BuildVehicleActivitiesQuery(string normalizedRegistration)
+    private IQueryable<VehicleActivitySource> BuildVehicleActivitiesQuery(
+        string normalizedRegistration,
+        VehicleDetailsDateRange? dateRange = null)
     {
-        var nowUtc = DateTime.UtcNow;
-        var latestAllowedUtc = nowUtc.AddDays(1);
+        var rangeFromUtc = dateRange?.FromUtc;
+        var rangeToExclusiveUtc = dateRange?.ToExclusiveUtc;
 
-        return _dbContext.VehicleUses
-            .AsNoTracking()
-            .Where(x =>
-                x.DddFile.CompanyId == _currentUser.CompanyId
-                && x.StartUtc >= VehicleUseDateValidator.MinimumStartUtc
-                && x.EndUtc > x.StartUtc
-                && x.StartUtc <= latestAllowedUtc
-                && x.EndUtc <= latestAllowedUtc
-                && x.RegistrationNumber != null
-                && x.RegistrationNumber.Replace(" ", "").Length >= 5
-                && EF.Functions.Like(
-                    normalizedRegistration,
-                    "%" + x.RegistrationNumber.Replace(" ", "").ToUpper()))
+        var query = BuildVehicleUsesQuery(normalizedRegistration, dateRange)
             .Join(
                 _dbContext.DriverActivities.AsNoTracking(),
                 vehicleUse => vehicleUse.DddFileId,
@@ -300,6 +339,29 @@ public class VehiclesController : ControllerBase
             .Where(x =>
                 x.activity.StartUtc < x.vehicleUse.EndUtc
                 && x.activity.EndUtc > x.vehicleUse.StartUtc)
+            .Select(x => new
+            {
+                x.vehicleUse,
+                x.activity,
+                StartUtc = x.activity.StartUtc < x.vehicleUse.StartUtc
+                    ? x.vehicleUse.StartUtc
+                    : x.activity.StartUtc,
+                EndUtc = x.activity.EndUtc > x.vehicleUse.EndUtc
+                    ? x.vehicleUse.EndUtc
+                    : x.activity.EndUtc
+            });
+
+        if (rangeFromUtc.HasValue)
+        {
+            query = query.Where(x => x.EndUtc > rangeFromUtc.Value);
+        }
+
+        if (rangeToExclusiveUtc.HasValue)
+        {
+            query = query.Where(x => x.StartUtc < rangeToExclusiveUtc.Value);
+        }
+
+        return query
             .Select(x => new VehicleActivitySource
             {
                 ActivityId = x.activity.Id,
@@ -309,12 +371,12 @@ public class VehiclesController : ControllerBase
                     ? null
                     : FormatDriverName(x.vehicleUse.DddFile.Driver.FirstName, x.vehicleUse.DddFile.Driver.LastName),
                 ActivityType = x.activity.ActivityType,
-                StartUtc = x.activity.StartUtc < x.vehicleUse.StartUtc
-                    ? x.vehicleUse.StartUtc
-                    : x.activity.StartUtc,
-                EndUtc = x.activity.EndUtc > x.vehicleUse.EndUtc
-                    ? x.vehicleUse.EndUtc
-                    : x.activity.EndUtc
+                StartUtc = rangeFromUtc.HasValue && x.StartUtc < rangeFromUtc.Value
+                    ? rangeFromUtc.Value
+                    : x.StartUtc,
+                EndUtc = rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
+                    ? rangeToExclusiveUtc.Value
+                    : x.EndUtc
             });
     }
 

@@ -846,7 +846,7 @@
 .dispatcher-assistant-primary-action span,
 .dispatcher-assistant-secondary-actions > span,
 .dispatcher-assistant-next-steps > span {
-    color: var(--color-muted);
+    color: var(--color-text);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -1355,7 +1355,7 @@
 }
 
 .rule-analysis-metrics dt {
-    color: #64748b;
+    color: #475569;
     font-size: 12px;
     font-weight: 700;
 }
@@ -1417,6 +1417,11 @@
 
 :root[data-theme="dark"] .rule-analysis-metrics dd {
     color: #f8fafc;
+}
+
+:root[data-theme="dark"] .rule-analysis-metrics dt,
+:root[data-theme="dark"] .rule-analysis-heading span {
+    color: #dbeafe;
 }
 
 :root[data-theme="dark"] .rule-analysis-table th,
@@ -1486,7 +1491,7 @@
 .rule-analysis-steps em {
     display: inline-flex;
     margin-right: 0.5rem;
-    color: #64748b;
+    color: #475569;
     font-size: 0.78rem;
     font-style: normal;
 }
@@ -1507,5 +1512,15 @@
 
 :root[data-theme="dark"] .rule-analysis-steps small,
 :root[data-theme="dark"] .rule-analysis-steps em {
-    color: #cbd5e1;
+    color: #dbeafe;
+}
+
+:root[data-theme="dark"] .dispatcher-assistant-statusbar span:not(.dispatcher-assistant-icon),
+:root[data-theme="dark"] .dispatcher-assistant-reason span,
+:root[data-theme="dark"] .dispatcher-assistant-kpi span,
+:root[data-theme="dark"] .dispatcher-event-context > span,
+:root[data-theme="dark"] .dispatcher-assistant-primary-action span,
+:root[data-theme="dark"] .dispatcher-assistant-secondary-actions > span,
+:root[data-theme="dark"] .dispatcher-assistant-next-steps > span {
+    color: #e2e8f0;
 }
