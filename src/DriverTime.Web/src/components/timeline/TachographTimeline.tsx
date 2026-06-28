@@ -12,6 +12,12 @@ export type TachographActivity = {
     vehicleRegistrationNumber?: string | null;
     registrationNumber?: string | null;
     vehicle?: string | null;
+    driverId?: string | null;
+    driverName?: string | null;
+    driverFirstName?: string | null;
+    driverLastName?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
     driverCardNumber?: string | null;
     cardNumber?: string | null;
     distanceKm?: number | null;
@@ -110,6 +116,7 @@ type Segment = {
     width: number;
     seconds: number;
     vehicleRegistration: string | null;
+    driverName: string | null;
     cardNumber: string | null;
     countryStart: string | null;
     countryEnd: string | null;
@@ -194,6 +201,17 @@ function getVehicleRegistration(activity: TachographActivity) {
 
 function getCardNumber(activity: TachographActivity) {
     return activity.driverCardNumber ?? activity.cardNumber ?? null;
+}
+
+function getDriverName(activity: TachographActivity) {
+    const directName = activity.driverName?.trim();
+    if (directName) return directName;
+
+    const firstName = (activity.driverFirstName ?? activity.firstName ?? "").trim();
+    const lastName = (activity.driverLastName ?? activity.lastName ?? "").trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
+
+    return fullName || null;
 }
 
 function getVehicleUseRegistration(vehicleUse: TachographVehicleUse) {
@@ -356,6 +374,7 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
                 width: Math.max(0.18, percentFor(segmentEnd, start) - percentFor(segmentStart, start)),
                 seconds,
                 vehicleRegistration: vehicleRegistration ?? (vehicleUse ? getVehicleUseRegistration(vehicleUse) : null),
+                driverName: getDriverName(activity),
                 cardNumber: getCardNumber(activity),
                 countryStart,
                 countryEnd,
