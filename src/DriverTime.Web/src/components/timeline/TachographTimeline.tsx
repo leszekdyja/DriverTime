@@ -21,6 +21,10 @@ export type TachographActivity = {
     driverCardNumber?: string | null;
     cardNumber?: string | null;
     distanceKm?: number | null;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
+    odometerStart?: number | null;
+    odometerEnd?: number | null;
     averageSpeedKmh?: number | null;
     countryStart?: string | null;
     countryEnd?: string | null;
@@ -121,6 +125,8 @@ type Segment = {
     countryStart: string | null;
     countryEnd: string | null;
     distanceKm: number | null;
+    startOdometerKm: number | null;
+    endOdometerKm: number | null;
     averageSpeedKmh: number | null;
     vehicleUse: TachographVehicleUse | null;
     overlappingViolation: TachographViolation | null;
@@ -214,8 +220,91 @@ function getDriverName(activity: TachographActivity) {
     return fullName || null;
 }
 
+function getActivityStartOdometer(activity: TachographActivity) {
+    return activity.startOdometerKm ?? activity.odometerStart ?? null;
+}
+
+function getActivityEndOdometer(activity: TachographActivity) {
+    return activity.endOdometerKm ?? activity.odometerEnd ?? null;
+}
+
+function getActivityDistanceKm(activity: TachographActivity) {
+    if (activity.distanceKm !== null && activity.distanceKm !== undefined && Number.isFinite(activity.distanceKm)) {
+        return activity.distanceKm;
+    }
+
+    const startOdometer = getActivityStartOdometer(activity);
+    const endOdometer = getActivityEndOdometer(activity);
+
+    if (
+        startOdometer !== null &&
+        startOdometer !== undefined &&
+        endOdometer !== null &&
+        endOdometer !== undefined &&
+        Number.isFinite(startOdometer) &&
+        Number.isFinite(endOdometer) &&
+        endOdometer >= startOdometer
+    ) {
+        return endOdometer - startOdometer;
+    }
+
+    return null;
+}
+
+function isSameInstant(left: Date | null, right: Date | null) {
+    return Boolean(left && right && left.getTime() === right.getTime());
+}
+
 function getVehicleUseRegistration(vehicleUse: TachographVehicleUse) {
     return vehicleUse.registrationNumber ?? vehicleUse.vehicleRegistration ?? vehicleUse.vehicleRegistrationNumber ?? vehicleUse.vehicle_registration ?? "Pojazd";
+}
+
+function getVehicleUseStart(vehicleUse: TachographVehicleUse | null) {
+    return vehicleUse ? parseDate(vehicleUse.startUtc ?? vehicleUse.start) : null;
+}
+
+function getVehicleUseEnd(vehicleUse: TachographVehicleUse | null) {
+    return vehicleUse ? parseDate(vehicleUse.endUtc ?? vehicleUse.end) : null;
+}
+
+function getVehicleUseDistanceKm(vehicleUse: TachographVehicleUse | null) {
+    if (!vehicleUse) return null;
+
+    if (vehicleUse.distanceKm !== null && vehicleUse.distanceKm !== undefined && Number.isFinite(vehicleUse.distanceKm)) {
+        return vehicleUse.distanceKm;
+    }
+
+    const startOdometer = vehicleUse.startOdometerKm;
+    const endOdometer = vehicleUse.endOdometerKm;
+
+    if (
+        startOdometer !== null &&
+        startOdometer !== undefined &&
+        endOdometer !== null &&
+        endOdometer !== undefined &&
+        Number.isFinite(startOdometer) &&
+        Number.isFinite(endOdometer) &&
+        endOdometer >= startOdometer
+    ) {
+        return endOdometer - startOdometer;
+    }
+
+    return null;
+}
+
+function canUseVehicleUseDistanceForSegment(segmentStart: Date, segmentEnd: Date, activityStart: Date, activityEnd: Date, vehicleUse: TachographVehicleUse | null) {
+    if (!vehicleUse) return false;
+
+    const vehicleUseStart = getVehicleUseStart(vehicleUse);
+    const vehicleUseEnd = getVehicleUseEnd(vehicleUse);
+    const isWholeActivitySegment = segmentStart.getTime() === activityStart.getTime() && segmentEnd.getTime() === activityEnd.getTime();
+
+    return isWholeActivitySegment && isSameInstant(vehicleUseStart, activityStart) && isSameInstant(vehicleUseEnd, activityEnd);
+}
+
+function formatVehicleMarkerLabel(registration: string) {
+    const normalized = registration.replace(/\s+/g, "").toUpperCase();
+    return normalized.length <= 8 ? normalized : `${normalized.slice(0, 8)}…`;
 }
 
 function getCountryTimestamp(entry: TachographCountryEntry) {
@@ -377,7 +466,12 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
             const type = getActivityKind(activity.activityType);
             const vehicleRegistration = getVehicleRegistration(activity);
             const vehicleUse = findVehicleUse(segmentStart, segmentEnd, vehicleUses, vehicleRegistration);
-            const distanceKm = type === "DRIVING" ? activity.distanceKm ?? null : null;
+            const canUseVehicleUseDistance = type === "DRIVING" && canUseVehicleUseDistanceForSegment(segmentStart, segmentEnd, activityStart, activityEnd, vehicleUse);
+            const startOdometerKm = type === "DRIVING" ? getActivityStartOdometer(activity) ?? (canUseVehicleUseDistance ? vehicleUse?.startOdometerKm ?? null : null) : null;
+            const endOdometerKm = type === "DRIVING" ? getActivityEndOdometer(activity) ?? (canUseVehicleUseDistance ? vehicleUse?.endOdometerKm ?? null : null) : null;
+            const isWholeActivitySegment = segmentStart.getTime() === activityStart.getTime() && segmentEnd.getTime() === activityEnd.getTime();
+            const activityDistanceKm = type === "DRIVING" && isWholeActivitySegment ? getActivityDistanceKm(activity) : null;
+            const distanceKm = activityDistanceKm ?? (canUseVehicleUseDistance ? getVehicleUseDistanceKm(vehicleUse) : null);
             const averageSpeedKmh = type === "DRIVING" ? activity.averageSpeedKmh ?? (distanceKm && seconds > 0 ? distanceKm / (seconds / 3600) : null) : null;
             const countryStart = activity.countryStart ?? activity.startCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "start");
             const countryEnd = activity.countryEnd ?? activity.endCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "end");
@@ -399,6 +493,8 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string, coun
                 countryStart,
                 countryEnd,
                 distanceKm,
+                startOdometerKm,
+                endOdometerKm,
                 averageSpeedKmh,
                 vehicleUse,
                 overlappingViolation: findOverlappingViolation(segmentStart, segmentEnd, violations),
@@ -424,7 +520,14 @@ function buildMarkersForDay(day: string, countryEntries: TachographCountryEntry[
         const timestamp = parseDate(vehicleUse.startUtc ?? vehicleUse.start);
         if (!timestamp || timestamp < start || timestamp >= end) continue;
         const registration = getVehicleUseRegistration(vehicleUse);
-        markers.push({ id: vehicleUse.id ?? `vehicle-${registration}-${timestamp.toISOString()}`, kind: "vehicle", left: clampPercent(percentFor(timestamp, start)), label: registration, title: `Pojazd: ${registration}\nStart: ${dateTimeFormatter.format(timestamp)}` });
+        const endTime = getVehicleUseEnd(vehicleUse);
+        markers.push({
+            id: vehicleUse.id ?? `vehicle-${registration}-${timestamp.toISOString()}`,
+            kind: "vehicle",
+            left: clampPercent(percentFor(timestamp, start)),
+            label: `V ${formatVehicleMarkerLabel(registration)}`,
+            title: `Pojazd: ${registration}\nStart: ${dateTimeFormatter.format(timestamp)}${endTime ? `\nKoniec: ${dateTimeFormatter.format(endTime)}` : ""}`,
+        });
     }
 
     for (const reading of cardReadings) {
@@ -500,7 +603,11 @@ function getSegmentRows(segment: Segment) {
     if (segment.countryStart) rows.push(["Kraj rozpoczęcia", segment.countryStart]);
     if (segment.countryEnd) rows.push(["Kraj zakończenia", segment.countryEnd]);
     if (segment.cardNumber) rows.push(["Numer karty", segment.cardNumber]);
-    if (segment.type === "DRIVING" && segment.distanceKm !== null && segment.distanceKm !== undefined) rows.push(["Odległość", `${formatNumber(segment.distanceKm, 1)} km`]);
+    if (segment.type === "DRIVING") {
+        rows.push(["Odległość", segment.distanceKm !== null && segment.distanceKm !== undefined ? `${formatNumber(segment.distanceKm, 1)} km` : "Brak danych"]);
+        if (segment.startOdometerKm !== null && segment.startOdometerKm !== undefined) rows.push(["Licznik początkowy", `${formatNumber(segment.startOdometerKm)} km`]);
+        if (segment.endOdometerKm !== null && segment.endOdometerKm !== undefined) rows.push(["Licznik końcowy", `${formatNumber(segment.endOdometerKm)} km`]);
+    }
     if (segment.type === "DRIVING" && segment.averageSpeedKmh !== null && segment.averageSpeedKmh !== undefined && Number.isFinite(segment.averageSpeedKmh)) rows.push(["Średnia prędkość", `${formatNumber(segment.averageSpeedKmh, 1)} km/h`]);
 
     return rows;

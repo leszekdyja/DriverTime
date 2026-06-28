@@ -1,4 +1,4 @@
-﻿import { apiFetch } from "./apiClient";
+import { apiFetch } from "./apiClient";
 
 export type DriverActivity = {
     id: string;
@@ -13,6 +13,9 @@ export type DriverActivity = {
     vehicleRegistration?: string;
     vehicleRegistrationNumber?: string;
     vehicle?: string;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
+    distanceKm?: number | null;
 };
 
 export async function getDriverActivitiesByCard(
