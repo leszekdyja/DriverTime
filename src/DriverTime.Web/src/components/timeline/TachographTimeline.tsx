@@ -488,6 +488,8 @@ function getSegmentRows(segment: Segment) {
         ["Typ aktywności", segment.label],
     ];
 
+    rows.push(["Kierowca", segment.driverName || "Brak danych"]);
+
     if (segment.vehicleRegistration) rows.push(["Pojazd", segment.vehicleRegistration]);
     if (segment.countryStart) rows.push(["Kraj rozpoczęcia", segment.countryStart]);
     if (segment.countryEnd) rows.push(["Kraj zakończenia", segment.countryEnd]);
@@ -603,3 +605,4 @@ export default function TachographTimeline({ activities, day, days, label, count
         </section>
     );
 }
+
