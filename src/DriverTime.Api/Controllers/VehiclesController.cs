@@ -1,4 +1,5 @@
 using DriverTime.Application.Interfaces;
+using DriverTime.Application.Vehicles;
 using DriverTime.Application.Vehicles.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
@@ -135,19 +136,44 @@ public class VehiclesController : ControllerBase
                 .ToListAsync(cancellationToken)
         };
 
-        details.Activities = await BuildVehicleActivitiesQuery(normalizedRegistration, dateRange)
+        var activitySources = await BuildVehicleActivitiesQuery(normalizedRegistration, dateRange)
             .OrderByDescending(x => x.StartUtc)
-            .Select(x => new VehicleActivityDto
-            {
-                Id = x.ActivityId,
-                DddFileId = x.DddFileId,
-                DriverId = x.DriverId,
-                DriverName = x.DriverName,
-                ActivityType = x.ActivityType,
-                StartUtc = x.StartUtc,
-                EndUtc = x.EndUtc
-            })
             .ToListAsync(cancellationToken);
+        var mileageAssignments = VehicleActivityMileageAssigner.Assign(activitySources.Select(x => new VehicleActivityMileageSource(
+            x.ActivityId,
+            x.VehicleUseId,
+            x.VehicleRegistration,
+            x.ActivityType,
+            x.StartUtc,
+            x.EndUtc,
+            x.VehicleUseStartUtc,
+            x.VehicleUseEndUtc,
+            x.StartOdometerKm,
+            x.EndOdometerKm,
+            x.DistanceKm)));
+
+        details.Activities = activitySources
+            .Select(x =>
+            {
+                mileageAssignments.TryGetValue(
+                    VehicleActivityMileageAssigner.BuildAssignmentKey(x.ActivityId, x.VehicleUseId),
+                    out var mileage);
+
+                return new VehicleActivityDto
+                {
+                    Id = x.ActivityId,
+                    DddFileId = x.DddFileId,
+                    DriverId = x.DriverId,
+                    DriverName = x.DriverName,
+                    ActivityType = x.ActivityType,
+                    StartUtc = x.StartUtc,
+                    EndUtc = x.EndUtc,
+                    StartOdometerKm = mileage?.StartOdometerKm,
+                    EndOdometerKm = mileage?.EndOdometerKm,
+                    DistanceKm = mileage?.DistanceKm
+                };
+            })
+            .ToList();
 
         return Ok(details);
     }
@@ -366,6 +392,8 @@ public class VehiclesController : ControllerBase
             {
                 ActivityId = x.activity.Id,
                 DddFileId = x.activity.DddFileId,
+                VehicleUseId = x.vehicleUse.Id,
+                VehicleRegistration = x.vehicleUse.RegistrationNumber,
                 DriverId = x.vehicleUse.DddFile.DriverId,
                 DriverName = x.vehicleUse.DddFile.Driver == null
                     ? null
@@ -376,7 +404,12 @@ public class VehiclesController : ControllerBase
                     : x.StartUtc,
                 EndUtc = rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
                     ? rangeToExclusiveUtc.Value
-                    : x.EndUtc
+                    : x.EndUtc,
+                VehicleUseStartUtc = x.vehicleUse.StartUtc,
+                VehicleUseEndUtc = x.vehicleUse.EndUtc,
+                StartOdometerKm = x.vehicleUse.StartOdometerKm,
+                EndOdometerKm = x.vehicleUse.EndOdometerKm,
+                DistanceKm = x.vehicleUse.DistanceKm
             });
     }
 
@@ -443,6 +476,10 @@ public class VehiclesController : ControllerBase
 
         public Guid DddFileId { get; set; }
 
+        public Guid VehicleUseId { get; set; }
+
+        public string VehicleRegistration { get; set; } = string.Empty;
+
         public Guid? DriverId { get; set; }
 
         public string? DriverName { get; set; }
@@ -452,5 +489,15 @@ public class VehiclesController : ControllerBase
         public DateTime StartUtc { get; set; }
 
         public DateTime EndUtc { get; set; }
+
+        public DateTime VehicleUseStartUtc { get; set; }
+
+        public DateTime VehicleUseEndUtc { get; set; }
+
+        public int? StartOdometerKm { get; set; }
+
+        public int? EndOdometerKm { get; set; }
+
+        public int? DistanceKm { get; set; }
     }
 }

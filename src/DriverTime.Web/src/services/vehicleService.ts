@@ -37,6 +37,9 @@ export type VehicleActivity = {
     activityType: string;
     startUtc: string;
     endUtc: string;
+    distanceKm?: number | null;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
 };
 
 export type VehicleDetails = Vehicle & {
