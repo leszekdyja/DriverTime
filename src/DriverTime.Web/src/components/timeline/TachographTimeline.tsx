@@ -1,4 +1,4 @@
-﻿import { useMemo } from "react";
+﻿import { useMemo, useState } from "react";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -11,6 +11,15 @@ export type TachographActivity = {
     vehicleRegistration?: string | null;
     vehicleRegistrationNumber?: string | null;
     registrationNumber?: string | null;
+    vehicle?: string | null;
+    driverCardNumber?: string | null;
+    cardNumber?: string | null;
+    distanceKm?: number | null;
+    averageSpeedKmh?: number | null;
+    countryStart?: string | null;
+    countryEnd?: string | null;
+    startCountryCode?: string | null;
+    endCountryCode?: string | null;
 };
 
 export type TachographCountryEntry = {
@@ -90,15 +99,24 @@ type DayRow = {
 };
 
 type Segment = {
+    key: string;
     id: string;
     type: ActivityKind;
     label: string;
+    sourceActivity: TachographActivity;
     start: Date;
     end: Date;
     left: number;
     width: number;
     seconds: number;
     vehicleRegistration: string | null;
+    cardNumber: string | null;
+    countryStart: string | null;
+    countryEnd: string | null;
+    distanceKm: number | null;
+    averageSpeedKmh: number | null;
+    vehicleUse: TachographVehicleUse | null;
+    overlappingViolation: TachographViolation | null;
 };
 
 type Marker = {
@@ -113,6 +131,10 @@ type Marker = {
 type ActivityKind = "DRIVING" | "REST" | "WORK" | "AVAILABILITY" | "UNKNOWN";
 
 const secondsInDay = 24 * 60 * 60;
+const breakResetSeconds = 45 * 60;
+const dailyRestSeconds = 9 * 60 * 60;
+const weeklyRestSeconds = 24 * 60 * 60;
+const regularWeeklyRestSeconds = 45 * 60 * 60;
 const hourLabels = Array.from({ length: 13 }, (_, index) => index * 2);
 const gridHours = Array.from({ length: 25 }, (_, hour) => hour);
 
@@ -167,7 +189,11 @@ function getActivityKind(activityType: string): ActivityKind {
 }
 
 function getVehicleRegistration(activity: TachographActivity) {
-    return activity.vehicleRegistration ?? activity.vehicleRegistrationNumber ?? activity.registrationNumber ?? null;
+    return activity.vehicleRegistration ?? activity.vehicleRegistrationNumber ?? activity.registrationNumber ?? activity.vehicle ?? null;
+}
+
+function getCardNumber(activity: TachographActivity) {
+    return activity.driverCardNumber ?? activity.cardNumber ?? null;
 }
 
 function getVehicleUseRegistration(vehicleUse: TachographVehicleUse) {
@@ -180,6 +206,13 @@ function getCountryTimestamp(entry: TachographCountryEntry) {
 
 function getCountryCode(entry: TachographCountryEntry) {
     return (entry.countryCode ?? entry.country_code ?? "").trim().toUpperCase();
+}
+
+function getCountryType(entry: TachographCountryEntry) {
+    const normalized = (entry.entryType ?? entry.type ?? "").trim().toUpperCase();
+    if (normalized.includes("START") || normalized.includes("BEGIN") || normalized.includes("POCZ")) return "start";
+    if (normalized.includes("END") || normalized.includes("STOP") || normalized.includes("KON")) return "end";
+    return "unknown";
 }
 
 function getCardReadingTimestamp(reading: TachographCardReading) {
@@ -209,6 +242,10 @@ function formatDuration(seconds: number) {
     if (hours <= 0) return `${minutes} min`;
     if (minutes <= 0) return `${hours} godz.`;
     return `${hours} godz. ${minutes} min`;
+}
+
+function formatNumber(value: number, fractionDigits = 0) {
+    return new Intl.NumberFormat("pl-PL", { maximumFractionDigits: fractionDigits }).format(value);
 }
 
 function buildRows(propsDays: TachographTimelineDay[] | undefined, day: string | undefined, activities: TachographActivity[], violations: TachographViolation[]) {
@@ -249,7 +286,44 @@ function buildRows(propsDays: TachographTimelineDay[] | undefined, day: string |
         });
 }
 
-function buildSegmentsForDay(activities: TachographActivity[], day: string): Segment[] {
+function overlaps(start: Date, end: Date, otherStart: Date, otherEnd: Date) {
+    return start < otherEnd && end > otherStart;
+}
+
+function findVehicleUse(segmentStart: Date, segmentEnd: Date, vehicleUses: TachographVehicleUse[], activityVehicle: string | null) {
+    return vehicleUses.find((vehicleUse) => {
+        const start = parseDate(vehicleUse.startUtc ?? vehicleUse.start);
+        const end = parseDate(vehicleUse.endUtc ?? vehicleUse.end) ?? segmentEnd;
+        if (!start || !overlaps(segmentStart, segmentEnd, start, end)) return false;
+        const registration = getVehicleUseRegistration(vehicleUse);
+        return !activityVehicle || registration === activityVehicle;
+    }) ?? null;
+}
+
+function findCountryForSegment(segmentStart: Date, segmentEnd: Date, countryEntries: TachographCountryEntry[], mode: "start" | "end") {
+    const entries = countryEntries
+        .map((entry) => ({ entry, timestamp: getCountryTimestamp(entry), code: getCountryCode(entry), type: getCountryType(entry) }))
+        .filter((item): item is { entry: TachographCountryEntry; timestamp: Date; code: string; type: string } => Boolean(item.timestamp && item.code))
+        .sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
+
+    const preferred = entries.find((item) => item.timestamp >= segmentStart && item.timestamp <= segmentEnd && item.type === mode);
+    if (preferred) return preferred.code;
+
+    const reference = mode === "start" ? segmentStart : segmentEnd;
+    const fallback = [...entries].reverse().find((item) => item.timestamp <= reference);
+    return fallback?.code ?? null;
+}
+
+function findOverlappingViolation(segmentStart: Date, segmentEnd: Date, violations: TachographViolation[]) {
+    return violations.find((violation) => {
+        const start = parseDate(violation.occurredAtUtc);
+        if (!start) return false;
+        const end = getViolationEnd(violation) ?? start;
+        return overlaps(segmentStart, segmentEnd, start, end.getTime() === start.getTime() ? new Date(start.getTime() + 60_000) : end);
+    }) ?? null;
+}
+
+function buildSegmentsForDay(activities: TachographActivity[], day: string, countryEntries: TachographCountryEntry[], vehicleUses: TachographVehicleUse[], violations: TachographViolation[]): Segment[] {
     const start = dayStart(day);
     const end = addDays(start, 1);
 
@@ -263,17 +337,32 @@ function buildSegmentsForDay(activities: TachographActivity[], day: string): Seg
             const segmentEnd = activityEnd > end ? end : activityEnd;
             const seconds = Math.max(0, (segmentEnd.getTime() - segmentStart.getTime()) / 1000);
             const type = getActivityKind(activity.activityType);
+            const vehicleRegistration = getVehicleRegistration(activity);
+            const vehicleUse = findVehicleUse(segmentStart, segmentEnd, vehicleUses, vehicleRegistration);
+            const distanceKm = activity.distanceKm ?? vehicleUse?.distanceKm ?? null;
+            const averageSpeedKmh = activity.averageSpeedKmh ?? (distanceKm && seconds > 0 ? distanceKm / (seconds / 3600) : null);
+            const countryStart = activity.countryStart ?? activity.startCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "start");
+            const countryEnd = activity.countryEnd ?? activity.endCountryCode ?? findCountryForSegment(segmentStart, segmentEnd, countryEntries, "end");
 
             return {
+                key: `${activity.id}-${segmentStart.toISOString()}-${segmentEnd.toISOString()}`,
                 id: activity.id,
                 type,
                 label: activityMeta[type].label,
+                sourceActivity: activity,
                 start: segmentStart,
                 end: segmentEnd,
                 left: clampPercent(percentFor(segmentStart, start)),
                 width: Math.max(0.18, percentFor(segmentEnd, start) - percentFor(segmentStart, start)),
                 seconds,
-                vehicleRegistration: getVehicleRegistration(activity),
+                vehicleRegistration: vehicleRegistration ?? (vehicleUse ? getVehicleUseRegistration(vehicleUse) : null),
+                cardNumber: getCardNumber(activity),
+                countryStart,
+                countryEnd,
+                distanceKm,
+                averageSpeedKmh,
+                vehicleUse,
+                overlappingViolation: findOverlappingViolation(segmentStart, segmentEnd, violations),
             };
         })
         .filter((segment): segment is Segment => segment !== null)
@@ -324,13 +413,7 @@ function buildMarkersForDay(day: string, countryEntries: TachographCountryEntry[
 }
 
 function buildTooltip(segment: Segment) {
-    return [
-        `Typ: ${segment.label}`,
-        `Start: ${dateTimeFormatter.format(segment.start)}`,
-        `Koniec: ${dateTimeFormatter.format(segment.end)}`,
-        `Czas: ${formatDuration(segment.seconds)}`,
-        segment.vehicleRegistration ? `Pojazd: ${segment.vehicleRegistration}` : null,
-    ].filter(Boolean).join("\n");
+    return [`Typ: ${segment.label}`, `${timeFormatter.format(segment.start)}-${timeFormatter.format(segment.end)}`, `Czas: ${formatDuration(segment.seconds)}`].join("\n");
 }
 
 function buildDayTotals(segments: Segment[]) {
@@ -346,17 +429,73 @@ function buildNavigatorSegments(rows: Array<{ row: DayRow; segments: Segment[] }
     const durationMs = rangeEnd.getTime() - rangeStart.getTime();
 
     return rows.flatMap(({ segments }) => segments.map((segment) => ({
-        id: segment.id + segment.start.toISOString(),
+        id: segment.key,
         className: activityMeta[segment.type].className,
         left: ((segment.start.getTime() - rangeStart.getTime()) / durationMs) * 100,
         width: Math.max(0.1, ((segment.end.getTime() - segment.start.getTime()) / durationMs) * 100),
     })));
 }
 
+function calculateDrivingSinceLastBreak(activities: TachographActivity[], selectedSegment: Segment) {
+    let counterSeconds = 0;
+    const ordered = activities
+        .map((activity) => ({ activity, start: parseDate(activity.startUtc), end: parseDate(activity.endUtc), type: getActivityKind(activity.activityType) }))
+        .filter((item): item is { activity: TachographActivity; start: Date; end: Date; type: ActivityKind } => Boolean(item.start && item.end && item.end > item.start && item.start <= selectedSegment.end))
+        .sort((left, right) => left.start.getTime() - right.start.getTime());
+
+    for (const item of ordered) {
+        const clippedEnd = item.end > selectedSegment.end ? selectedSegment.end : item.end;
+        if (clippedEnd <= item.start) continue;
+        const seconds = (clippedEnd.getTime() - item.start.getTime()) / 1000;
+
+        if ((item.type === "REST" || item.type === "AVAILABILITY") && seconds >= breakResetSeconds) {
+            counterSeconds = 0;
+            continue;
+        }
+
+        if (item.type === "DRIVING") {
+            counterSeconds += seconds;
+        }
+    }
+
+    return counterSeconds;
+}
+
+function getSegmentRows(segment: Segment) {
+    const rows: Array<[string, string]> = [
+        ["Rozpoczęcie", dateTimeFormatter.format(segment.start)],
+        ["Zakończenie", dateTimeFormatter.format(segment.end)],
+        ["Czas trwania", formatDuration(segment.seconds)],
+        ["Typ aktywności", segment.label],
+    ];
+
+    if (segment.vehicleRegistration) rows.push(["Pojazd", segment.vehicleRegistration]);
+    if (segment.countryStart) rows.push(["Kraj rozpoczęcia", segment.countryStart]);
+    if (segment.countryEnd) rows.push(["Kraj zakończenia", segment.countryEnd]);
+    if (segment.cardNumber) rows.push(["Numer karty", segment.cardNumber]);
+    if (segment.distanceKm !== null && segment.distanceKm !== undefined) rows.push(["Odległość", `${formatNumber(segment.distanceKm, 1)} km`]);
+    if (segment.averageSpeedKmh !== null && segment.averageSpeedKmh !== undefined && Number.isFinite(segment.averageSpeedKmh)) rows.push(["Średnia prędkość", `${formatNumber(segment.averageSpeedKmh, 1)} km/h`]);
+
+    return rows;
+}
+
+function getRestAnalysisRows(segment: Segment) {
+    if (segment.type !== "REST") return [];
+
+    const rows: Array<[string, string]> = [["Długość odpoczynku", formatDuration(segment.seconds)]];
+    if (segment.seconds >= dailyRestSeconds) rows.push(["Zaliczony jako dzienny", "Tak"]);
+    if (segment.seconds >= weeklyRestSeconds) rows.push(["Zaliczony jako tygodniowy", segment.seconds >= regularWeeklyRestSeconds ? "Regularny" : "Skrócony"]);
+    if (segment.seconds >= weeklyRestSeconds && segment.seconds < regularWeeklyRestSeconds) rows.push(["Skrócony", "Tak"]);
+
+    return rows;
+}
+
 export default function TachographTimeline({ activities, day, days, label, countryEntries = [], vehicleUses = [], violations = [], cardReadings = [], onViolationClick }: TachographTimelineProps) {
+    const [selectedSegmentKey, setSelectedSegmentKey] = useState<string | null>(null);
     const rows = useMemo(() => buildRows(days, day, activities, violations), [activities, day, days, violations]);
-    const rowModels = useMemo(() => rows.map((row) => ({ row, segments: buildSegmentsForDay(activities, row.date), markers: buildMarkersForDay(row.date, countryEntries, vehicleUses, violations, cardReadings) })), [activities, cardReadings, countryEntries, rows, vehicleUses, violations]);
+    const rowModels = useMemo(() => rows.map((row) => ({ row, segments: buildSegmentsForDay(activities, row.date, countryEntries, vehicleUses, violations), markers: buildMarkersForDay(row.date, countryEntries, vehicleUses, violations, cardReadings) })), [activities, cardReadings, countryEntries, rows, vehicleUses, violations]);
     const navigatorSegments = buildNavigatorSegments(rowModels);
+    const selectedSegment = rowModels.flatMap((model) => model.segments).find((segment) => segment.key === selectedSegmentKey) ?? null;
     const dateRange = rows.length > 1 ? `${rows[0]?.shortDate ?? ""} - ${rows.at(-1)?.shortDate ?? ""}` : rows[0]?.label ?? label ?? "";
 
     if (rows.length === 0) {
@@ -369,37 +508,71 @@ export default function TachographTimeline({ activities, day, days, label, count
                 <div><span>Oś czasu tachografu</span><h4>{label ?? dateRange}</h4></div>
                 <div className="tachograph-pro-meta"><strong>{dateRange}</strong><span>{rows.length === 1 ? "1 dzień" : `${rows.length} dni`}</span></div>
             </header>
-            <div className="tachograph-pro-scroll">
-                <div className="tachograph-pro-grid">
-                    <div className="tachograph-time-scale" aria-hidden="true"><div /><div className="tachograph-time-axis">{hourLabels.map((hour) => <span key={hour} style={{ left: `${(hour / 24) * 100}%` }}>{formatHour(hour)}</span>)}</div></div>
-                    <div className="tachograph-week-rows">
-                        {rowModels.map(({ row, segments, markers }) => {
-                            const totals = buildDayTotals(segments);
-                            const drivingSeconds = totals.get("DRIVING") ?? 0;
-                            return (
-                                <div className="tachograph-day-row" key={row.date}>
-                                    <div className="tachograph-day-label"><strong>{row.dayName}</strong><span>{row.shortDate}</span><small>Jazda {formatDuration(drivingSeconds)}</small></div>
-                                    <div className="tachograph-day-track">
-                                        <div className="tachograph-grid-lines" aria-hidden="true">{gridHours.map((hour) => <i className={hour % 4 === 0 ? "major" : undefined} key={hour} style={{ left: `${(hour / 24) * 100}%` }} />)}</div>
-                                        <div className="tachograph-segments-row">
-                                            {segments.length === 0 && <span className="tachograph-no-data">Brak danych</span>}
-                                            {segments.map((segment, index) => (
-                                                <span className={`tachograph-pro-segment ${activityMeta[segment.type].className}`} key={segment.id + segment.start.toISOString() + index} style={{ left: `${segment.left}%`, width: `${segment.width}%` }} title={buildTooltip(segment)} aria-label={buildTooltip(segment)}>
-                                                    {segment.width >= 5.5 && <span>{formatDuration(segment.seconds)}</span>}
-                                                </span>
-                                            ))}
-                                        </div>
-                                        <div className="tachograph-marker-row">
-                                            {markers.map((marker) => (
-                                                <button className={`tachograph-pro-marker ${marker.kind}`} key={marker.id} style={{ left: `${marker.left}%` }} title={marker.title} type="button" onClick={() => marker.kind === "violation" && marker.violationId && onViolationClick?.(marker.violationId)}>{marker.label}</button>
-                                            ))}
+            <div className="tachograph-analysis-layout">
+                <div className="tachograph-pro-scroll">
+                    <div className="tachograph-pro-grid">
+                        <div className="tachograph-time-scale" aria-hidden="true"><div /><div className="tachograph-time-axis">{hourLabels.map((hour) => <span key={hour} style={{ left: `${(hour / 24) * 100}%` }}>{formatHour(hour)}</span>)}</div></div>
+                        <div className="tachograph-week-rows">
+                            {rowModels.map(({ row, segments, markers }) => {
+                                const totals = buildDayTotals(segments);
+                                const drivingSeconds = totals.get("DRIVING") ?? 0;
+                                return (
+                                    <div className="tachograph-day-row" key={row.date}>
+                                        <div className="tachograph-day-label"><strong>{row.dayName}</strong><span>{row.shortDate}</span><small>Jazda {formatDuration(drivingSeconds)}</small></div>
+                                        <div className="tachograph-day-track">
+                                            <div className="tachograph-grid-lines" aria-hidden="true">{gridHours.map((hour) => <i className={hour % 4 === 0 ? "major" : undefined} key={hour} style={{ left: `${(hour / 24) * 100}%` }} />)}</div>
+                                            <div className="tachograph-segments-row">
+                                                {segments.length === 0 && <span className="tachograph-no-data">Brak danych</span>}
+                                                {segments.map((segment) => (
+                                                    <button
+                                                        className={`tachograph-pro-segment ${activityMeta[segment.type].className}${selectedSegmentKey === segment.key ? " selected" : ""}`}
+                                                        key={segment.key}
+                                                        style={{ left: `${segment.left}%`, width: `${segment.width}%` }}
+                                                        title={buildTooltip(segment)}
+                                                        aria-label={buildTooltip(segment)}
+                                                        type="button"
+                                                        onClick={() => setSelectedSegmentKey(segment.key)}
+                                                    >
+                                                        {segment.width >= 5.5 && <span>{formatDuration(segment.seconds)}</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="tachograph-marker-row">
+                                                {markers.map((marker) => (
+                                                    <button className={`tachograph-pro-marker ${marker.kind}`} key={marker.id} style={{ left: `${marker.left}%` }} title={marker.title} type="button" onClick={() => marker.kind === "violation" && marker.violationId && onViolationClick?.(marker.violationId)}>{marker.label}</button>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
+                <aside className="tachograph-segment-panel" aria-live="polite">
+                    {selectedSegment ? (
+                        <>
+                            <span>Analiza segmentu</span>
+                            <h5>{selectedSegment.label}</h5>
+                            <dl>
+                                {getSegmentRows(selectedSegment).map(([rowLabel, value]) => <div key={rowLabel}><dt>{rowLabel}</dt><dd>{value}</dd></div>)}
+                                {selectedSegment.type === "DRIVING" && <div><dt>Czas jazdy od ostatniej przerwy</dt><dd>{formatDuration(calculateDrivingSinceLastBreak(activities, selectedSegment))}</dd></div>}
+                                {selectedSegment.type === "DRIVING" && <div><dt>Udział w analizie naruszenia</dt><dd>{selectedSegment.overlappingViolation ? "Tak" : "Brak danych"}</dd></div>}
+                                {getRestAnalysisRows(selectedSegment).map(([rowLabel, value]) => <div key={rowLabel}><dt>{rowLabel}</dt><dd>{value}</dd></div>)}
+                            </dl>
+                            {selectedSegment.type === "DRIVING" && selectedSegment.overlappingViolation?.id && onViolationClick && (
+                                <button type="button" className="tachograph-rule-button" onClick={() => onViolationClick(selectedSegment.overlappingViolation!.id!)}>
+                                    Pokaż analizę reguły
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        <div className="tachograph-segment-panel-empty">
+                            <span>Analiza segmentu</span>
+                            <p>Kliknij segment aktywności, aby zobaczyć szczegóły.</p>
+                        </div>
+                    )}
+                </aside>
             </div>
             <footer className="tachograph-pro-footer">
                 <div className="tachograph-pro-legend" aria-label="Legenda aktywności">
