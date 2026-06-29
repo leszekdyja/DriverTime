@@ -9,10 +9,14 @@ namespace DriverTime.Api.Controllers;
 public class PlanningSchedulesController : ControllerBase
 {
     private readonly IPlanningScheduleService _planningScheduleService;
+    private readonly IPlanningScheduleValidationService _validationService;
 
-    public PlanningSchedulesController(IPlanningScheduleService planningScheduleService)
+    public PlanningSchedulesController(
+        IPlanningScheduleService planningScheduleService,
+        IPlanningScheduleValidationService validationService)
     {
         _planningScheduleService = planningScheduleService;
+        _validationService = validationService;
     }
 
     [HttpGet]
@@ -31,6 +35,16 @@ public class PlanningSchedulesController : ControllerBase
         return schedule is null ? NotFound() : Ok(schedule);
     }
 
+
+    [HttpGet("{id:guid}/validation")]
+    public async Task<ActionResult<PlanningScheduleValidationDto>> ValidateSchedule(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var validation = await _validationService.ValidateScheduleAsync(id, cancellationToken);
+
+        return validation is null ? NotFound() : Ok(validation);
+    }
     [HttpPost]
     public async Task<ActionResult<PlanningScheduleDto>> Create(
         [FromBody] PlanningScheduleCreateRequestDto request,
@@ -103,3 +117,4 @@ public class PlanningSchedulesController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 }
+

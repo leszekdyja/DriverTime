@@ -10,10 +10,12 @@ import {
     getSchedules,
     updateSchedule,
     upsertAssignment,
+    validateSchedule,
     type PlanningAssignment,
     type PlanningAssignmentType,
     type PlanningSchedule,
     type PlanningScheduleListItem,
+    type PlanningScheduleValidation,
 } from "../../services/planningSchedulesService";
 
 const assignmentTypeLabels: Record<PlanningAssignmentType, string> = {
@@ -86,6 +88,8 @@ export default function PlanningSchedulesTab() {
     const [editor, setEditor] = useState<EditorState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
+    const [validation, setValidation] = useState<PlanningScheduleValidation | null>(null);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
 
@@ -150,6 +154,7 @@ export default function PlanningSchedulesTab() {
         setSelectedSchedule(null);
         setIsEditingSchedule(false);
         setEditor(null);
+        setValidation(null);
     }
 
     async function saveSchedule(event: FormEvent<HTMLFormElement>) {
@@ -260,6 +265,25 @@ export default function PlanningSchedulesTab() {
         }
     }
 
+    async function checkScheduleValidation() {
+        if (!selectedSchedule) return;
+
+        setIsValidating(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            const result = await validateSchedule(selectedSchedule.id);
+            setValidation(result);
+            setMessage("Walidacja grafiku została wykonana.");
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się sprawdzić grafiku.");
+        } finally {
+            setIsValidating(false);
+        }
+    }
+
     useEffect(() => {
         void loadInitialData();
     }, []);
@@ -310,6 +334,41 @@ export default function PlanningSchedulesTab() {
 
                     {selectedSchedule ? (
                         <div className="planning-month-wrapper">
+                            <div className="planning-validation-panel">
+                                <div className="planning-validation-header">
+                                    <div>
+                                        <h4>Walidacja grafiku</h4>
+                                        <p>Sprawdź podstawowe konflikty i braki w grafiku miesięcznym.</p>
+                                    </div>
+                                    <button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating}>
+                                        {isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}
+                                    </button>
+                                </div>
+                                {validation ? (
+                                    <div className="planning-validation-results">
+                                        <div className="planning-validation-summary">
+                                            <span><strong>{validation.errorCount}</strong> błędów</span>
+                                            <span><strong>{validation.warningCount}</strong> ostrzeżeń</span>
+                                        </div>
+                                        {validation.warnings.length === 0 ? (
+                                            <p className="drivers-status">Nie znaleziono problemów w grafiku.</p>
+                                        ) : (
+                                            <ul className="planning-validation-list">
+                                                {validation.warnings.map((warning, index) => (
+                                                    <li key={`${warning.assignmentId ?? warning.code}-${index}`} className={`planning-validation-item ${warning.severity.toLowerCase()}`}>
+                                                        <span className="planning-validation-severity">{warning.severity === "Error" ? "Błąd" : warning.severity === "Warning" ? "Ostrzeżenie" : "Info"}</span>
+                                                        <span>{warning.date ?? "Brak daty"}</span>
+                                                        <span>{warning.driverName ?? "Brak kierowcy"}</span>
+                                                        <span>{warning.code}</span>
+                                                        <strong>{warning.message}</strong>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                ) : null}
+                            </div>
+
                             <div className="planning-month-table-wrap">
                                 <table className="planning-month-table">
                                     <thead>
@@ -370,3 +429,7 @@ export default function PlanningSchedulesTab() {
         </section>
     );
 }
+
+
+
+

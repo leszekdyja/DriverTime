@@ -46,6 +46,23 @@ export type PlanningAssignmentPayload = {
     notes?: string | null;
 };
 
+export type PlanningScheduleValidationWarning = {
+    severity: "Info" | "Warning" | "Error" | string;
+    date: string | null;
+    driverId: string | null;
+    driverName: string | null;
+    assignmentId: string | null;
+    code: string;
+    message: string;
+};
+
+export type PlanningScheduleValidation = {
+    scheduleId: string;
+    warningCount: number;
+    errorCount: number;
+    warnings: PlanningScheduleValidationWarning[];
+};
+
 async function readJson<T>(response: Response, fallbackMessage: string): Promise<T> {
     if (!response.ok) {
         let message = fallbackMessage;
@@ -71,6 +88,11 @@ export async function getSchedules(): Promise<PlanningScheduleListItem[]> {
 export async function getSchedule(id: string): Promise<PlanningSchedule> {
     const response = await apiFetch(`/api/planning/schedules/${id}`);
     return readJson<PlanningSchedule>(response, "Nie udało się pobrać grafiku.");
+}
+
+export async function validateSchedule(id: string): Promise<PlanningScheduleValidation> {
+    const response = await apiFetch(`/api/planning/schedules/${id}/validation`);
+    return readJson<PlanningScheduleValidation>(response, "Nie udało się sprawdzić grafiku.");
 }
 
 export async function createSchedule(payload: PlanningSchedulePayload): Promise<PlanningSchedule> {
@@ -113,3 +135,4 @@ export async function deleteAssignment(scheduleId: string, assignmentId: string)
         throw new Error(response.status === 404 ? "Nie znaleziono przypisania w tym grafiku." : "Nie udało się usunąć przypisania.");
     }
 }
+
