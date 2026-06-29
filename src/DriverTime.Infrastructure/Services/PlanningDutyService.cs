@@ -408,18 +408,7 @@ public class PlanningDutyService : IPlanningDutyService
             {
                 errors.Add($"{label}: numer służby jest wymagany.");
             }
-
-            if (!duty.StartTime.HasValue)
-            {
-                errors.Add($"{label}: godzina rozpoczęcia jest wymagana.");
-            }
-
-            if (!duty.EndTime.HasValue)
-            {
-                errors.Add($"{label}: godzina zakończenia jest wymagana.");
-            }
-
-            OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jest za długi.", errors);
+OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jest za długi.", errors);
             OptionalText(duty.DutyName, NameMaxLength, $"{label}: nazwa jest za długa.", errors);
             OptionalText(duty.Line, 500, $"{label}: linia jest za długa.", errors);
             OptionalText(duty.VehicleRequirement, VehicleRequirementMaxLength, $"{label}: wymagany pojazd jest za długi.", errors);
@@ -654,6 +643,7 @@ public class PlanningDutyService : IPlanningDutyService
         }
     }
 }
+
 
 
 

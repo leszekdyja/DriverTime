@@ -169,8 +169,6 @@ public class PlanningDutyServiceTests
             PlanningDutyService.ConfirmImportForCompany(new List<PlanningDuty>(), request, Guid.NewGuid(), DateTime.UtcNow));
 
         Assert.IsTrue(exception.Errors.Any(x => x.Contains("numer służby jest wymagany", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(exception.Errors.Any(x => x.Contains("godzina rozpoczęcia jest wymagana", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(exception.Errors.Any(x => x.Contains("godzina zakończenia jest wymagana", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -312,4 +310,5 @@ public class PlanningDutyServiceTests
         return duty;
     }
 }
+
 

@@ -188,10 +188,7 @@ function getImportDraftErrors(draft: ImportDraft) {
     const errors: Record<string, string> = {};
 
     if (!draft.dutyNumber.trim()) errors.dutyNumber = "Numer służby jest wymagany.";
-    if (!draft.startTime.trim()) errors.startTime = "Godzina rozpoczęcia jest wymagana.";
-    if (!draft.endTime.trim()) errors.endTime = "Godzina zakończenia jest wymagana.";
-
-    return errors;
+return errors;
 }
 
 function getAverageConfidence(preview: PlanningDutyPdfImportPreview | null) {
@@ -786,6 +783,7 @@ function VerificationField({
         </label>
     );
 }
+
 
 
 
