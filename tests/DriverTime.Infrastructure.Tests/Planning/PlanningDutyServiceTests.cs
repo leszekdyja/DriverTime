@@ -104,6 +104,97 @@ public class PlanningDutyServiceTests
         Assert.AreEqual(DeleteBehavior.Cascade, stopForeignKey.DeleteBehavior);
     }
 
+    [TestMethod]
+    public void ConfirmImport_CreatesNewDuty()
+    {
+        var companyId = Guid.NewGuid();
+        var duties = new List<PlanningDuty>();
+
+        var result = PlanningDutyService.ConfirmImportForCompany(
+            duties,
+            CreateConfirmRequest(),
+            companyId,
+            DateTime.UtcNow);
+
+        Assert.AreEqual(1, result.CreatedCount);
+        Assert.AreEqual(1, duties.Count);
+        Assert.AreEqual(companyId, duties[0].CompanyId);
+        Assert.AreEqual("101", duties[0].DutyNumber);
+        Assert.AreEqual("K-11", duties[0].Lines.Single().LineCode);
+    }
+
+    [TestMethod]
+    public void ConfirmImport_SameDutySecondTime_ReturnsUnchangedAndDoesNotDuplicate()
+    {
+        var companyId = Guid.NewGuid();
+        var duties = new List<PlanningDuty>();
+        var request = CreateConfirmRequest();
+
+        PlanningDutyService.ConfirmImportForCompany(duties, request, companyId, DateTime.UtcNow);
+        var result = PlanningDutyService.ConfirmImportForCompany(duties, request, companyId, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.AreEqual(1, result.UnchangedCount);
+        Assert.AreEqual(1, duties.Count);
+    }
+
+    [TestMethod]
+    public void ConfirmImport_UpdatesExistingDutyWhenDataDiffers()
+    {
+        var companyId = Guid.NewGuid();
+        var duties = new List<PlanningDuty>();
+        var request = CreateConfirmRequest();
+        PlanningDutyService.ConfirmImportForCompany(duties, request, companyId, DateTime.UtcNow);
+
+        var updatedRequest = CreateConfirmRequest();
+        updatedRequest.Duties[0].DutyName = "Służba 101 zmieniona";
+        updatedRequest.Duties[0].WorkingMinutes = 510;
+
+        var result = PlanningDutyService.ConfirmImportForCompany(duties, updatedRequest, companyId, DateTime.UtcNow.AddMinutes(1));
+
+        Assert.AreEqual(1, result.UpdatedCount);
+        Assert.AreEqual(1, duties.Count);
+        Assert.AreEqual("Służba 101 zmieniona", duties[0].Name);
+        Assert.AreEqual(510, duties[0].WorkMinutes);
+    }
+
+    [TestMethod]
+    public void ConfirmImport_ValidatesMissingRequiredFields()
+    {
+        var request = CreateConfirmRequest();
+        request.Duties[0].DutyNumber = "";
+        request.Duties[0].StartTime = null;
+        request.Duties[0].EndTime = null;
+
+        var exception = Assert.ThrowsException<PlanningDutyValidationException>(() =>
+            PlanningDutyService.ConfirmImportForCompany(new List<PlanningDuty>(), request, Guid.NewGuid(), DateTime.UtcNow));
+
+        Assert.IsTrue(exception.Errors.Any(x => x.Contains("numer służby jest wymagany", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(exception.Errors.Any(x => x.Contains("godzina rozpoczęcia jest wymagana", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(exception.Errors.Any(x => x.Contains("godzina zakończenia jest wymagana", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [TestMethod]
+    public void ConfirmImport_DoesNotUpdateDutyFromOtherCompany()
+    {
+        var currentCompanyId = Guid.NewGuid();
+        var otherCompanyId = Guid.NewGuid();
+        var duties = new List<PlanningDuty>
+        {
+            CreateExistingDuty(otherCompanyId)
+        };
+
+        var result = PlanningDutyService.ConfirmImportForCompany(
+            duties,
+            CreateConfirmRequest(),
+            currentCompanyId,
+            DateTime.UtcNow);
+
+        Assert.AreEqual(1, result.CreatedCount);
+        Assert.AreEqual(2, duties.Count);
+        Assert.AreEqual(otherCompanyId, duties[0].CompanyId);
+        Assert.AreEqual(currentCompanyId, duties[1].CompanyId);
+    }
+
     private static CreatePlanningDutyRequest CreateValidRequest() => new()
     {
         DutyNumber = "24",
@@ -119,4 +210,56 @@ public class PlanningDutyServiceTests
         DistanceKm = 128.5m,
         Notes = "Test"
     };
+
+    private static PlanningDutyPdfImportConfirmRequestDto CreateConfirmRequest() => new()
+    {
+        SourceFileName = "sluzby.pdf",
+        Duties = new List<PlanningDutyPdfImportConfirmItemDto>
+        {
+            new()
+            {
+                DutyNumber = "101",
+                DutyName = "Służba 101",
+                Line = "K-11",
+                StartTime = new TimeOnly(5, 20),
+                EndTime = new TimeOnly(13, 45),
+                WorkingMinutes = 505,
+                DrivingMinutes = 320,
+                BreakMinutes = 45,
+                DistanceKm = 112.5m,
+                Notes = "Import testowy",
+                Stops = new List<PlanningDutyPdfImportConfirmStopDto>
+                {
+                    new()
+                    {
+                        Sequence = 1,
+                        StopName = "Dworzec",
+                        DepartureTime = new TimeOnly(5, 20)
+                    }
+                }
+            }
+        }
+    };
+
+    private static PlanningDuty CreateExistingDuty(Guid companyId)
+    {
+        var duty = new PlanningDuty
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId,
+            DutyNumber = "101",
+            Name = "Służba 101 obca",
+            StartTime = new TimeOnly(5, 20),
+            EndTime = new TimeOnly(13, 45),
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        duty.Lines.Add(new PlanningDutyLine
+        {
+            Id = Guid.NewGuid(),
+            PlanningDutyId = duty.Id,
+            LineCode = "K-11"
+        });
+
+        return duty;
+    }
 }

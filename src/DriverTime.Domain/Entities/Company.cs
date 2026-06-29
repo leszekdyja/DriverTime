@@ -29,8 +29,11 @@ public class Company : BaseEntity
 
     public ICollection<PlanningDuty> PlanningDuties { get; set; } = new List<PlanningDuty>();
 
+    public ICollection<PlanningSchedule> PlanningSchedules { get; set; } = new List<PlanningSchedule>();
+
     public ICollection<ImportFile> ImportFiles { get; set; } = new List<ImportFile>();
 
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }
+
 

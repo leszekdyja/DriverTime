@@ -46,6 +46,10 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<PlanningDutyStop> PlanningDutyStops => Set<PlanningDutyStop>();
 
+    public DbSet<PlanningSchedule> PlanningSchedules => Set<PlanningSchedule>();
+
+    public DbSet<PlanningAssignment> PlanningAssignments => Set<PlanningAssignment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -331,6 +335,49 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.LineCode).HasMaxLength(50);
             entity.Property(x => x.Km).HasPrecision(10, 2);
         });
+
+        modelBuilder.Entity<PlanningSchedule>(entity =>
+        {
+            entity.ToTable("PlanningSchedules");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Year, x.Month });
+
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.PlanningSchedules)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Assignments)
+                .WithOne(x => x.PlanningSchedule)
+                .HasForeignKey(x => x.PlanningScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningAssignment>(entity =>
+        {
+            entity.ToTable("PlanningAssignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PlanningScheduleId, x.DriverId, x.Date }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Date });
+
+            entity.Property(x => x.AssignmentType)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.PlanningAssignments)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PlanningDuty)
+                .WithMany(x => x.PlanningAssignments)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         modelBuilder.Entity<CardReadSession>(entity =>
         {
             entity.ToTable("CardReadSessions");
@@ -361,4 +408,5 @@ public class DriverTimeDbContext : DbContext
         });
     }
 }
+
 

@@ -33,6 +33,11 @@ public interface IApplicationDbContext
 
     DbSet<PlanningDutyStop> PlanningDutyStops { get; }
 
+    DbSet<PlanningSchedule> PlanningSchedules { get; }
+
+    DbSet<PlanningAssignment> PlanningAssignments { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+
 

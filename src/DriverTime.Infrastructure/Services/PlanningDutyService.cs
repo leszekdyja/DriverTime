@@ -114,6 +114,82 @@ public class PlanningDutyService : IPlanningDutyService
         return true;
     }
 
+
+    public async Task<PlanningDutyPdfImportConfirmResultDto> ConfirmPdfImportAsync(
+        PlanningDutyPdfImportConfirmRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateConfirmRequest(request);
+
+        var companyId = _currentUser.CompanyId;
+        var now = DateTime.UtcNow;
+        var dutyNumbers = request.Duties
+            .Select(x => NormalizeRequired(x.DutyNumber))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var existingDuties = await _dbContext.PlanningDuties
+            .Include(x => x.Lines)
+            .Include(x => x.Stops)
+            .Where(x => x.CompanyId == companyId && dutyNumbers.Contains(x.DutyNumber))
+            .ToListAsync(cancellationToken);
+
+        var result = ConfirmImportForCompany(existingDuties, request, companyId, now);
+
+        foreach (var duty in existingDuties.Where(x => _dbContext.Entry(x).State == EntityState.Detached))
+        {
+            _dbContext.PlanningDuties.Add(duty);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return result;
+    }
+
+    internal static PlanningDutyPdfImportConfirmResultDto ConfirmImportForCompany(
+        IList<PlanningDuty> existingDuties,
+        PlanningDutyPdfImportConfirmRequestDto request,
+        Guid companyId,
+        DateTime now)
+    {
+        ValidateConfirmRequest(request);
+
+        var result = new PlanningDutyPdfImportConfirmResultDto();
+
+        foreach (var item in request.Duties)
+        {
+            var dutyNumber = NormalizeRequired(item.DutyNumber);
+            var lineKey = GetLineKey(item.Line);
+            var matchingDuty = existingDuties.FirstOrDefault(duty =>
+                duty.CompanyId == companyId
+                && string.Equals(duty.DutyNumber, dutyNumber, StringComparison.OrdinalIgnoreCase)
+                && duty.StartTime == item.StartTime
+                && duty.EndTime == item.EndTime
+                && string.Equals(GetLineKey(duty), lineKey, StringComparison.OrdinalIgnoreCase));
+
+            if (matchingDuty is null)
+            {
+                var created = CreateDutyFromConfirmItem(item, request.SourceFileName, companyId, now);
+                existingDuties.Add(created);
+                result.CreatedCount++;
+                result.Items.Add(CreateResultItem(item, "Created", "Dodano nową służbę."));
+                continue;
+            }
+
+            if (IsConfirmItemIdentical(matchingDuty, item, request.SourceFileName))
+            {
+                result.UnchangedCount++;
+                result.Items.Add(CreateResultItem(item, "Unchanged", "Służba bez zmian."));
+                continue;
+            }
+
+            ApplyConfirmItem(matchingDuty, item, request.SourceFileName, now, setUpdatedAt: true);
+            result.UpdatedCount++;
+            result.Items.Add(CreateResultItem(item, "Updated", "Zaktualizowano istniejącą służbę."));
+        }
+
+        return result;
+    }
     internal static void Validate(CreatePlanningDutyRequest request)
     {
         var errors = new List<string>();
@@ -302,6 +378,208 @@ public class PlanningDutyService : IPlanningDutyService
             .ToList()
     };
 
+
+    internal static void ValidateConfirmRequest(PlanningDutyPdfImportConfirmRequestDto request)
+    {
+        var errors = new List<string>();
+
+        if (request.Duties.Count == 0)
+        {
+            errors.Add("Brak służb do importu.");
+        }
+
+        for (var index = 0; index < request.Duties.Count; index++)
+        {
+            var duty = request.Duties[index];
+            var label = $"Służba #{index + 1}";
+
+            if (string.IsNullOrWhiteSpace(duty.DutyNumber))
+            {
+                errors.Add($"{label}: numer służby jest wymagany.");
+            }
+
+            if (!duty.StartTime.HasValue)
+            {
+                errors.Add($"{label}: godzina rozpoczęcia jest wymagana.");
+            }
+
+            if (!duty.EndTime.HasValue)
+            {
+                errors.Add($"{label}: godzina zakończenia jest wymagana.");
+            }
+
+            OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jest za długi.", errors);
+            OptionalText(duty.DutyName, NameMaxLength, $"{label}: nazwa jest za długa.", errors);
+            OptionalText(duty.Line, LineCodeMaxLength, $"{label}: linia jest za długa.", errors);
+            OptionalText(duty.Notes, NotesMaxLength, $"{label}: uwagi są za długie.", errors);
+            NonNegative(duty.WorkingMinutes, $"{label}: czas pracy nie może być ujemny.", errors);
+            NonNegative(duty.DrivingMinutes, $"{label}: czas jazdy nie może być ujemny.", errors);
+            NonNegative(duty.BreakMinutes, $"{label}: czas przerwy nie może być ujemny.", errors);
+            NonNegative(duty.DistanceKm, $"{label}: kilometry nie mogą być ujemne.", errors);
+
+            foreach (var stop in duty.Stops)
+            {
+                OptionalText(stop.StopName, StopNameMaxLength, $"{label}: nazwa przystanku jest za długa.", errors);
+                NonNegative(stop.Sequence, $"{label}: kolejność przystanku nie może być ujemna.", errors);
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new PlanningDutyValidationException(errors);
+        }
+    }
+
+    private static PlanningDuty CreateDutyFromConfirmItem(
+        PlanningDutyPdfImportConfirmItemDto item,
+        string? sourceFileName,
+        Guid companyId,
+        DateTime now)
+    {
+        var duty = new PlanningDuty
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId,
+            CreatedAt = now,
+            CreatedAtUtc = now
+        };
+
+        ApplyConfirmItem(duty, item, sourceFileName, now, setUpdatedAt: false);
+
+        return duty;
+    }
+
+    private static void ApplyConfirmItem(
+        PlanningDuty duty,
+        PlanningDutyPdfImportConfirmItemDto item,
+        string? sourceFileName,
+        DateTime now,
+        bool setUpdatedAt)
+    {
+        var dutyNumber = NormalizeRequired(item.DutyNumber);
+        duty.DutyNumber = dutyNumber;
+        duty.Name = NormalizeOptional(item.DutyName) ?? $"Służba {dutyNumber}";
+        duty.StartTime = item.StartTime;
+        duty.EndTime = item.EndTime;
+        duty.WorkMinutes = item.WorkingMinutes;
+        duty.DrivingMinutes = item.DrivingMinutes;
+        duty.BreakMinutes = item.BreakMinutes;
+        duty.DistanceKm = item.DistanceKm;
+        duty.Notes = NormalizeOptional(item.Notes);
+        duty.SourceFileName = NormalizeOptional(sourceFileName);
+
+        if (setUpdatedAt)
+        {
+            duty.UpdatedAtUtc = now;
+        }
+
+        duty.Lines.Clear();
+        foreach (var line in SplitLineCodes(item.Line))
+        {
+            duty.Lines.Add(new PlanningDutyLine
+            {
+                Id = Guid.NewGuid(),
+                PlanningDutyId = duty.Id,
+                LineCode = line
+            });
+        }
+
+        duty.Stops.Clear();
+        foreach (var stop in item.Stops.OrderBy(x => x.Sequence))
+        {
+            var stopName = NormalizeOptional(stop.StopName);
+            if (stopName is null)
+            {
+                continue;
+            }
+
+            duty.Stops.Add(new PlanningDutyStop
+            {
+                Id = Guid.NewGuid(),
+                PlanningDutyId = duty.Id,
+                Sequence = stop.Sequence,
+                StopName = stopName,
+                ArrivalTime = stop.ArrivalTime,
+                DepartureTime = stop.DepartureTime,
+                LineCode = NormalizeOptional(item.Line)
+            });
+        }
+    }
+
+    private static bool IsConfirmItemIdentical(
+        PlanningDuty duty,
+        PlanningDutyPdfImportConfirmItemDto item,
+        string? sourceFileName)
+    {
+        var dutyName = NormalizeOptional(item.DutyName) ?? $"Służba {NormalizeRequired(item.DutyNumber)}";
+
+        return string.Equals(duty.Name, dutyName, StringComparison.Ordinal)
+            && duty.StartTime == item.StartTime
+            && duty.EndTime == item.EndTime
+            && duty.WorkMinutes == item.WorkingMinutes
+            && duty.DrivingMinutes == item.DrivingMinutes
+            && duty.BreakMinutes == item.BreakMinutes
+            && duty.DistanceKm == item.DistanceKm
+            && string.Equals(duty.Notes, NormalizeOptional(item.Notes), StringComparison.Ordinal)
+            && string.Equals(duty.SourceFileName, NormalizeOptional(sourceFileName), StringComparison.Ordinal)
+            && string.Equals(GetLineKey(duty), GetLineKey(item.Line), StringComparison.OrdinalIgnoreCase)
+            && AreStopsIdentical(duty.Stops, item.Stops);
+    }
+
+    private static bool AreStopsIdentical(
+        IEnumerable<PlanningDutyStop> existingStops,
+        IEnumerable<PlanningDutyPdfImportConfirmStopDto> importedStops)
+    {
+        var existing = existingStops
+            .OrderBy(x => x.Sequence)
+            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.ArrivalTime}|{x.DepartureTime}")
+            .ToList();
+        var imported = importedStops
+            .Where(x => !string.IsNullOrWhiteSpace(x.StopName))
+            .OrderBy(x => x.Sequence)
+            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.ArrivalTime}|{x.DepartureTime}")
+            .ToList();
+
+        return existing.SequenceEqual(imported, StringComparer.Ordinal);
+    }
+
+    private static PlanningDutyPdfImportConfirmResultItemDto CreateResultItem(
+        PlanningDutyPdfImportConfirmItemDto item,
+        string status,
+        string message) => new()
+    {
+        DutyNumber = NormalizeOptional(item.DutyNumber),
+        Line = NormalizeOptional(item.Line),
+        Status = status,
+        Message = message
+    };
+
+    private static string GetLineKey(PlanningDuty duty) =>
+        string.Join(",", duty.Lines
+            .Select(x => NormalizeOptional(x.LineCode))
+            .Where(x => x is not null)
+            .Select(x => x!)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+
+    private static string GetLineKey(string? line) =>
+        string.Join(",", SplitLineCodes(line).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
+
+    private static List<string> SplitLineCodes(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<string>();
+        }
+
+        return value
+            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string NormalizeRequired(string? value) => value?.Trim() ?? string.Empty;
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -352,3 +630,5 @@ public class PlanningDutyService : IPlanningDutyService
         }
     }
 }
+
+

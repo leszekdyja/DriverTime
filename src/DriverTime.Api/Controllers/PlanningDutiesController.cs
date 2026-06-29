@@ -1,4 +1,5 @@
-﻿using DriverTime.Application.Planning.DTOs;
+﻿using DriverTime.Application.Interfaces;
+using DriverTime.Application.Planning.DTOs;
 using DriverTime.Application.Planning.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,10 +10,17 @@ namespace DriverTime.Api.Controllers;
 public class PlanningDutiesController : ControllerBase
 {
     private readonly IPlanningDutyService _planningDutyService;
+    private readonly IPlanningDutyPdfImportService _pdfImportService;
+    private readonly ICurrentUserService _currentUser;
 
-    public PlanningDutiesController(IPlanningDutyService planningDutyService)
+    public PlanningDutiesController(
+        IPlanningDutyService planningDutyService,
+        IPlanningDutyPdfImportService pdfImportService,
+        ICurrentUserService currentUser)
     {
         _planningDutyService = planningDutyService;
+        _pdfImportService = pdfImportService;
+        _currentUser = currentUser;
     }
 
     [HttpGet]
@@ -33,6 +41,60 @@ public class PlanningDutiesController : ControllerBase
         return duty is null ? NotFound() : Ok(duty);
     }
 
+
+    [HttpPost("import/pdf/preview")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<PlanningDutyPdfImportPreviewDto>> PreviewPdfImport(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { errors = new[] { "Wybierz plik PDF do importu." } });
+        }
+
+        if (!string.Equals(file.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase)
+            && !file.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { errors = new[] { "Do podglądu importu można przesłać tylko plik PDF." } });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var preview = await _pdfImportService.PreviewAsync(
+            file.FileName,
+            file.Length,
+            stream,
+            cancellationToken);
+
+        return Ok(preview);
+    }
+
+    [HttpPost("import/pdf/confirm")]
+    public async Task<ActionResult<PlanningDutyPdfImportConfirmResultDto>> ConfirmPdfImport(
+        [FromBody] PlanningDutyPdfImportConfirmRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            var result = await _planningDutyService.ConfirmPdfImportAsync(request, cancellationToken);
+
+            return Ok(result);
+        }
+        catch (PlanningDutyValidationException ex)
+        {
+            return BadRequest(new { errors = ex.Errors });
+        }
+    }
     [HttpPost]
     public async Task<ActionResult<PlanningDutyDetailsDto>> Create(
         [FromBody] CreatePlanningDutyRequest request,
@@ -76,3 +138,5 @@ public class PlanningDutiesController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 }
+
+

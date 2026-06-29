@@ -23,4 +23,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<PlanningDutyLine> PlanningDutyLines => Set<PlanningDutyLine>();
 
     public DbSet<PlanningDutyStop> PlanningDutyStops => Set<PlanningDutyStop>();
+
+    public DbSet<PlanningSchedule> PlanningSchedules => Set<PlanningSchedule>();
+
+    public DbSet<PlanningAssignment> PlanningAssignments => Set<PlanningAssignment>();
 }
+

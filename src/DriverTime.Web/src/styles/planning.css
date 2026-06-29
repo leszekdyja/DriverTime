@@ -144,3 +144,368 @@
         width: 100%;
     }
 }
+
+.planning-import-panel {
+    margin-top: 28px;
+}
+
+.planning-import-controls {
+    display: flex;
+    align-items: end;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.planning-import-controls label {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.planning-import-controls input[type="file"] {
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+}
+
+.planning-import-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.planning-preview-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.planning-preview-summary span {
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+.planning-warning-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.planning-warning-list p {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--color-warning-border, #f59e0b);
+    border-radius: var(--radius-sm);
+    background: var(--color-warning-bg, rgba(245, 158, 11, 0.12));
+    color: var(--color-warning, #fbbf24);
+}
+
+@media (max-width: 720px) {
+    .planning-import-controls {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+.planning-verification-summary {
+    align-items: center;
+}
+
+.planning-verification-list {
+    display: grid;
+    gap: 16px;
+}
+
+.planning-verification-card {
+    padding: 16px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-muted);
+}
+
+.planning-verification-card h4 {
+    margin: 0 0 14px;
+}
+
+.planning-verification-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.planning-verification-field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.planning-field-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.planning-field-heading small {
+    padding: 3px 7px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.planning-verification-field input,
+.planning-verification-field textarea {
+    min-height: 42px;
+    padding: 9px 11px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+    font: inherit;
+}
+
+.planning-verification-field textarea {
+    min-height: 88px;
+    resize: vertical;
+}
+
+.planning-verification-field input.confidence-warning,
+.planning-verification-field textarea.confidence-warning {
+    border-color: var(--color-warning-border, #f59e0b);
+    background: var(--color-warning-bg, rgba(245, 158, 11, 0.12));
+}
+
+.planning-verification-field input.confidence-danger,
+.planning-verification-field textarea.confidence-danger {
+    border-color: var(--color-danger-border);
+    background: var(--color-danger-bg);
+}
+
+.planning-field-error {
+    color: var(--color-danger);
+    font-size: 12px;
+    font-weight: 750;
+}
+
+.planning-import-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.planning-import-actions span {
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+    .planning-verification-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .planning-verification-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .planning-import-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+.planning-schedules-panel {
+    margin-top: 28px;
+}
+
+.planning-schedules-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 18px;
+}
+
+.planning-schedules-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.planning-schedules-list h4,
+.planning-assignment-editor h4 {
+    margin: 0 0 6px;
+}
+
+.planning-schedule-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-muted);
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.planning-schedule-item.active,
+.planning-schedule-item:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+
+.planning-schedule-item span {
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.planning-schedule-form {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.4fr) 100px 100px minmax(180px, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.planning-schedule-form label,
+.planning-assignment-editor label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.planning-schedule-form input,
+.planning-assignment-editor select,
+.planning-assignment-editor textarea {
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-heading);
+    font: inherit;
+}
+
+.planning-month-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: 16px;
+    align-items: start;
+}
+
+.planning-month-table-wrap {
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    max-height: 620px;
+}
+
+.planning-month-table {
+    min-width: 980px;
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--color-text);
+}
+
+.planning-month-table th,
+.planning-month-table td {
+    border-bottom: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    padding: 6px;
+    text-align: center;
+}
+
+.planning-month-table thead th,
+.planning-month-table tbody th {
+    position: sticky;
+    background: var(--color-surface-muted);
+    z-index: 1;
+}
+
+.planning-month-table thead th {
+    top: 0;
+}
+
+.planning-month-table tbody th {
+    left: 0;
+    min-width: 160px;
+    text-align: left;
+}
+
+.planning-month-table td button {
+    width: 100%;
+    min-width: 42px;
+    min-height: 34px;
+    padding: 5px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.planning-month-table td button.has-assignment {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+    font-weight: 800;
+}
+
+.planning-assignment-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-surface-muted);
+}
+
+.planning-assignment-editor textarea {
+    min-height: 86px;
+    resize: vertical;
+}
+
+@media (max-width: 1180px) {
+    .planning-schedules-layout,
+    .planning-month-wrapper {
+        grid-template-columns: 1fr;
+    }
+
+    .planning-schedule-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .planning-schedule-form {
+        grid-template-columns: 1fr;
+    }
+}

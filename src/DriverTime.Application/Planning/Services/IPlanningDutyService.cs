@@ -13,4 +13,9 @@ public interface IPlanningDutyService
     Task<PlanningDutyDetailsDto?> UpdateAsync(Guid id, UpdatePlanningDutyRequest request, CancellationToken cancellationToken = default);
 
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<PlanningDutyPdfImportConfirmResultDto> ConfirmPdfImportAsync(
+        PlanningDutyPdfImportConfirmRequestDto request,
+        CancellationToken cancellationToken = default);
 }
+

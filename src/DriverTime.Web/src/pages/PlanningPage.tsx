@@ -1,15 +1,22 @@
-﻿import { useEffect, useState, type FormEvent } from "react";
+﻿import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
+import PlanningSchedulesTab from "../components/planning/PlanningSchedulesTab";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
+    confirmPlanningDutiesPdfImport,
     createPlanningDuty,
     deletePlanningDuty,
     getPlanningDuty,
     getPlanningDuties,
+    previewPlanningDutiesPdf,
     updatePlanningDuty,
     type PlanningDuty,
     type PlanningDutyDetails,
     type PlanningDutyPayload,
+    type PlanningDutyPdfImportConfirmResult,
+    type PlanningDutyPdfImportConfidence,
+    type PlanningDutyPdfImportPreview,
+    type PlanningDutyPdfImportPreviewItem,
 } from "../services/planningDutiesService";
 import "../styles/drivers.css";
 import "../styles/planning.css";
@@ -29,6 +36,20 @@ type PlanningDutyFormState = {
     notes: string;
 };
 
+type ImportDraft = {
+    dutyNumber: string;
+    name: string;
+    line: string;
+    startTime: string;
+    endTime: string;
+    workMinutes: string;
+    drivingMinutes: string;
+    breakMinutes: string;
+    distanceKm: string;
+    notes: string;
+    confidence: PlanningDutyPdfImportConfidence;
+};
+
 const emptyForm: PlanningDutyFormState = {
     dutyNumber: "",
     name: "",
@@ -42,6 +63,18 @@ const emptyForm: PlanningDutyFormState = {
     drivingMinutes: "",
     distanceKm: "",
     notes: "",
+};
+
+const emptyConfidence: PlanningDutyPdfImportConfidence = {
+    dutyNumber: 0,
+    startTime: 0,
+    endTime: 0,
+    line: 0,
+    stops: 0,
+    workingMinutes: 0,
+    drivingMinutes: 0,
+    breakMinutes: 0,
+    distanceKm: 0,
 };
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", { dateStyle: "medium" });
@@ -116,6 +149,54 @@ function fromDetails(details: PlanningDutyDetails): PlanningDutyFormState {
     };
 }
 
+function toImportDraft(item: PlanningDutyPdfImportPreviewItem): ImportDraft {
+    return {
+        dutyNumber: item.dutyNumber ?? "",
+        name: item.name ?? "",
+        line: item.lines.map((line) => line.lineCode).join(", "),
+        startTime: item.startTime?.slice(0, 5) ?? "",
+        endTime: item.endTime?.slice(0, 5) ?? "",
+        workMinutes: item.workMinutes?.toString() ?? "",
+        drivingMinutes: item.drivingMinutes?.toString() ?? "",
+        breakMinutes: item.breakMinutes?.toString() ?? "",
+        distanceKm: item.distanceKm?.toString() ?? "",
+        notes: item.notes ?? "",
+        confidence: item.confidence ?? emptyConfidence,
+    };
+}
+
+function getConfidenceBadge(confidence: number) {
+    if (confidence >= 90) return `🟢 ${confidence}%`;
+    if (confidence >= 70) return `🟡 ${confidence}%`;
+    if (confidence >= 40) return `🟠 ${confidence}%`;
+    return `🔴 ${confidence}%`;
+}
+
+function getConfidenceClass(confidence: number) {
+    if (confidence < 40) return " confidence-danger";
+    if (confidence < 70) return " confidence-warning";
+    return "";
+}
+
+function getImportDraftErrors(draft: ImportDraft) {
+    const errors: Record<string, string> = {};
+
+    if (!draft.dutyNumber.trim()) errors.dutyNumber = "Numer służby jest wymagany.";
+    if (!draft.startTime.trim()) errors.startTime = "Godzina rozpoczęcia jest wymagana.";
+    if (!draft.endTime.trim()) errors.endTime = "Godzina zakończenia jest wymagana.";
+
+    return errors;
+}
+
+function getAverageConfidence(preview: PlanningDutyPdfImportPreview | null) {
+    if (!preview || preview.duties.length === 0) return 0;
+
+    const values = preview.duties.flatMap((duty) => Object.values(duty.confidence ?? emptyConfidence));
+    if (values.length === 0) return 0;
+
+    return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
 export default function PlanningPage() {
     const [duties, setDuties] = useState<PlanningDuty[]>([]);
     const [selectedDuty, setSelectedDuty] = useState<PlanningDutyDetails | null>(null);
@@ -126,6 +207,12 @@ export default function PlanningPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [message, setMessage] = useState("");
+    const [pdfFile, setPdfFile] = useState<File | null>(null);
+    const [pdfPreview, setPdfPreview] = useState<PlanningDutyPdfImportPreview | null>(null);
+    const [importResult, setImportResult] = useState<PlanningDutyPdfImportConfirmResult | null>(null);
+    const [importDrafts, setImportDrafts] = useState<ImportDraft[]>([]);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
     const [isMessageError, setIsMessageError] = useState(false);
 
     async function loadDuties() {
@@ -204,6 +291,33 @@ export default function PlanningPage() {
         }
     }
 
+    async function previewPdfImport() {
+        if (!pdfFile) {
+            setIsMessageError(true);
+            setMessage("Wybierz plik PDF przed przygotowaniem podglądu.");
+            return;
+        }
+
+        setIsPreviewLoading(true);
+        setMessage("");
+        setIsMessageError(false);
+        setPdfPreview(null);
+        setImportDrafts([]);
+        setImportResult(null);
+
+        try {
+            const preview = await previewPlanningDutiesPdf(pdfFile);
+            setPdfPreview(preview);
+            setImportDrafts(preview.duties.map(toImportDraft));
+            setMessage("Podgląd importu PDF został przygotowany. Dane nie zostały zapisane do bazy.");
+        } catch (error) {
+            setIsMessageError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się przygotować podglądu importu PDF.");
+        } finally {
+            setIsPreviewLoading(false);
+        }
+    }
+
     async function confirmDelete() {
         if (!dutyToDelete) return;
 
@@ -229,9 +343,72 @@ export default function PlanningPage() {
         }
     }
 
+    function updateImportDraft(index: number, field: keyof ImportDraft, value: string) {
+        setImportDrafts((current) => current.map((draft, draftIndex) => (
+            draftIndex === index ? { ...draft, [field]: value } : draft
+        )));
+    }
+
+
+    function hasImportValidationErrors() {
+        return importDrafts.length === 0 || importDrafts.some((draft) => Object.keys(getImportDraftErrors(draft)).length > 0);
+    }
+
+    async function confirmPdfImport() {
+        if (!pdfPreview || hasImportValidationErrors()) {
+            setIsMessageError(true);
+            setMessage("Uzupełnij wymagane pola przed importem do biblioteki.");
+            return;
+        }
+
+        setIsImporting(true);
+        setMessage("");
+        setIsMessageError(false);
+        setImportResult(null);
+
+        try {
+            const result = await confirmPlanningDutiesPdfImport({
+                sourceFileName: pdfPreview.fileName,
+                duties: importDrafts.map((draft) => ({
+                    dutyNumber: draft.dutyNumber.trim(),
+                    dutyName: draft.name.trim() || null,
+                    line: draft.line.trim() || null,
+                    startTime: draft.startTime ? `${draft.startTime}:00` : null,
+                    endTime: draft.endTime ? `${draft.endTime}:00` : null,
+                    workingMinutes: toIntegerOrNull(draft.workMinutes),
+                    drivingMinutes: toIntegerOrNull(draft.drivingMinutes),
+                    breakMinutes: toIntegerOrNull(draft.breakMinutes),
+                    distanceKm: toNumberOrNull(draft.distanceKm),
+                    notes: draft.notes.trim() || null,
+                    stops: [],
+                })),
+            });
+
+            setImportResult(result);
+            await loadDuties();
+            setMessage("Import PDF został zapisany do biblioteki służb.");
+        } catch (error) {
+            setIsMessageError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się zapisać importu PDF do biblioteki.");
+        } finally {
+            setIsImporting(false);
+        }
+    }
+    function cancelImportVerification() {
+        setPdfPreview(null);
+        setImportDrafts([]);
+        setImportResult(null);
+        setPdfFile(null);
+        setImportResult(null);
+        setMessage("");
+        setIsMessageError(false);
+    }
+
     useEffect(() => {
         void loadDuties();
     }, []);
+
+    const averageConfidence = getAverageConfidence(pdfPreview);
 
     return (
         <div className="drivers-page planning-page">
@@ -248,6 +425,159 @@ export default function PlanningPage() {
                     {message}
                 </p>
             ) : null}
+
+            <section className="drivers-panel planning-import-panel">
+                <div className="section-heading planning-panel-heading">
+                    <div>
+                        <h3>Import PDF służb</h3>
+                        <p>Podgląd i ręczna weryfikacja danych z tekstowego pliku PDF. OCR i zapis do bazy pojawią się w kolejnych etapach.</p>
+                    </div>
+                </div>
+
+                <div className="planning-import-controls">
+                    <label>
+                        Plik PDF
+                        <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            onChange={(event) => {
+                                setPdfFile(event.target.files?.[0] ?? null);
+                                setPdfPreview(null);
+                                setImportDrafts([]);
+                                setImportResult(null);
+                            }}
+                        />
+                    </label>
+                    <button
+                        className="planning-primary-button"
+                        type="button"
+                        onClick={() => void previewPdfImport()}
+                        disabled={!pdfFile || isPreviewLoading}
+                    >
+                        {isPreviewLoading ? "Analizowanie..." : "Podgląd importu"}
+                    </button>
+                </div>
+
+                {pdfPreview ? (
+                    <div className="planning-import-preview">
+                        <div className="planning-preview-summary planning-verification-summary">
+                            <span><strong>Plik:</strong> {pdfPreview.fileName}</span>
+                            <span><strong>Rozmiar:</strong> {pdfPreview.fileSizeBytes.toLocaleString("pl-PL")} B</span>
+                            <span><strong>Rozpoznano służb:</strong> {pdfPreview.detectedDutyCount}</span>
+                            <span><strong>Średnia pewność:</strong> {averageConfidence}%</span>
+                            <span><strong>Liczba ostrzeżeń:</strong> {pdfPreview.warnings.length}</span>
+                        </div>
+
+                        {pdfPreview.warnings.length > 0 ? (
+                            <div className="planning-warning-list" role="status">
+                                {pdfPreview.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+                            </div>
+                        ) : null}
+
+                        {importDrafts.length > 0 ? (
+                            <div className="planning-verification-list">
+                                {importDrafts.map((draft, index) => {
+                                    const errors = getImportDraftErrors(draft);
+                                    return (
+                                        <section className="planning-verification-card" key={`${draft.dutyNumber || "sluzba"}-${index}`}>
+                                            <h4>Służba {draft.dutyNumber || index + 1}</h4>
+                                            <div className="planning-verification-grid">
+                                                <VerificationField label="Numer służby" confidence={draft.confidence.dutyNumber} error={errors.dutyNumber}>
+                                                    <input className={getConfidenceClass(draft.confidence.dutyNumber)} value={draft.dutyNumber} onChange={(event) => updateImportDraft(index, "dutyNumber", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Nazwa (opcjonalnie)">
+                                                    <input value={draft.name} onChange={(event) => updateImportDraft(index, "name", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Linia" confidence={draft.confidence.line}>
+                                                    <input className={getConfidenceClass(draft.confidence.line)} value={draft.line} onChange={(event) => updateImportDraft(index, "line", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Godzina rozpoczęcia" confidence={draft.confidence.startTime} error={errors.startTime}>
+                                                    <input className={getConfidenceClass(draft.confidence.startTime)} type="time" value={draft.startTime} onChange={(event) => updateImportDraft(index, "startTime", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Godzina zakończenia" confidence={draft.confidence.endTime} error={errors.endTime}>
+                                                    <input className={getConfidenceClass(draft.confidence.endTime)} type="time" value={draft.endTime} onChange={(event) => updateImportDraft(index, "endTime", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Czas pracy" confidence={draft.confidence.workingMinutes}>
+                                                    <input className={getConfidenceClass(draft.confidence.workingMinutes)} type="number" min="0" value={draft.workMinutes} onChange={(event) => updateImportDraft(index, "workMinutes", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Czas jazdy" confidence={draft.confidence.drivingMinutes}>
+                                                    <input className={getConfidenceClass(draft.confidence.drivingMinutes)} type="number" min="0" value={draft.drivingMinutes} onChange={(event) => updateImportDraft(index, "drivingMinutes", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Czas przerwy" confidence={draft.confidence.breakMinutes}>
+                                                    <input className={getConfidenceClass(draft.confidence.breakMinutes)} type="number" min="0" value={draft.breakMinutes} onChange={(event) => updateImportDraft(index, "breakMinutes", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Kilometry" confidence={draft.confidence.distanceKm}>
+                                                    <input className={getConfidenceClass(draft.confidence.distanceKm)} type="number" min="0" step="0.01" value={draft.distanceKm} onChange={(event) => updateImportDraft(index, "distanceKm", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Uwagi">
+                                                    <textarea value={draft.notes} onChange={(event) => updateImportDraft(index, "notes", event.target.value)} />
+                                                </VerificationField>
+                                            </div>
+                                        </section>
+                                    );
+                                })}
+                            </div>
+                        ) : null}
+
+                        {importResult ? (
+                            <div className="planning-import-result" role="status">
+                                <div className="planning-preview-summary">
+                                    <span><strong>Dodano:</strong> {importResult.createdCount}</span>
+                                    <span><strong>Zaktualizowano:</strong> {importResult.updatedCount}</span>
+                                    <span><strong>Bez zmian:</strong> {importResult.unchangedCount}</span>
+                                    <span><strong>Pominięto:</strong> {importResult.skippedCount}</span>
+                                    <span><strong>Błędy:</strong> {importResult.errors.length}</span>
+                                </div>
+                                {importResult.errors.length > 0 ? (
+                                    <div className="planning-warning-list">
+                                        {importResult.errors.map((error) => <p key={error}>{error}</p>)}
+                                    </div>
+                                ) : null}
+                                {importResult.items.length > 0 ? (
+                                    <div className="drivers-table-wrapper">
+                                        <table className="drivers-table planning-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Numer</th>
+                                                    <th>Linia</th>
+                                                    <th>Status</th>
+                                                    <th>Komunikat</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {importResult.items.map((item, index) => (
+                                                    <tr key={`${item.dutyNumber ?? "wynik"}-${index}`}>
+                                                        <td>{item.dutyNumber ?? "Brak danych"}</td>
+                                                        <td>{item.line ?? "Brak danych"}</td>
+                                                        <td>{item.status}</td>
+                                                        <td>{item.message}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ) : null}
+
+                        <div className="planning-import-actions">
+                            <button
+                                className="planning-primary-button"
+                                type="button"
+                                onClick={() => void confirmPdfImport()}
+                                disabled={hasImportValidationErrors() || isImporting}
+                            >
+                                {isImporting ? "Importowanie..." : "Importuj do biblioteki"}
+                            </button>
+                            <button className="planning-secondary-button" type="button" onClick={cancelImportVerification} disabled={isImporting}>
+                                Anuluj
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
+            </section>
+
+            <PlanningSchedulesTab />
 
             <div className="planning-grid">
                 <section className="drivers-panel">
@@ -292,7 +622,7 @@ export default function PlanningPage() {
                                             <td>{duty.dutyNumber}</td>
                                             <td>{duty.name}</td>
                                             <td>{formatDate(duty.validFrom)}</td>
-                                            <td>{formatTime(duty.startTime)}–{formatTime(duty.endTime)}</td>
+                                            <td>{formatTime(duty.startTime)}-{formatTime(duty.endTime)}</td>
                                             <td>{formatMinutes(duty.workMinutes)}</td>
                                             <td>{formatKm(duty.distanceKm)}</td>
                                             <td>
@@ -376,4 +706,31 @@ export default function PlanningPage() {
         </div>
     );
 }
+
+function VerificationField({
+    label,
+    confidence,
+    error,
+    children,
+}: {
+    label: string;
+    confidence?: number;
+    error?: string;
+    children: ReactNode;
+}) {
+    return (
+        <label className="planning-verification-field">
+            <span className="planning-field-heading">
+                <span>{label}</span>
+                {confidence !== undefined ? <small>{getConfidenceBadge(confidence)}</small> : null}
+            </span>
+            {children}
+            {error ? <span className="planning-field-error">{error}</span> : null}
+        </label>
+    );
+}
+
+
+
+
 

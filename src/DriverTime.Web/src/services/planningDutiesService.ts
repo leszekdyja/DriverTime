@@ -42,6 +42,86 @@ export type PlanningDutyDetails = PlanningDuty & {
     stops: PlanningDutyStop[];
 };
 
+export type PlanningDutyPdfImportConfidence = {
+    dutyNumber: number;
+    startTime: number;
+    endTime: number;
+    line: number;
+    stops: number;
+    workingMinutes: number;
+    drivingMinutes: number;
+    breakMinutes: number;
+    distanceKm: number;
+};
+export type PlanningDutyPdfImportPreviewItem = {
+    dutyNumber: string | null;
+    name: string | null;
+    validFrom: string | null;
+    vehicleRequirement: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    totalDurationMinutes: number | null;
+    workMinutes: number | null;
+    breakMinutes: number | null;
+    drivingMinutes: number | null;
+    distanceKm: number | null;
+    notes: string | null;
+    sourceFileName: string | null;
+    lines: PlanningDutyLine[];
+    stops: PlanningDutyStop[];
+    confidence: PlanningDutyPdfImportConfidence;
+};
+
+export type PlanningDutyPdfImportPreview = {
+    fileName: string;
+    fileSizeBytes: number;
+    detectedDutyCount: number;
+    warnings: string[];
+    duties: PlanningDutyPdfImportPreviewItem[];
+};
+
+
+export type PlanningDutyPdfImportConfirmStop = {
+    stopName: string | null;
+    arrivalTime: string | null;
+    departureTime: string | null;
+    sequence: number;
+};
+
+export type PlanningDutyPdfImportConfirmItem = {
+    dutyNumber: string;
+    dutyName: string | null;
+    line: string | null;
+    startTime: string | null;
+    endTime: string | null;
+    workingMinutes: number | null;
+    drivingMinutes: number | null;
+    breakMinutes: number | null;
+    distanceKm: number | null;
+    notes: string | null;
+    stops: PlanningDutyPdfImportConfirmStop[];
+};
+
+export type PlanningDutyPdfImportConfirmRequest = {
+    sourceFileName: string | null;
+    duties: PlanningDutyPdfImportConfirmItem[];
+};
+
+export type PlanningDutyPdfImportConfirmResultItem = {
+    dutyNumber: string | null;
+    line: string | null;
+    status: "Created" | "Updated" | "Unchanged" | "Skipped" | "Error" | string;
+    message: string;
+};
+
+export type PlanningDutyPdfImportConfirmResult = {
+    createdCount: number;
+    updatedCount: number;
+    unchangedCount: number;
+    skippedCount: number;
+    errors: string[];
+    items: PlanningDutyPdfImportConfirmResultItem[];
+};
 export type PlanningDutyPayload = {
     dutyNumber: string;
     name: string;
@@ -121,4 +201,30 @@ export async function deletePlanningDuty(id: string): Promise<void> {
     if (!response.ok) {
         throw new Error("Nie udało się usunąć służby.");
     }
+}
+
+export async function previewPlanningDutiesPdf(file: File): Promise<PlanningDutyPdfImportPreview> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await apiFetch("/api/planning/duties/import/pdf/preview", {
+        method: "POST",
+        body: formData,
+    });
+
+    return readJson<PlanningDutyPdfImportPreview>(response, "Nie udało się przygotować podglądu importu PDF.");
+}
+
+
+
+export async function confirmPlanningDutiesPdfImport(
+    request: PlanningDutyPdfImportConfirmRequest,
+): Promise<PlanningDutyPdfImportConfirmResult> {
+    const response = await apiFetch("/api/planning/duties/import/pdf/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+    });
+
+    return readJson<PlanningDutyPdfImportConfirmResult>(response, "Nie udało się zapisać importu PDF do biblioteki.");
 }

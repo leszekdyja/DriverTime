@@ -1,4 +1,4 @@
-namespace DriverTime.Domain.Entities;
+﻿namespace DriverTime.Domain.Entities;
 
 public class Driver
 {
@@ -20,5 +20,8 @@ public class Driver
 
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
 
+    public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
+

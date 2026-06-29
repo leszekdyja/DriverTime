@@ -41,4 +41,7 @@ public class PlanningDuty : BaseEntity
     public ICollection<PlanningDutyLine> Lines { get; set; } = new List<PlanningDutyLine>();
 
     public ICollection<PlanningDutyStop> Stops { get; set; } = new List<PlanningDutyStop>();
+
+    public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
 }
+
