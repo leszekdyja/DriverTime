@@ -8,6 +8,10 @@ public class PlanningDutyPdfImportConfirmItemDto
 
     public string? Line { get; set; }
 
+    public DateOnly? ValidFrom { get; set; }
+
+    public string? VehicleRequirement { get; set; }
+
     public TimeOnly? StartTime { get; set; }
 
     public TimeOnly? EndTime { get; set; }
@@ -24,3 +28,4 @@ public class PlanningDutyPdfImportConfirmItemDto
 
     public List<PlanningDutyPdfImportConfirmStopDto> Stops { get; set; } = new();
 }
+

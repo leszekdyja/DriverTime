@@ -195,6 +195,55 @@ public class PlanningDutyServiceTests
         Assert.AreEqual(currentCompanyId, duties[1].CompanyId);
     }
 
+
+    [TestMethod]
+    public void ConfirmImport_TransportDutySheetData_SavesCompleteDutyDefinition()
+    {
+        var companyId = Guid.NewGuid();
+        var duties = new List<PlanningDuty>();
+        var request = new PlanningDutyPdfImportConfirmRequestDto
+        {
+            SourceFileName = "sluzba-60.pdf",
+            Duties = new List<PlanningDutyPdfImportConfirmItemDto>
+            {
+                new()
+                {
+                    DutyNumber = "60",
+                    DutyName = "Służba 60",
+                    Line = "K-64 / K-48",
+                    ValidFrom = new DateOnly(2025, 11, 1),
+                    VehicleRequirement = "Autobus 41 miejscowy",
+                    StartTime = new TimeOnly(16, 20),
+                    EndTime = new TimeOnly(3, 5),
+                    WorkingMinutes = 540,
+                    BreakMinutes = 120,
+                    DistanceKm = 218m,
+                    Notes = "Ważna od 01.11.2025; Autobus 41 miejscowy",
+                    Stops = new List<PlanningDutyPdfImportConfirmStopDto>
+                    {
+                        new() { Sequence = 1, StopName = "BAZA WPO", Km = 0m, DepartureTime = new TimeOnly(16, 20) },
+                        new() { Sequence = 2, StopName = "ZG RUDNA ZACHODNIA", Km = 56m, ArrivalTime = new TimeOnly(18, 10), DepartureTime = new TimeOnly(18, 12) },
+                        new() { Sequence = 3, StopName = "SZYB SG", Km = 74m, DepartureTime = new TimeOnly(18, 40) }
+                    }
+                }
+            }
+        };
+
+        var result = PlanningDutyService.ConfirmImportForCompany(duties, request, companyId, DateTime.UtcNow);
+
+        Assert.AreEqual(1, result.CreatedCount);
+        var duty = duties.Single();
+        Assert.AreEqual("60", duty.DutyNumber);
+        Assert.AreEqual(new DateOnly(2025, 11, 1), duty.ValidFrom);
+        Assert.AreEqual("Autobus 41 miejscowy", duty.VehicleRequirement);
+        Assert.AreEqual(218m, duty.DistanceKm);
+        Assert.IsTrue(duty.Lines.Any(x => x.LineCode == "K-64"));
+        Assert.IsTrue(duty.Lines.Any(x => x.LineCode == "K-48"));
+        Assert.AreEqual(3, duty.Stops.Count);
+        Assert.AreEqual("BAZA WPO", duty.Stops.OrderBy(x => x.Sequence).First().StopName);
+        Assert.AreEqual(56m, duty.Stops.Single(x => x.StopName == "ZG RUDNA ZACHODNIA").Km);
+        Assert.AreEqual(3, duty.Stops.Single(x => x.StopName == "SZYB SG").Sequence);
+    }
     private static CreatePlanningDutyRequest CreateValidRequest() => new()
     {
         DutyNumber = "24",
@@ -263,3 +312,4 @@ public class PlanningDutyServiceTests
         return duty;
     }
 }
+

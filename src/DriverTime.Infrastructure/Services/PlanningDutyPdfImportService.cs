@@ -59,6 +59,15 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             return new List<PlanningDutyPdfImportPreviewItemDto>();
         }
 
+        if (IsTransportDutySheet(normalizedText))
+        {
+            var transportDuty = TryParseTransportDutySheet(normalizedText, sourceFileName);
+            if (transportDuty is not null)
+            {
+                return new List<PlanningDutyPdfImportPreviewItemDto> { transportDuty };
+            }
+        }
+
         var dutyMatches = GetDutyMatches(normalizedText);
         if (dutyMatches.Count == 0)
         {
@@ -113,6 +122,208 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
         return duties;
     }
 
+    private static bool IsTransportDutySheet(string text) =>
+        text.Contains("ZATRUDNIENIE KIEROWCY", StringComparison.OrdinalIgnoreCase)
+        && text.Contains("DZIENNY PRZEBIEG", StringComparison.OrdinalIgnoreCase);
+
+    private static PlanningDutyPdfImportPreviewItemDto? TryParseTransportDutySheet(
+        string text,
+        string sourceFileName)
+    {
+        var dutyMatch = Regex.Match(text, @"(?im)\bSŁUŻBA\s+(?<number>[A-Za-z0-9\-/]+)");
+        if (!dutyMatch.Success)
+        {
+            dutyMatch = Regex.Match(text, @"(?im)\bSLUZBA\s+(?<number>[A-Za-z0-9\-/]+)");
+        }
+
+        if (!dutyMatch.Success)
+        {
+            return null;
+        }
+
+        var employmentSection = ExtractSection(text, "ZATRUDNIENIE KIEROWCY");
+        var validFrom = ExtractValidFrom(text);
+        var vehicleRequirement = ExtractVehicleRequirement(text);
+        var start = ExtractLabeledTime(employmentSection, @"(?i)(?:start\s+pracy|początek\s+pracy|poczatek\s+pracy|rozpoczęcie|rozpoczecie|start)");
+        var end = ExtractLabeledTime(employmentSection, @"(?i)(?:koniec\s+pracy|zakończenie|zakonczenie|koniec)");
+        var workMinutes = ExtractMinutes(employmentSection, @"(?i)\bpraca\b\s*[:\-]?\s*(?<value>\d{1,2}\s*h\s*\d{1,2}(?:\s*min)?|\d{1,2}:\d{2}|\d{1,4}\s*min|\d{1,4})");
+        var breakfastBreak = ExtractMinutes(employmentSection, @"(?i)przer\.?\s*śniad\.?\s*[:\-]?\s*(?<value>\d{1,2}\s*h\s*\d{1,2}(?:\s*min)?|\d{1,2}:\d{2}|\d{1,4}\s*min|\d{1,4})");
+        var mainBreak = ExtractMinutes(employmentSection, @"(?i)\bprzerwa\b\s*[:\-]?\s*(?<value>\d{1,2}\s*h\s*\d{1,2}(?:\s*min)?|\d{1,2}:\d{2}|\d{1,4}\s*min|\d{1,4})");
+        var distance = ExtractDailyDistance(text);
+        var lines = ExtractTransportLines(text);
+        var stops = ExtractTransportStops(text, lines.Values.Select(x => x.LineCode).ToList());
+        var notes = BuildTransportNotes(validFrom, vehicleRequirement);
+
+        return new PlanningDutyPdfImportPreviewItemDto
+        {
+            DutyNumber = dutyMatch.Groups["number"].Value.Trim(),
+            Name = $"Służba {dutyMatch.Groups["number"].Value.Trim()}",
+            ValidFrom = validFrom,
+            VehicleRequirement = vehicleRequirement,
+            StartTime = start,
+            EndTime = end,
+            WorkMinutes = workMinutes.Value,
+            BreakMinutes = SumNullableMinutes(mainBreak.Value, breakfastBreak.Value),
+            DistanceKm = distance.Value,
+            Notes = notes,
+            SourceFileName = sourceFileName,
+            Lines = lines.Values,
+            Stops = stops.Values,
+            Confidence = new PlanningDutyPdfImportConfidenceDto
+            {
+                DutyNumber = 100,
+                StartTime = start.HasValue ? 100 : 0,
+                EndTime = end.HasValue ? 100 : 0,
+                Line = lines.Values.Count > 0 ? lines.Confidence : 0,
+                Stops = stops.Values.Count > 0 ? stops.Confidence : 0,
+                WorkingMinutes = workMinutes.Value.HasValue ? 100 : 0,
+                BreakMinutes = mainBreak.Value.HasValue || breakfastBreak.Value.HasValue ? 100 : 0,
+                DistanceKm = distance.Value.HasValue ? 100 : 0
+            }
+        };
+    }
+
+    private static string ExtractSection(string text, string heading)
+    {
+        var index = CultureInfo.InvariantCulture.CompareInfo.IndexOf(text, heading, CompareOptions.IgnoreCase);
+        return index < 0 ? string.Empty : text[index..];
+    }
+
+    private static DateOnly? ExtractValidFrom(string text)
+    {
+        var match = Regex.Match(text, @"(?i)WAŻNA\s+OD\s+(?<date>\d{1,2}[.]\d{1,2}[.]\d{4})");
+        if (!match.Success)
+        {
+            match = Regex.Match(text, @"(?i)WAZNA\s+OD\s+(?<date>\d{1,2}[.]\d{1,2}[.]\d{4})");
+        }
+
+        return DateOnly.TryParseExact(match.Groups["date"].Value, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
+            ? date
+            : null;
+    }
+
+    private static string? ExtractVehicleRequirement(string text)
+    {
+        var match = Regex.Match(text, @"(?im)^\s*(?<vehicle>Autobus\s+\d+\s+miejscowy)\s*$");
+        return match.Success ? match.Groups["vehicle"].Value.Trim() : null;
+    }
+
+    private static TimeOnly? ExtractLabeledTime(string text, string labelPattern)
+    {
+        var match = Regex.Match(text, $@"{labelPattern}\s*[:\-]?\s*(?<time>\d{{1,2}}[:.]\d{{2}})");
+        return match.Success ? TryParseTime(match.Groups["time"].Value) : null;
+    }
+
+    private static (decimal? Value, int Confidence) ExtractDailyDistance(string text)
+    {
+        var match = Regex.Match(text, @"(?i)DZIENNY\s+PRZEBIEG\s*[:\-]?\s*(?<value>\d+(?:[,.]\d+)?)\s*km");
+        return match.Success && decimal.TryParse(match.Groups["value"].Value.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? (value, 100)
+            : (null, 0);
+    }
+
+    private static (List<PlanningDutyLineDto> Values, int Confidence) ExtractTransportLines(string text)
+    {
+        var codes = Regex.Matches(text, @"(?i)\bK-\d{1,4}(?:bis)?\b")
+            .Select(x => x.Value.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return (codes.Select(code => new PlanningDutyLineDto
+        {
+            Id = Guid.NewGuid(),
+            LineCode = code,
+            Variant = code.EndsWith("bis", StringComparison.OrdinalIgnoreCase) ? "bis" : null
+        }).ToList(), codes.Count > 0 ? 90 : 0);
+    }
+
+    private static (List<PlanningDutyStopDto> Values, int Confidence) ExtractTransportStops(
+        string text,
+        IReadOnlyCollection<string> lineCodes)
+    {
+        var stops = new List<PlanningDutyStopDto>();
+        var knownHeadings = new[]
+        {
+            "SŁUŻBA", "SLUZBA", "WAŻNA", "WAZNA", "Autobus", "DZIENNY", "ZATRUDNIENIE", "KIEROWCY", "czas", "praca", "przerwa", "przer.śniad"
+        };
+
+        foreach (var rawLine in text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var line = rawLine.Trim();
+            if (line.Length < 3 || knownHeadings.Any(x => line.StartsWith(x, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            if (lineCodes.Any(code => string.Equals(code, line, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var match = Regex.Match(line, @"^(?:(?<km>\d+(?:[,.]\d+)?)\s+)?(?<stop>[\p{L}0-9,. /\-]+?)(?:\s+(?<times>(?:\d{1,2}[:.]\d{2}\s*)+))?$", RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var stopName = Regex.Replace(match.Groups["stop"].Value.Trim(), @"\s+", " ");
+            if (!IsLikelyTransportStop(stopName))
+            {
+                continue;
+            }
+
+            decimal? km = null;
+            if (decimal.TryParse(match.Groups["km"].Value.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedKm))
+            {
+                km = parsedKm;
+            }
+
+            var times = Regex.Matches(match.Groups["times"].Value, @"\d{1,2}[:.]\d{2}")
+                .Select(x => TryParseTime(x.Value))
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .ToList();
+
+            stops.Add(new PlanningDutyStopDto
+            {
+                Id = Guid.NewGuid(),
+                Sequence = stops.Count + 1,
+                StopName = stopName,
+                Km = km,
+                ArrivalTime = times.Count > 1 ? times[0] : null,
+                DepartureTime = times.Count > 0 ? times[^1] : null,
+                LineCode = lineCodes.Count == 1 ? lineCodes.First() : null
+            });
+        }
+
+        return (stops, stops.Count > 0 ? 80 : 0);
+    }
+
+    private static bool IsLikelyTransportStop(string value)
+    {
+        if (Regex.IsMatch(value, @"^K-\d", RegexOptions.IgnoreCase)) return false;
+        if (Regex.IsMatch(value, @"^\d+(?:[,.]\d+)?$")) return false;
+        if (Regex.IsMatch(value, @"^\d{1,2}[:.]\d{2}")) return false;
+        return value.Contains(' ')
+            || value.Contains(',')
+            || value.Equals("BAZA WPO", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("ZG ", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("SZYB ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int? SumNullableMinutes(params int?[] values)
+    {
+        var present = values.Where(x => x.HasValue).Select(x => x!.Value).ToList();
+        return present.Count == 0 ? null : present.Sum();
+    }
+
+    private static string? BuildTransportNotes(DateOnly? validFrom, string? vehicleRequirement)
+    {
+        var notes = new List<string>();
+        if (validFrom.HasValue) notes.Add($"Ważna od {validFrom:dd.MM.yyyy}");
+        if (!string.IsNullOrWhiteSpace(vehicleRequirement)) notes.Add(vehicleRequirement);
+        return notes.Count == 0 ? null : string.Join("; ", notes);
+    }
     private static string NormalizeText(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
@@ -338,5 +549,7 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             .Replace("\\\\", "\\");
     }
 }
+
+
 
 

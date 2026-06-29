@@ -15,6 +15,7 @@ export type PlanningDuty = {
     distanceKm: number | null;
     createdAtUtc: string;
     updatedAtUtc: string | null;
+    lines: PlanningDutyLine[];
 };
 
 export type PlanningDutyLine = {
@@ -85,6 +86,8 @@ export type PlanningDutyPdfImportConfirmStop = {
     stopName: string | null;
     arrivalTime: string | null;
     departureTime: string | null;
+    km: number | null;
+    lineCode: string | null;
     sequence: number;
 };
 
@@ -92,6 +95,8 @@ export type PlanningDutyPdfImportConfirmItem = {
     dutyNumber: string;
     dutyName: string | null;
     line: string | null;
+    validFrom: string | null;
+    vehicleRequirement: string | null;
     startTime: string | null;
     endTime: string | null;
     workingMinutes: number | null;
@@ -228,3 +233,6 @@ export async function confirmPlanningDutiesPdfImport(
 
     return readJson<PlanningDutyPdfImportConfirmResult>(response, "Nie udało się zapisać importu PDF do biblioteki.");
 }
+
+
+

@@ -29,4 +29,7 @@ public class PlanningDutyListDto
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime? UpdatedAtUtc { get; set; }
+
+    public List<PlanningDutyLineDto> Lines { get; set; } = new();
 }
+

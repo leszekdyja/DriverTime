@@ -40,6 +40,8 @@ type ImportDraft = {
     dutyNumber: string;
     name: string;
     line: string;
+    validFrom: string;
+    vehicleRequirement: string;
     startTime: string;
     endTime: string;
     workMinutes: string;
@@ -47,6 +49,7 @@ type ImportDraft = {
     breakMinutes: string;
     distanceKm: string;
     notes: string;
+    stops: PlanningDutyPdfImportPreviewItem["stops"];
     confidence: PlanningDutyPdfImportConfidence;
 };
 
@@ -153,7 +156,9 @@ function toImportDraft(item: PlanningDutyPdfImportPreviewItem): ImportDraft {
     return {
         dutyNumber: item.dutyNumber ?? "",
         name: item.name ?? "",
-        line: item.lines.map((line) => line.lineCode).join(", "),
+        line: item.lines.map((line) => line.lineCode).join(" / "),
+        validFrom: item.validFrom ?? "",
+        vehicleRequirement: item.vehicleRequirement ?? "",
         startTime: item.startTime?.slice(0, 5) ?? "",
         endTime: item.endTime?.slice(0, 5) ?? "",
         workMinutes: item.workMinutes?.toString() ?? "",
@@ -161,6 +166,7 @@ function toImportDraft(item: PlanningDutyPdfImportPreviewItem): ImportDraft {
         breakMinutes: item.breakMinutes?.toString() ?? "",
         distanceKm: item.distanceKm?.toString() ?? "",
         notes: item.notes ?? "",
+        stops: item.stops ?? [],
         confidence: item.confidence ?? emptyConfidence,
     };
 }
@@ -373,6 +379,8 @@ export default function PlanningPage() {
                     dutyNumber: draft.dutyNumber.trim(),
                     dutyName: draft.name.trim() || null,
                     line: draft.line.trim() || null,
+                    validFrom: draft.validFrom || null,
+                    vehicleRequirement: draft.vehicleRequirement.trim() || null,
                     startTime: draft.startTime ? `${draft.startTime}:00` : null,
                     endTime: draft.endTime ? `${draft.endTime}:00` : null,
                     workingMinutes: toIntegerOrNull(draft.workMinutes),
@@ -380,7 +388,14 @@ export default function PlanningPage() {
                     breakMinutes: toIntegerOrNull(draft.breakMinutes),
                     distanceKm: toNumberOrNull(draft.distanceKm),
                     notes: draft.notes.trim() || null,
-                    stops: [],
+                    stops: draft.stops.map((stop) => ({
+                        stopName: stop.stopName,
+                        arrivalTime: stop.arrivalTime,
+                        departureTime: stop.departureTime,
+                        km: stop.km,
+                        lineCode: stop.lineCode,
+                        sequence: stop.sequence,
+                    })),
                 })),
             });
 
@@ -490,6 +505,12 @@ export default function PlanningPage() {
                                                 </VerificationField>
                                                 <VerificationField label="Linia" confidence={draft.confidence.line}>
                                                     <input className={getConfidenceClass(draft.confidence.line)} value={draft.line} onChange={(event) => updateImportDraft(index, "line", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Ważna od">
+                                                    <input type="date" value={draft.validFrom} onChange={(event) => updateImportDraft(index, "validFrom", event.target.value)} />
+                                                </VerificationField>
+                                                <VerificationField label="Wymagany pojazd">
+                                                    <input value={draft.vehicleRequirement} onChange={(event) => updateImportDraft(index, "vehicleRequirement", event.target.value)} />
                                                 </VerificationField>
                                                 <VerificationField label="Godzina rozpoczęcia" confidence={draft.confidence.startTime} error={errors.startTime}>
                                                     <input className={getConfidenceClass(draft.confidence.startTime)} type="time" value={draft.startTime} onChange={(event) => updateImportDraft(index, "startTime", event.target.value)} />
@@ -608,11 +629,11 @@ export default function PlanningPage() {
                                 <thead>
                                     <tr>
                                         <th>Numer</th>
-                                        <th>Nazwa</th>
+                                        <th>Linie</th>
                                         <th>Ważna od</th>
-                                        <th>Godziny</th>
-                                        <th>Czas pracy</th>
-                                        <th>Kilometry</th>
+                                        <th>Typ pojazdu</th>
+                                        <th>Praca</th>
+                                        <th>Km</th>
                                         <th>Akcje</th>
                                     </tr>
                                 </thead>
@@ -620,9 +641,9 @@ export default function PlanningPage() {
                                     {duties.map((duty) => (
                                         <tr key={duty.id}>
                                             <td>{duty.dutyNumber}</td>
-                                            <td>{duty.name}</td>
+                                            <td>{duty.lines.length > 0 ? duty.lines.map((line) => line.lineCode).join(" / ") : "Brak danych"}</td>
                                             <td>{formatDate(duty.validFrom)}</td>
-                                            <td>{formatTime(duty.startTime)}-{formatTime(duty.endTime)}</td>
+                                            <td>{duty.vehicleRequirement ?? "Brak danych"}</td>
                                             <td>{formatMinutes(duty.workMinutes)}</td>
                                             <td>{formatKm(duty.distanceKm)}</td>
                                             <td>
@@ -681,8 +702,44 @@ export default function PlanningPage() {
                         <h4>Szczegóły służby</h4>
                         {selectedDuty ? (
                             <>
-                                <p><strong>Linie:</strong> {selectedDuty.lines.length > 0 ? selectedDuty.lines.map((line) => line.lineCode).join(", ") : "Brak danych"}</p>
-                                <p><strong>Przystanki:</strong> {selectedDuty.stops.length > 0 ? `${selectedDuty.stops.length} pozycji` : "Brak danych"}</p>
+                                <div className="planning-duty-details-grid">
+                                    <p><strong>Numer służby:</strong> {selectedDuty.dutyNumber}</p>
+                                    <p><strong>Ważna od:</strong> {formatDate(selectedDuty.validFrom)}</p>
+                                    <p><strong>Linie:</strong> {selectedDuty.lines.length > 0 ? selectedDuty.lines.map((line) => line.lineCode).join(" / ") : "Brak danych"}</p>
+                                    <p><strong>Pojazd:</strong> {selectedDuty.vehicleRequirement ?? "Brak danych"}</p>
+                                    <p><strong>Czas pracy:</strong> {formatMinutes(selectedDuty.workMinutes)}</p>
+                                    <p><strong>Przerwy:</strong> {formatMinutes(selectedDuty.breakMinutes)}</p>
+                                    <p><strong>Dzienny przebieg:</strong> {formatKm(selectedDuty.distanceKm)}</p>
+                                </div>
+                                {selectedDuty.stops.length > 0 ? (
+                                    <div className="planning-stops-details">
+                                        <h5>Lista przystanków</h5>
+                                        <div className="drivers-table-wrapper">
+                                            <table className="drivers-table planning-table planning-stops-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>LP</th>
+                                                        <th>Przystanek</th>
+                                                        <th>Km</th>
+                                                        <th>Przyjazd</th>
+                                                        <th>Odjazd</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {selectedDuty.stops.map((stop) => (
+                                                        <tr key={stop.id || `${stop.sequence}-${stop.stopName}`}>
+                                                            <td>{stop.sequence}</td>
+                                                            <td>{stop.stopName}</td>
+                                                            <td>{stop.km ?? "-"}</td>
+                                                            <td>{formatTime(stop.arrivalTime)}</td>
+                                                            <td>{formatTime(stop.departureTime)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ) : <p><strong>Przystanki:</strong> Brak danych</p>}
                             </>
                         ) : (
                             <p>Wybierz służbę z listy albo zapisz nową, aby zobaczyć szczegóły.</p>
@@ -729,6 +786,13 @@ function VerificationField({
         </label>
     );
 }
+
+
+
+
+
+
+
 
 
 

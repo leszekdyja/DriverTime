@@ -8,5 +8,10 @@ public class PlanningDutyPdfImportConfirmStopDto
 
     public TimeOnly? DepartureTime { get; set; }
 
+    public decimal? Km { get; set; }
+
+    public string? LineCode { get; set; }
+
     public int Sequence { get; set; }
 }
+

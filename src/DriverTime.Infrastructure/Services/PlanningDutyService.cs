@@ -36,6 +36,7 @@ public class PlanningDutyService : IPlanningDutyService
 
         return await _dbContext.PlanningDuties
             .AsNoTracking()
+            .Include(x => x.Lines)
             .Where(x => x.CompanyId == companyId)
             .OrderByDescending(x => x.ValidFrom)
             .ThenBy(x => x.DutyNumber)
@@ -331,7 +332,17 @@ public class PlanningDutyService : IPlanningDutyService
         DrivingMinutes = duty.DrivingMinutes,
         DistanceKm = duty.DistanceKm,
         CreatedAtUtc = duty.CreatedAtUtc,
-        UpdatedAtUtc = duty.UpdatedAtUtc
+        UpdatedAtUtc = duty.UpdatedAtUtc,
+        Lines = duty.Lines
+            .OrderBy(x => x.LineCode)
+            .Select(x => new PlanningDutyLineDto
+            {
+                Id = x.Id,
+                LineCode = x.LineCode,
+                Variant = x.Variant,
+                DistanceKm = x.DistanceKm
+            })
+            .ToList()
     };
 
     private static PlanningDutyDetailsDto ToDetailsDto(PlanningDuty duty) => new()
@@ -410,7 +421,8 @@ public class PlanningDutyService : IPlanningDutyService
 
             OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jest za długi.", errors);
             OptionalText(duty.DutyName, NameMaxLength, $"{label}: nazwa jest za długa.", errors);
-            OptionalText(duty.Line, LineCodeMaxLength, $"{label}: linia jest za długa.", errors);
+            OptionalText(duty.Line, 500, $"{label}: linia jest za długa.", errors);
+            OptionalText(duty.VehicleRequirement, VehicleRequirementMaxLength, $"{label}: wymagany pojazd jest za długi.", errors);
             OptionalText(duty.Notes, NotesMaxLength, $"{label}: uwagi są za długie.", errors);
             NonNegative(duty.WorkingMinutes, $"{label}: czas pracy nie może być ujemny.", errors);
             NonNegative(duty.DrivingMinutes, $"{label}: czas jazdy nie może być ujemny.", errors);
@@ -459,6 +471,8 @@ public class PlanningDutyService : IPlanningDutyService
         var dutyNumber = NormalizeRequired(item.DutyNumber);
         duty.DutyNumber = dutyNumber;
         duty.Name = NormalizeOptional(item.DutyName) ?? $"Służba {dutyNumber}";
+        duty.ValidFrom = item.ValidFrom;
+        duty.VehicleRequirement = NormalizeOptional(item.VehicleRequirement);
         duty.StartTime = item.StartTime;
         duty.EndTime = item.EndTime;
         duty.WorkMinutes = item.WorkingMinutes;
@@ -499,9 +513,10 @@ public class PlanningDutyService : IPlanningDutyService
                 PlanningDutyId = duty.Id,
                 Sequence = stop.Sequence,
                 StopName = stopName,
+                Km = stop.Km,
                 ArrivalTime = stop.ArrivalTime,
                 DepartureTime = stop.DepartureTime,
-                LineCode = NormalizeOptional(item.Line)
+                LineCode = NormalizeOptional(stop.LineCode) ?? NormalizeSingleLineCode(item.Line)
             });
         }
     }
@@ -514,6 +529,8 @@ public class PlanningDutyService : IPlanningDutyService
         var dutyName = NormalizeOptional(item.DutyName) ?? $"Służba {NormalizeRequired(item.DutyNumber)}";
 
         return string.Equals(duty.Name, dutyName, StringComparison.Ordinal)
+            && duty.ValidFrom == item.ValidFrom
+            && string.Equals(duty.VehicleRequirement, NormalizeOptional(item.VehicleRequirement), StringComparison.Ordinal)
             && duty.StartTime == item.StartTime
             && duty.EndTime == item.EndTime
             && duty.WorkMinutes == item.WorkingMinutes
@@ -523,21 +540,22 @@ public class PlanningDutyService : IPlanningDutyService
             && string.Equals(duty.Notes, NormalizeOptional(item.Notes), StringComparison.Ordinal)
             && string.Equals(duty.SourceFileName, NormalizeOptional(sourceFileName), StringComparison.Ordinal)
             && string.Equals(GetLineKey(duty), GetLineKey(item.Line), StringComparison.OrdinalIgnoreCase)
-            && AreStopsIdentical(duty.Stops, item.Stops);
+            && AreStopsIdentical(duty.Stops, item.Stops, item.Line);
     }
 
     private static bool AreStopsIdentical(
         IEnumerable<PlanningDutyStop> existingStops,
-        IEnumerable<PlanningDutyPdfImportConfirmStopDto> importedStops)
+        IEnumerable<PlanningDutyPdfImportConfirmStopDto> importedStops,
+        string? line)
     {
         var existing = existingStops
             .OrderBy(x => x.Sequence)
-            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.ArrivalTime}|{x.DepartureTime}")
+            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.Km}|{x.ArrivalTime}|{x.DepartureTime}|{NormalizeOptional(x.LineCode)}")
             .ToList();
         var imported = importedStops
             .Where(x => !string.IsNullOrWhiteSpace(x.StopName))
             .OrderBy(x => x.Sequence)
-            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.ArrivalTime}|{x.DepartureTime}")
+            .Select(x => $"{x.Sequence}|{NormalizeOptional(x.StopName)}|{x.Km}|{x.ArrivalTime}|{x.DepartureTime}|{NormalizeOptional(x.LineCode) ?? NormalizeSingleLineCode(line)}")
             .ToList();
 
         return existing.SequenceEqual(imported, StringComparer.Ordinal);
@@ -564,6 +582,12 @@ public class PlanningDutyService : IPlanningDutyService
     private static string GetLineKey(string? line) =>
         string.Join(",", SplitLineCodes(line).OrderBy(x => x, StringComparer.OrdinalIgnoreCase));
 
+    private static string? NormalizeSingleLineCode(string? line)
+    {
+        var lines = SplitLineCodes(line);
+        return lines.Count == 1 ? lines[0] : null;
+    }
+
     private static List<string> SplitLineCodes(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -572,7 +596,7 @@ public class PlanningDutyService : IPlanningDutyService
         }
 
         return value
-            .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Split(new[] { ',', ';', '/' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => x.Trim())
             .Where(x => x.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -630,5 +654,10 @@ public class PlanningDutyService : IPlanningDutyService
         }
     }
 }
+
+
+
+
+
 
 

@@ -597,3 +597,33 @@
         grid-template-columns: 1fr;
     }
 }
+
+.planning-duty-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 14px;
+}
+
+.planning-duty-details-grid p {
+    margin: 0;
+}
+
+.planning-stops-details {
+    margin-top: 14px;
+}
+
+.planning-stops-details h5 {
+    margin: 0 0 8px;
+    color: #f8fafc;
+}
+
+.planning-stops-table th:first-child,
+.planning-stops-table td:first-child {
+    width: 56px;
+}
+
+@media (max-width: 760px) {
+    .planning-duty-details-grid {
+        grid-template-columns: 1fr;
+    }
+}
