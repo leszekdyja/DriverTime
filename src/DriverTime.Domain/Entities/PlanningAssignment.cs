@@ -20,6 +20,12 @@ public class PlanningAssignment : BaseEntity
 
     public DateOnly Date { get; set; }
 
+    public DateTime? StartDateTime { get; set; }
+
+    public DateTime? EndDateTime { get; set; }
+
+    public PlanningAssignmentStatus Status { get; set; } = PlanningAssignmentStatus.Manual;
+
     public PlanningAssignmentType AssignmentType { get; set; } = PlanningAssignmentType.Duty;
 
     public string? Notes { get; set; }
@@ -28,3 +34,4 @@ public class PlanningAssignment : BaseEntity
 
     public DateTime? UpdatedUtc { get; set; }
 }
+

@@ -1,6 +1,7 @@
 ﻿import { apiFetch } from "./apiClient";
 
 export type PlanningAssignmentType = "Duty" | "DayOff" | "Vacation" | "SickLeave" | "Training" | "Other";
+export type PlanningAssignmentStatus = "Generated" | "Manual" | "Conflict" | string;
 
 export type PlanningScheduleListItem = {
     id: string;
@@ -23,10 +24,61 @@ export type PlanningAssignment = {
     line: string | null;
     startTime: string | null;
     endTime: string | null;
+    startDateTime: string | null;
+    endDateTime: string | null;
+    status: PlanningAssignmentStatus;
     assignmentType: PlanningAssignmentType;
     notes: string | null;
 };
 
+export type PlanningAutoGeneratePayload = {
+    dateFrom: string;
+    dateTo: string;
+    driverIds?: string[];
+};
+
+export type PlanningAutoGenerateResult = {
+    dateFrom: string;
+    dateTo: string;
+    generatedCount: number;
+    conflictCount: number;
+    manualAssignmentsPreserved: number;
+    messages: string[];
+};
+
+export type PlanningAssignmentListItem = {
+    id: string;
+    workDate: string;
+    driverId: string;
+    driverFullName: string;
+    planningDutyId: string | null;
+    dutyNumber: string | null;
+    startDateTime: string | null;
+    endDateTime: string | null;
+    status: PlanningAssignmentStatus;
+};
+
+
+export type PlanningDriverAvailabilityType = "Vacation" | "DayOff" | "SickLeave" | "Unavailable";
+
+export type PlanningDriverAvailability = {
+    id: string;
+    driverId: string;
+    driverFullName: string;
+    dateFrom: string;
+    dateTo: string;
+    type: PlanningDriverAvailabilityType;
+    note: string | null;
+    createdAtUtc: string;
+};
+
+export type PlanningDriverAvailabilityPayload = {
+    driverId: string;
+    dateFrom: string;
+    dateTo: string;
+    type: PlanningDriverAvailabilityType;
+    note?: string | null;
+};
 export type PlanningSchedule = PlanningScheduleListItem & {
     assignments: PlanningAssignment[];
 };
@@ -136,3 +188,39 @@ export async function deleteAssignment(scheduleId: string, assignmentId: string)
     }
 }
 
+export async function autoGeneratePlanning(payload: PlanningAutoGeneratePayload): Promise<PlanningAutoGenerateResult> {
+    const response = await apiFetch("/api/planning/auto-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    return readJson<PlanningAutoGenerateResult>(response, "Nie udało się wygenerować planu automatycznie.");
+}
+
+export async function getPlanningAssignments(dateFrom: string, dateTo: string): Promise<PlanningAssignmentListItem[]> {
+    const params = new URLSearchParams({ dateFrom, dateTo });
+    const response = await apiFetch(`/api/planning/assignments?${params.toString()}`);
+    return readJson<PlanningAssignmentListItem[]>(response, "Nie udało się pobrać przypisań planu.");
+}
+
+export async function getPlanningDriverAvailability(dateFrom: string, dateTo: string): Promise<PlanningDriverAvailability[]> {
+    const params = new URLSearchParams({ dateFrom, dateTo });
+    const response = await apiFetch(`/api/planning/driver-availability?${params.toString()}`);
+    return readJson<PlanningDriverAvailability[]>(response, "Nie udało się pobrać dostępności kierowców.");
+}
+
+export async function createPlanningDriverAvailability(payload: PlanningDriverAvailabilityPayload): Promise<PlanningDriverAvailability> {
+    const response = await apiFetch("/api/planning/driver-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    return readJson<PlanningDriverAvailability>(response, "Nie udało się dodać dostępności kierowcy.");
+}
+
+export async function deletePlanningDriverAvailability(id: string): Promise<void> {
+    const response = await apiFetch(`/api/planning/driver-availability/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+        throw new Error(response.status === 404 ? "Nie znaleziono wpisu dostępności." : "Nie udało się usunąć dostępności kierowcy.");
+    }
+}

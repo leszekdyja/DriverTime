@@ -56,6 +56,10 @@ public static class DependencyInjection
 
         services.AddScoped<IPlanningScheduleValidationService, PlanningScheduleValidationService>();
 
+        services.AddScoped<IPlanningAutoGeneratorService, PlanningAutoGeneratorService>();
+
+        services.AddScoped<IPlanningDriverAvailabilityService, PlanningDriverAvailabilityService>();
+
         services.AddScoped<IPlanningDutyPdfImportService, PlanningDutyPdfImportService>();
 
         services.AddScoped<IDashboardService, DashboardService>();
@@ -101,6 +105,8 @@ public static class DependencyInjection
         return services;
     }
 }
+
+
 
 
 

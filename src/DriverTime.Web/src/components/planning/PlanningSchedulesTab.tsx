@@ -3,16 +3,24 @@
 import { getDrivers, type Driver } from "../../services/driversService";
 import { getPlanningDuties, type PlanningDuty } from "../../services/planningDutiesService";
 import {
+    autoGeneratePlanning,
+    createPlanningDriverAvailability,
     createSchedule,
     deleteAssignment,
+    deletePlanningDriverAvailability,
     deleteSchedule,
+    getPlanningAssignments,
+    getPlanningDriverAvailability,
     getSchedule,
     getSchedules,
     updateSchedule,
     upsertAssignment,
     validateSchedule,
     type PlanningAssignment,
+    type PlanningAssignmentListItem,
     type PlanningAssignmentType,
+    type PlanningDriverAvailability,
+    type PlanningDriverAvailabilityType,
     type PlanningSchedule,
     type PlanningScheduleListItem,
     type PlanningScheduleValidation,
@@ -28,6 +36,27 @@ const assignmentTypeLabels: Record<PlanningAssignmentType, string> = {
 };
 
 const assignmentTypes = Object.entries(assignmentTypeLabels) as Array<[PlanningAssignmentType, string]>;
+const availabilityTypeLabels: Record<PlanningDriverAvailabilityType, string> = {
+    Vacation: "Urlop",
+    DayOff: "Dzień wolny",
+    SickLeave: "Chorobowe",
+    Unavailable: "Niedostępny",
+};
+
+const availabilityTypes = Object.entries(availabilityTypeLabels) as Array<[PlanningDriverAvailabilityType, string]>;
+
+
+type AvailabilityForm = {
+    driverId: string;
+    dateFrom: string;
+    dateTo: string;
+    type: PlanningDriverAvailabilityType;
+    note: string;
+};
+type AutoGenerateForm = {
+    dateFrom: string;
+    dateTo: string;
+};
 
 type ScheduleForm = {
     name: string;
@@ -45,6 +74,27 @@ type EditorState = {
     notes: string;
 };
 
+
+function getDefaultAvailabilityForm(): AvailabilityForm {
+    const today = new Date();
+    return {
+        driverId: "",
+        dateFrom: toDateInputValue(today),
+        dateTo: toDateInputValue(today),
+        type: "Unavailable",
+        note: "",
+    };
+}
+function getDefaultAutoGenerateForm(): AutoGenerateForm {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    return {
+        dateFrom: toDateInputValue(firstDay),
+        dateTo: toDateInputValue(lastDay),
+    };
+}
+
 function getDefaultScheduleForm(): ScheduleForm {
     const today = new Date();
     return {
@@ -53,6 +103,28 @@ function getDefaultScheduleForm(): ScheduleForm {
         month: (today.getMonth() + 1).toString(),
         notes: "",
     };
+}
+
+function toDateInputValue(date: Date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateTime(value: string | null) {
+    if (!value) return "-";
+    return new Date(value).toLocaleString("pl-PL", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function formatStatus(status: string) {
+    if (status === "Generated") return "Wygenerowane";
+    if (status === "Manual") return "Ręczne";
+    if (status === "Conflict") return "Konflikt";
+    return status;
 }
 
 function getDriverName(driver: Driver) {
@@ -84,11 +156,17 @@ export default function PlanningSchedulesTab() {
     const [drivers, setDrivers] = useState<Driver[]>([]);
     const [duties, setDuties] = useState<PlanningDuty[]>([]);
     const [form, setForm] = useState<ScheduleForm>(getDefaultScheduleForm());
+    const [autoForm, setAutoForm] = useState<AutoGenerateForm>(getDefaultAutoGenerateForm());
+    const [availabilityForm, setAvailabilityForm] = useState<AvailabilityForm>(getDefaultAvailabilityForm());
+    const [autoAssignments, setAutoAssignments] = useState<PlanningAssignmentListItem[]>([]);
+    const [driverAvailability, setDriverAvailability] = useState<PlanningDriverAvailability[]>([]);
     const [isEditingSchedule, setIsEditingSchedule] = useState(false);
     const [editor, setEditor] = useState<EditorState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isValidating, setIsValidating] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [isSavingAvailability, setIsSavingAvailability] = useState(false);
     const [validation, setValidation] = useState<PlanningScheduleValidation | null>(null);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
@@ -112,14 +190,18 @@ export default function PlanningSchedulesTab() {
         setIsError(false);
 
         try {
-            const [loadedSchedules, loadedDrivers, loadedDuties] = await Promise.all([
+            const [loadedSchedules, loadedDrivers, loadedDuties, loadedAssignments, loadedAvailability] = await Promise.all([
                 getSchedules(),
                 getDrivers(),
                 getPlanningDuties(),
+                getPlanningAssignments(autoForm.dateFrom, autoForm.dateTo),
+                getPlanningDriverAvailability(autoForm.dateFrom, autoForm.dateTo),
             ]);
             setSchedules(loadedSchedules);
             setDrivers(loadedDrivers);
             setDuties(loadedDuties);
+            setAutoAssignments(loadedAssignments);
+            setDriverAvailability(loadedAvailability);
         } catch (error) {
             setIsError(true);
             setMessage(error instanceof Error ? error.message : "Nie udało się pobrać danych grafików.");
@@ -265,6 +347,94 @@ export default function PlanningSchedulesTab() {
         }
     }
 
+
+
+    async function loadDriverAvailability() {
+        setMessage("");
+        setIsError(false);
+
+        try {
+            setDriverAvailability(await getPlanningDriverAvailability(autoForm.dateFrom, autoForm.dateTo));
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się pobrać dostępności kierowców.");
+        }
+    }
+
+    async function saveDriverAvailability() {
+        setIsSavingAvailability(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            await createPlanningDriverAvailability({
+                driverId: availabilityForm.driverId,
+                dateFrom: availabilityForm.dateFrom,
+                dateTo: availabilityForm.dateTo,
+                type: availabilityForm.type,
+                note: availabilityForm.note.trim() || null,
+            });
+            setAvailabilityForm(getDefaultAvailabilityForm());
+            setDriverAvailability(await getPlanningDriverAvailability(autoForm.dateFrom, autoForm.dateTo));
+            setMessage("Dostępność kierowcy została zapisana.");
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się zapisać dostępności kierowcy.");
+        } finally {
+            setIsSavingAvailability(false);
+        }
+    }
+
+    async function removeDriverAvailability(id: string) {
+        setIsSavingAvailability(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            await deletePlanningDriverAvailability(id);
+            setDriverAvailability(await getPlanningDriverAvailability(autoForm.dateFrom, autoForm.dateTo));
+            setMessage("Wpis dostępności został usunięty.");
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się usunąć dostępności kierowcy.");
+        } finally {
+            setIsSavingAvailability(false);
+        }
+    }
+    async function loadAutoAssignments() {
+        setMessage("");
+        setIsError(false);
+
+        try {
+            setAutoAssignments(await getPlanningAssignments(autoForm.dateFrom, autoForm.dateTo));
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się pobrać przypisań planu.");
+        }
+    }
+
+    async function generateAutomatically() {
+        setIsGenerating(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            const result = await autoGeneratePlanning({ ...autoForm, driverIds: drivers.map((driver) => driver.id) });
+            setSchedules(await getSchedules());
+            setAutoAssignments(await getPlanningAssignments(autoForm.dateFrom, autoForm.dateTo));
+            setDriverAvailability(await getPlanningDriverAvailability(autoForm.dateFrom, autoForm.dateTo));
+            if (selectedSchedule) {
+                setSelectedSchedule(await getSchedule(selectedSchedule.id));
+            }
+            const conflictInfo = result.conflictCount > 0 ? ` Konflikty: ${result.conflictCount}.` : "";
+            setMessage(`Wygenerowano ${result.generatedCount} przypisań.${conflictInfo}`);
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się wygenerować planu automatycznie.");
+        } finally {
+            setIsGenerating(false);
+        }
+    }
     async function checkScheduleValidation() {
         if (!selectedSchedule) return;
 
@@ -295,7 +465,7 @@ export default function PlanningSchedulesTab() {
             <div className="section-heading planning-panel-heading">
                 <div>
                     <h3>Grafiki miesięczne</h3>
-                    <p>Podstawowy grafik kierowców na miesiąc. Automatyczne planowanie dodamy później.</p>
+                    <p>Podstawowy grafik kierowców na miesiąc z generowaniem automatycznym MVP.</p>
                 </div>
                 <button className="planning-primary-button" type="button" onClick={resetForm}>Nowy grafik</button>
             </div>
@@ -332,6 +502,116 @@ export default function PlanningSchedulesTab() {
                         </div>
                     </form>
 
+
+
+                    <div className="planning-validation-panel">
+                        <div className="planning-validation-header">
+                            <div>
+                                <h4>Dostępność kierowców</h4>
+                                <p>Wpisy z tej listy blokują kierowcę przy automatycznym planowaniu w wybranych dniach.</p>
+                            </div>
+                            <button className="planning-secondary-button" type="button" onClick={() => void loadDriverAvailability()} disabled={isSavingAvailability}>Odśwież dostępność</button>
+                        </div>
+                        <div className="planning-schedule-form">
+                            <label>Kierowca
+                                <select value={availabilityForm.driverId} onChange={(event) => setAvailabilityForm({ ...availabilityForm, driverId: event.target.value })}>
+                                    <option value="">Wybierz kierowcę</option>
+                                    {drivers.map((driver) => <option key={driver.id} value={driver.id}>{getDriverName(driver)}</option>)}
+                                </select>
+                            </label>
+                            <label>Data od<input type="date" value={availabilityForm.dateFrom} onChange={(event) => setAvailabilityForm({ ...availabilityForm, dateFrom: event.target.value })} /></label>
+                            <label>Data do<input type="date" value={availabilityForm.dateTo} onChange={(event) => setAvailabilityForm({ ...availabilityForm, dateTo: event.target.value })} /></label>
+                            <label>Typ
+                                <select value={availabilityForm.type} onChange={(event) => setAvailabilityForm({ ...availabilityForm, type: event.target.value as PlanningDriverAvailabilityType })}>
+                                    {availabilityTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                </select>
+                            </label>
+                            <label>Notatka<input value={availabilityForm.note} onChange={(event) => setAvailabilityForm({ ...availabilityForm, note: event.target.value })} /></label>
+                            <div className="driver-row-actions">
+                                <button className="planning-primary-button" type="button" onClick={() => void saveDriverAvailability()} disabled={isSavingAvailability || !availabilityForm.driverId}>
+                                    {isSavingAvailability ? "Zapisywanie..." : "Dodaj dostępność"}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="drivers-table-wrapper">
+                            <table className="drivers-table planning-table">
+                                <thead>
+                                    <tr>
+                                        <th>Kierowca</th>
+                                        <th>Od</th>
+                                        <th>Do</th>
+                                        <th>Typ</th>
+                                        <th>Notatka</th>
+                                        <th>Akcje</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {driverAvailability.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6}>Brak wpisów dostępności w wybranym zakresie.</td>
+                                        </tr>
+                                    ) : driverAvailability.map((item) => (
+                                        <tr key={item.id}>
+                                            <td>{item.driverFullName}</td>
+                                            <td>{item.dateFrom}</td>
+                                            <td>{item.dateTo}</td>
+                                            <td>{availabilityTypeLabels[item.type] ?? item.type}</td>
+                                            <td>{item.note ?? "-"}</td>
+                                            <td><button className="driver-delete-button" type="button" onClick={() => void removeDriverAvailability(item.id)} disabled={isSavingAvailability}>Usuń</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div className="planning-validation-panel">
+                        <div className="planning-validation-header">
+                            <div>
+                                <h4>Automatyczne planowanie</h4>
+                                <p>Generator przypisuje służby do kierowców w wybranym zakresie i zostawia ręczne wpisy bez zmian.</p>
+                            </div>
+                            <button className="planning-primary-button" type="button" onClick={() => void generateAutomatically()} disabled={isGenerating}>
+                                {isGenerating ? "Generowanie..." : "Generuj plan automatycznie"}
+                            </button>
+                        </div>
+                        <div className="planning-schedule-form">
+                            <label>Data od<input type="date" value={autoForm.dateFrom} onChange={(event) => setAutoForm({ ...autoForm, dateFrom: event.target.value })} /></label>
+                            <label>Data do<input type="date" value={autoForm.dateTo} onChange={(event) => setAutoForm({ ...autoForm, dateTo: event.target.value })} /></label>
+                            <div className="driver-row-actions">
+                                <button className="planning-secondary-button" type="button" onClick={() => void loadAutoAssignments()} disabled={isGenerating}>Odśwież tabelę</button>
+                            </div>
+                        </div>
+                        <div className="drivers-table-wrapper">
+                            <table className="drivers-table planning-table">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Kierowca</th>
+                                        <th>Nr służby</th>
+                                        <th>Start</th>
+                                        <th>Koniec</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {autoAssignments.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6}>Brak przypisań w wybranym zakresie.</td>
+                                        </tr>
+                                    ) : autoAssignments.map((assignment) => (
+                                        <tr key={assignment.id}>
+                                            <td>{assignment.workDate}</td>
+                                            <td>{assignment.driverFullName}</td>
+                                            <td>{assignment.dutyNumber ?? "-"}</td>
+                                            <td>{formatDateTime(assignment.startDateTime)}</td>
+                                            <td>{formatDateTime(assignment.endDateTime)}</td>
+                                            <td>{formatStatus(assignment.status)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                     {selectedSchedule ? (
                         <div className="planning-month-wrapper">
                             <div className="planning-validation-panel">
@@ -429,6 +709,16 @@ export default function PlanningSchedulesTab() {
         </section>
     );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

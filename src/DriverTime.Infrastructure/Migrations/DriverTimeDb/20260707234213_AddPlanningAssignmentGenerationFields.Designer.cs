@@ -3,6 +3,7 @@ using System;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 {
     [DbContext(typeof(DriverTimeDbContext))]
-    partial class DriverTimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260707234213_AddPlanningAssignmentGenerationFields")]
+    partial class AddPlanningAssignmentGenerationFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -32,10 +35,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid?>("DddFileId")
                         .HasColumnType("uuid");
@@ -51,7 +54,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(2000)");
 
                     b.Property<DateTime?>("FailedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Notes")
                         .IsRequired()
@@ -64,7 +67,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(200)");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -98,7 +101,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -135,16 +138,16 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid>("DriverId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("FinishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("TimelineCount")
                         .HasColumnType("integer");
@@ -184,7 +187,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -200,10 +203,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(8000)");
 
                     b.Property<DateTime>("PeriodEndUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("PeriodStartUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("RuleName")
                         .IsRequired()
@@ -236,7 +239,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("EntryTimeUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("EntryType")
                         .IsRequired()
@@ -292,7 +295,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UploadedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
@@ -314,7 +317,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("ErrorMessage")
                         .IsRequired()
@@ -327,7 +330,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("FinishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("LastError")
                         .IsRequired()
@@ -335,13 +338,13 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(4000)");
 
                     b.Property<DateTime?>("LastRetryAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("RetryCount")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -372,7 +375,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("CardExpiryDate")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("CardIssuingCountry")
                         .IsRequired()
@@ -388,7 +391,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("FirstName")
                         .IsRequired()
@@ -422,13 +425,13 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("EndUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid?>("ImportFileId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("StartUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid?>("VehicleId")
                         .HasColumnType("uuid");
@@ -454,7 +457,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<long>("FileSize")
                         .HasColumnType("bigint");
@@ -472,7 +475,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("text");
 
                     b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
@@ -491,7 +494,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("boolean");
@@ -526,10 +529,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
@@ -559,7 +562,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(32)");
 
                     b.Property<DateTime?>("UpdatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
@@ -575,48 +578,6 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.ToTable("PlanningAssignments", (string)null);
                 });
 
-            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverAvailability", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateOnly>("DateFrom")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("DateTo")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("DriverId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "DateFrom", "DateTo");
-
-                    b.HasIndex("DriverId", "DateFrom", "DateTo");
-
-                    b.ToTable("PlanningDriverAvailabilities", (string)null);
-                });
-
             modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDuty", b =>
                 {
                     b.Property<Guid>("Id")
@@ -630,10 +591,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<decimal?>("DistanceKm")
                         .HasPrecision(10, 2)
@@ -670,7 +631,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateOnly?>("ValidFrom")
                         .HasColumnType("date");
@@ -696,7 +657,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<decimal?>("DistanceKm")
                         .HasPrecision(10, 2)
@@ -731,7 +692,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("time without time zone");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<TimeOnly?>("DepartureTime")
                         .HasColumnType("time without time zone");
@@ -776,10 +737,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("Month")
                         .HasColumnType("integer");
@@ -794,7 +755,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("character varying(4000)");
 
                     b.Property<DateTime?>("UpdatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int>("Year")
                         .HasColumnType("integer");
@@ -813,7 +774,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -841,7 +802,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -891,7 +852,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
@@ -927,7 +888,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("EndUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
@@ -937,7 +898,7 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("StartUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
@@ -953,10 +914,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CalculatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<Guid>("DriverId")
                         .HasColumnType("uuid");
@@ -978,10 +939,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("text");
 
                     b.Property<DateTime>("ViolationEnd")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<DateTime>("ViolationStart")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("ViolationType")
                         .IsRequired()
@@ -1159,25 +1120,6 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("PlanningSchedule");
                 });
 
-            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverAvailability", b =>
-                {
-                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
-                        .WithMany()
-                        .HasForeignKey("DriverId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-
-                    b.Navigation("Driver");
-                });
-
             modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDuty", b =>
                 {
                     b.HasOne("DriverTime.Domain.Entities.Company", "Company")
@@ -1348,3 +1290,5 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
         }
     }
 }
+
+

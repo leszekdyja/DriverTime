@@ -183,6 +183,8 @@ public class PlanningScheduleService : IPlanningScheduleService
 
         assignment.AssignmentType = assignmentType;
         assignment.PlanningDutyId = assignmentType == PlanningAssignmentType.Duty ? request.PlanningDutyId : null;
+        assignment.Status = PlanningAssignmentStatus.Manual;
+        ApplyAssignmentTimes(assignment, duty);
         assignment.Notes = NormalizeOptional(request.Notes);
         assignment.Driver = driver;
         assignment.PlanningDuty = assignment.PlanningDutyId.HasValue ? duty : null;
@@ -362,8 +364,10 @@ public class PlanningScheduleService : IPlanningScheduleService
 
         assignment.AssignmentType = assignmentType;
         assignment.PlanningDutyId = assignmentType == PlanningAssignmentType.Duty ? request.PlanningDutyId : null;
+        assignment.Status = PlanningAssignmentStatus.Manual;
         assignment.Driver = driver;
         assignment.PlanningDuty = assignmentType == PlanningAssignmentType.Duty ? duty : null;
+        ApplyAssignmentTimes(assignment, assignment.PlanningDuty);
         assignment.Notes = NormalizeOptional(request.Notes);
 
         return assignment;
@@ -423,10 +427,27 @@ public class PlanningScheduleService : IPlanningScheduleService
         Line = assignment.PlanningDuty is null ? null : GetLineKey(assignment.PlanningDuty),
         StartTime = assignment.PlanningDuty?.StartTime,
         EndTime = assignment.PlanningDuty?.EndTime,
+        StartDateTime = assignment.StartDateTime,
+        EndDateTime = assignment.EndDateTime,
+        Status = assignment.Status.ToString(),
         AssignmentType = assignment.AssignmentType.ToString(),
         Notes = assignment.Notes
     };
 
+
+    private static void ApplyAssignmentTimes(PlanningAssignment assignment, PlanningDuty? duty)
+    {
+        if (assignment.AssignmentType != PlanningAssignmentType.Duty || duty is null)
+        {
+            assignment.StartDateTime = null;
+            assignment.EndDateTime = null;
+            return;
+        }
+
+        var interval = PlanningAutoGeneratorService.BuildInterval(assignment.Date, duty);
+        assignment.StartDateTime = interval?.Start;
+        assignment.EndDateTime = interval?.End;
+    }
     private static string FormatDriverName(Driver driver)
     {
         var name = $"{driver.FirstName} {driver.LastName}".Trim();
@@ -458,4 +479,5 @@ public class PlanningScheduleService : IPlanningScheduleService
         }
     }
 }
+
 

@@ -37,7 +37,10 @@ public interface IApplicationDbContext
 
     DbSet<PlanningAssignment> PlanningAssignments { get; }
 
+    DbSet<PlanningDriverAvailability> PlanningDriverAvailabilities { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+
 
 

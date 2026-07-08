@@ -27,5 +27,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<PlanningSchedule> PlanningSchedules => Set<PlanningSchedule>();
 
     public DbSet<PlanningAssignment> PlanningAssignments => Set<PlanningAssignment>();
+
+    public DbSet<PlanningDriverAvailability> PlanningDriverAvailabilities => Set<PlanningDriverAvailability>();
 }
+
 
