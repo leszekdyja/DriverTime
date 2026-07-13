@@ -28,7 +28,12 @@ public class CreatePlanningDutyRequest
 
     public string? SourceFileName { get; set; }
 
+    public int? ActiveDaysMask { get; set; }
+
+    public bool IncludeHolidays { get; set; }
+
     public List<PlanningDutyLineDto> Lines { get; set; } = new();
 
     public List<PlanningDutyStopDto> Stops { get; set; } = new();
 }
+

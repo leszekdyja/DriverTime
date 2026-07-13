@@ -29,6 +29,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<PlanningAssignment> PlanningAssignments => Set<PlanningAssignment>();
 
     public DbSet<PlanningDriverAvailability> PlanningDriverAvailabilities => Set<PlanningDriverAvailability>();
+
+    public DbSet<PlanningDriverDutyRule> PlanningDriverDutyRules => Set<PlanningDriverDutyRule>();
 }
+
 
 

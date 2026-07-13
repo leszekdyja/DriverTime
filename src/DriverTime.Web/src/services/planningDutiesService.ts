@@ -13,6 +13,8 @@ export type PlanningDuty = {
     breakMinutes: number | null;
     drivingMinutes: number | null;
     distanceKm: number | null;
+    activeDaysMask: number | null;
+    includeHolidays: boolean;
     createdAtUtc: string;
     updatedAtUtc: string | null;
     lines: PlanningDutyLine[];
@@ -141,6 +143,8 @@ export type PlanningDutyPayload = {
     distanceKm?: number | null;
     notes?: string | null;
     sourceFileName?: string | null;
+    activeDaysMask?: number | null;
+    includeHolidays?: boolean;
     lines?: PlanningDutyLine[];
     stops?: PlanningDutyStop[];
 };
@@ -196,6 +200,16 @@ export async function updatePlanningDuty(id: string, payload: PlanningDutyPayloa
     return readJson<PlanningDutyDetails>(response, "Nie udało się zapisać służby.");
 }
 
+export async function updatePlanningDutyActiveDays(id: string, payload: { activeDaysMask?: number | null; includeHolidays: boolean }): Promise<PlanningDutyDetails> {
+    const response = await apiFetch(`/api/planning/duties/${id}/active-days`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+
+    return readJson<PlanningDutyDetails>(response, "Nie udało się zapisać dni wykonywania służby.");
+}
+
 export async function deletePlanningDuty(id: string): Promise<void> {
     const response = await apiFetch(`/api/planning/duties/${id}`, { method: "DELETE" });
 
@@ -233,6 +247,7 @@ export async function confirmPlanningDutiesPdfImport(
 
     return readJson<PlanningDutyPdfImportConfirmResult>(response, "Nie udało się zapisać importu PDF do biblioteki.");
 }
+
 
 
 

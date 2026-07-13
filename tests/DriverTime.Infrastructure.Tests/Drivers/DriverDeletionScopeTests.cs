@@ -1,4 +1,4 @@
-using DriverTime.Domain.Entities;
+﻿using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -12,6 +12,14 @@ public class DriverDeletionScopeTests
     private static readonly Guid DriverId = Guid.NewGuid();
     private static readonly Guid OtherDriverId = Guid.NewGuid();
 
+
+    [TestMethod]
+    public void NewDriver_DefaultsToIncludedInPlanning()
+    {
+        var driver = new Driver();
+
+        Assert.IsTrue(driver.IncludeInPlanning);
+    }
     [TestMethod]
     public void DeletionScope_SameDriverAndCompany_IncludesDriverAndImportData()
     {
@@ -88,3 +96,4 @@ public class DriverDeletionScopeTests
             CompanyId = companyId
         };
 }
+

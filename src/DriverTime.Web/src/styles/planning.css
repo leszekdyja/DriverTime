@@ -627,3 +627,410 @@
         grid-template-columns: 1fr;
     }
 }
+
+.planning-month-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 14px;
+}
+
+.planning-month-navigation label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.planning-month-navigation select,
+.planning-month-navigation input {
+    min-height: 38px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-heading);
+    padding: 7px 9px;
+}
+
+.planning-month-primary,
+.planning-details-panel {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.72);
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.planning-details-panel summary {
+    cursor: pointer;
+    color: #f8fafc;
+    font-weight: 760;
+    margin-bottom: 12px;
+}
+
+.planning-generation-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.planning-generation-summary span {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.56);
+    padding: 8px 10px;
+}
+
+.planning-generation-summary small {
+    display: block;
+    color: #cbd5e1;
+    font-size: 11px;
+}
+
+.planning-generation-summary strong {
+    color: #f8fafc;
+    font-size: 18px;
+}
+
+.planning-month-table-wrap {
+    max-height: calc(100vh - 310px);
+    min-height: 360px;
+    overflow: auto;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 8px;
+    background: rgba(2, 6, 23, 0.34);
+}
+
+.planning-month-table {
+    min-width: 1120px;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+}
+
+.planning-month-table th,
+.planning-month-table td {
+    border-right: 1px solid rgba(148, 163, 184, 0.16);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    padding: 0;
+}
+
+.planning-grid-driver-heading,
+.planning-grid-driver-name {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    width: 190px;
+    min-width: 190px;
+    max-width: 190px;
+    background: #111827;
+    text-align: left;
+}
+
+.planning-grid-driver-heading {
+    top: 0;
+    z-index: 6;
+    padding: 8px 10px;
+    color: #f8fafc;
+}
+
+.planning-grid-driver-name {
+    padding: 6px 10px;
+    color: #e5e7eb;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.planning-grid-day-heading {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    width: 42px;
+    min-width: 42px;
+    background: #111827;
+    color: #e5e7eb;
+    padding: 5px 2px;
+    text-align: center;
+}
+
+.planning-grid-day-heading span,
+.planning-grid-day-heading small {
+    display: block;
+    line-height: 1.1;
+}
+
+.planning-grid-day-heading small {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.planning-grid-day-heading.saturday {
+    background: #172033;
+}
+
+.planning-grid-day-heading.holiday {
+    background: #2a1720;
+}
+
+.planning-month-table td {
+    width: 42px;
+    min-width: 42px;
+    height: 32px;
+    background: rgba(15, 23, 42, 0.42);
+}
+
+.planning-assignment-cell {
+    position: relative;
+    width: 100%;
+    height: 32px;
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.planning-assignment-cell:hover {
+    outline: 1px solid #38bdf8;
+    outline-offset: -1px;
+}
+
+.planning-assignment-cell.duty { background: rgba(14, 165, 233, 0.14); color: #bae6fd; }
+.planning-assignment-cell.night { background: rgba(99, 102, 241, 0.18); color: #c7d2fe; }
+.planning-assignment-cell.reserve { background: rgba(20, 184, 166, 0.15); color: #99f6e4; }
+.planning-assignment-cell.dayOff { background: rgba(148, 163, 184, 0.16); color: #e2e8f0; }
+.planning-assignment-cell.vacation { background: rgba(34, 197, 94, 0.14); color: #bbf7d0; }
+.planning-assignment-cell.sickLeave { background: rgba(251, 146, 60, 0.14); color: #fed7aa; }
+.planning-assignment-cell.unavailable { background: rgba(244, 63, 94, 0.14); color: #fecdd3; }
+.planning-assignment-cell.special { background: rgba(234, 179, 8, 0.12); color: #fde68a; }
+
+.planning-assignment-cell.manual {
+    box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.62);
+}
+
+.planning-assignment-cell.manual i {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: #f8fafc;
+}
+
+.planning-editor-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(2, 6, 23, 0.66);
+}
+
+.planning-editor-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.planning-editor-title p,
+.planning-current-entry span {
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 12px;
+}
+
+.planning-current-entry {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.planning-current-entry strong { color: #f8fafc; }
+
+.planning-icon-button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.72);
+    color: #f8fafc;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+}
+
+@media (max-width: 720px) {
+    .planning-grid-driver-heading,
+    .planning-grid-driver-name {
+        width: 150px;
+        min-width: 150px;
+        max-width: 150px;
+    }
+
+    .planning-month-table-wrap {
+        max-height: calc(100vh - 260px);
+    }
+}
+
+/* Monthly planning layout fixes */
+.planning-schedules-layout {
+    display: block;
+}
+
+.planning-schedules-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.planning-schedules-list h4 {
+    grid-column: 1 / -1;
+}
+
+.planning-schedules-main {
+    width: 100%;
+    min-width: 0;
+}
+
+.planning-month-primary {
+    width: 100%;
+}
+
+.planning-month-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+.planning-grid-day-heading,
+.planning-month-table td {
+    width: 64px;
+    min-width: 64px;
+}
+
+.planning-assignment-cell {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.planning-driver-selection-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin: 14px 0;
+}
+
+.planning-driver-selection-tools input[type="text"],
+.planning-driver-selection-tools input:not([type]) {
+    min-height: 38px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--color-heading);
+    padding: 7px 9px;
+}
+
+.planning-driver-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px 14px;
+}
+
+.planning-driver-checkbox-grid label,
+.planning-driver-selection-tools label,
+.planning-duty-day-buttons label {
+    color: #e5e7eb;
+    font-size: 13px;
+}
+
+.planning-duty-days-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.planning-duty-days-item {
+    display: grid;
+    grid-template-columns: 70px minmax(160px, 1fr) minmax(340px, 2fr) auto;
+    gap: 10px;
+    align-items: center;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 6px;
+    padding: 10px;
+    background: rgba(15, 23, 42, 0.38);
+}
+
+.planning-duty-days-item strong {
+    color: #f8fafc;
+}
+
+.planning-duty-days-item span {
+    color: #cbd5e1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.planning-duty-day-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+@media (max-width: 1180px) {
+    .planning-duty-days-item {
+        grid-template-columns: 1fr;
+    }
+}
+
+.planning-grid-driver-name span {
+    display: block;
+}
+
+.planning-driver-auto-off {
+    display: inline-flex;
+    margin-top: 3px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.18);
+    color: #cbd5e1;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.planning-compact-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    border-radius: 6px;
+    background: rgba(15, 23, 42, 0.42);
+    color: #e5e7eb;
+}
+
+.planning-compact-info strong {
+    color: #ffffff;
+}

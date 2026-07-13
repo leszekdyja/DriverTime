@@ -1,4 +1,5 @@
 ﻿using DriverTime.Application.Interfaces;
+using DriverTime.Application.Planning;
 using DriverTime.Application.Planning.DTOs;
 using DriverTime.Application.Planning.Services;
 using DriverTime.Domain.Entities;
@@ -99,6 +100,27 @@ public class PlanningDutyService : IPlanningDutyService
         return ToDetailsDto(duty);
     }
 
+
+    public async Task<PlanningDutyDetailsDto?> UpdateActiveDaysAsync(
+        Guid id,
+        PlanningDutyActiveDaysRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var duty = await GetDutyInCurrentCompany(id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (duty is null)
+        {
+            return null;
+        }
+
+        duty.ActiveDaysMask = NormalizeActiveDaysMask(request.ActiveDaysMask);
+        duty.IncludeHolidays = request.IncludeHolidays;
+        duty.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return ToDetailsDto(duty);
+    }
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var duty = await GetDutyInCurrentCompany(id)
@@ -280,6 +302,8 @@ public class PlanningDutyService : IPlanningDutyService
         duty.DistanceKm = request.DistanceKm;
         duty.Notes = NormalizeOptional(request.Notes);
         duty.SourceFileName = NormalizeOptional(request.SourceFileName);
+        duty.ActiveDaysMask = NormalizeActiveDaysMask(request.ActiveDaysMask);
+        duty.IncludeHolidays = request.IncludeHolidays;
 
         if (setUpdatedAt)
         {
@@ -331,6 +355,8 @@ public class PlanningDutyService : IPlanningDutyService
         BreakMinutes = duty.BreakMinutes,
         DrivingMinutes = duty.DrivingMinutes,
         DistanceKm = duty.DistanceKm,
+        ActiveDaysMask = duty.ActiveDaysMask,
+        IncludeHolidays = duty.IncludeHolidays,
         CreatedAtUtc = duty.CreatedAtUtc,
         UpdatedAtUtc = duty.UpdatedAtUtc,
         Lines = duty.Lines
@@ -361,6 +387,8 @@ public class PlanningDutyService : IPlanningDutyService
         DistanceKm = duty.DistanceKm,
         Notes = duty.Notes,
         SourceFileName = duty.SourceFileName,
+        ActiveDaysMask = duty.ActiveDaysMask,
+        IncludeHolidays = duty.IncludeHolidays,
         CreatedAtUtc = duty.CreatedAtUtc,
         UpdatedAtUtc = duty.UpdatedAtUtc,
         Lines = duty.Lines
@@ -470,6 +498,7 @@ OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jes
         duty.DistanceKm = item.DistanceKm;
         duty.Notes = NormalizeOptional(item.Notes);
         duty.SourceFileName = NormalizeOptional(sourceFileName);
+        duty.ActiveDaysMask ??= PlanningDutyDayAvailability.WeekdaysMask;
 
         if (setUpdatedAt)
         {
@@ -592,6 +621,8 @@ OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jes
             .ToList();
     }
 
+    private static int? NormalizeActiveDaysMask(int? value) => value.HasValue ? PlanningDutyDayAvailability.NormalizeMask(value.Value) : null;
+
     private static string NormalizeRequired(string? value) => value?.Trim() ?? string.Empty;
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -643,6 +674,9 @@ OptionalText(duty.DutyNumber, DutyNumberMaxLength, $"{label}: numer służby jes
         }
     }
 }
+
+
+
 
 
 

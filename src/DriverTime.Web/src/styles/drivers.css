@@ -1,4 +1,4 @@
-.drivers-page {
+﻿.drivers-page {
     width: 100%;
     max-width: 1400px;
 }
@@ -317,4 +317,29 @@
 
     .drivers-toolbar { align-items: stretch; flex-direction: column; }
     .drivers-toolbar input, .drivers-toolbar button { width: 100%; }
+}
+
+.driver-planning-toggle,
+.driver-table-toggle {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--color-text);
+}
+
+.driver-planning-toggle small {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-muted);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.driver-table-toggle {
+    align-items: center;
+    white-space: nowrap;
+}
+
+.driver-table-toggle span {
+    font-weight: 700;
 }

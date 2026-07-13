@@ -4,12 +4,19 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DriverTime.Application.Planning.DTOs;
 using DriverTime.Application.Planning.Services;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Services;
 
 public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
 {
     private const string NoDutiesWarning = "Nie rozpoznano służb w pliku PDF. Sprawdź, czy plik zawiera tekst, a nie tylko skan.";
+    private readonly ILogger<PlanningDutyPdfImportService> _logger;
+
+    public PlanningDutyPdfImportService(ILogger<PlanningDutyPdfImportService> logger)
+    {
+        _logger = logger;
+    }
 
     public async Task<PlanningDutyPdfImportPreviewDto> PreviewAsync(
         string fileName,
@@ -30,6 +37,7 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             warnings.Add("Nie udało się odczytać tekstu z pliku PDF. Plik może być skanem albo mieć nietypową strukturę.");
         }
 
+        var diagnostics = BuildImportDiagnostics(text, fileName);
         var duties = ParseText(text, fileName, warnings);
 
         if (duties.Count == 0 && !warnings.Contains(NoDutiesWarning))
@@ -37,7 +45,7 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             warnings.Add(NoDutiesWarning);
         }
 
-        return new PlanningDutyPdfImportPreviewDto
+        var preview = new PlanningDutyPdfImportPreviewDto
         {
             FileName = fileName,
             FileSizeBytes = fileSizeBytes,
@@ -45,8 +53,121 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             Warnings = warnings.Distinct().ToList(),
             Duties = duties
         };
+
+        LogImportDiagnostics(fileName, text, diagnostics, preview);
+        return preview;
     }
 
+    private void LogImportDiagnostics(
+        string fileName,
+        string text,
+        PlanningDutyPdfImportDiagnostics diagnostics,
+        PlanningDutyPdfImportPreviewDto preview)
+    {
+        if (!_logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        _logger.LogDebug(
+            "Planning duty PDF import preview. File={FileName}, TextPreview={TextPreview}",
+            fileName,
+            TruncateForLog(text, 1000));
+        _logger.LogDebug(
+            "Planning duty PDF import sections. File={FileName}, Header={HeaderDetected}, StopsTable={StopsTableDetected}, DailyDistance={DailyDistanceDetected}, DriverEmployment={DriverEmploymentDetected}",
+            fileName,
+            diagnostics.HeaderDetected,
+            diagnostics.StopsTableDetected,
+            diagnostics.DailyDistanceDetected,
+            diagnostics.DriverEmploymentDetected);
+        _logger.LogDebug(
+            "Planning duty PDF import parser flow. File={FileName}, Sectional={SectionalSummary}, Generic={GenericSummary}, Fallback={FallbackSummary}, Final={FinalSummary}",
+            fileName,
+            diagnostics.SectionalSummary,
+            diagnostics.GenericSummary,
+            diagnostics.FallbackSummary,
+            SummarizeDuties(preview.Duties));
+    }
+
+    private static PlanningDutyPdfImportDiagnostics BuildImportDiagnostics(string? text, string sourceFileName)
+    {
+        var normalizedText = NormalizeText(text);
+        var sections = SplitTransportDutySections(normalizedText);
+        var diagnostics = new PlanningDutyPdfImportDiagnostics
+        {
+            HeaderDetected = !string.IsNullOrWhiteSpace(sections.Header),
+            StopsTableDetected = !string.IsNullOrWhiteSpace(sections.StopsTable),
+            DailyDistanceDetected = !string.IsNullOrWhiteSpace(sections.DailyDistance),
+            DriverEmploymentDetected = !string.IsNullOrWhiteSpace(sections.DriverEmployment),
+            SectionalSummary = IsTransportDutySheet(normalizedText)
+                ? SummarizeDuty(TryParseTransportDutySheet(normalizedText, sourceFileName, sections))
+                : "NotAttempted"
+        };
+
+        var dutyMatches = string.IsNullOrWhiteSpace(normalizedText)
+            ? new List<Match>()
+            : GetDutyMatches(normalizedText);
+        if (dutyMatches.Count > 0)
+        {
+            var generic = dutyMatches.Select(match =>
+                CreateGenericDutyPreview(
+                    match.Groups["number"].Value.Trim(),
+                    normalizedText[match.Index..],
+                    sourceFileName,
+                    ExtractValidFrom(normalizedText) ?? ExtractValidFrom(sourceFileName),
+                    dutyNumberConfidence: 50)).ToList();
+            diagnostics.GenericSummary = SummarizeDuties(generic);
+        }
+
+        var searchText = string.IsNullOrWhiteSpace(normalizedText)
+            ? sourceFileName
+            : $"{normalizedText}\n{sourceFileName}";
+        var fileDutyNumber = ExtractDutyNumber(searchText);
+        if (!string.IsNullOrWhiteSpace(fileDutyNumber))
+        {
+            var fallback = CreateGenericDutyPreview(
+                fileDutyNumber,
+                searchText,
+                sourceFileName,
+                ExtractValidFrom(searchText),
+                dutyNumberConfidence: 60);
+            diagnostics.FallbackSummary = SummarizeDuty(fallback);
+        }
+
+        return diagnostics;
+    }
+
+    private static string TruncateForLog(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = Regex.Replace(value, @"\s+", " ").Trim();
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
+    }
+
+    private static string SummarizeDuties(IReadOnlyCollection<PlanningDutyPdfImportPreviewItemDto> duties) =>
+        duties.Count == 0
+            ? "None"
+            : string.Join(" | ", duties.Select(SummarizeDuty));
+
+    private static string SummarizeDuty(PlanningDutyPdfImportPreviewItemDto? duty) =>
+        duty is null
+            ? "None"
+            : $"Duty={duty.DutyNumber ?? "null"}, Lines={string.Join("/", duty.Lines.Select(x => x.LineCode))}, Distance={duty.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? "null"}, Vehicle={duty.VehicleRequirement ?? "null"}, Start={duty.StartTime?.ToString("HH:mm", CultureInfo.InvariantCulture) ?? "null"}, End={duty.EndTime?.ToString("HH:mm", CultureInfo.InvariantCulture) ?? "null"}, Work={duty.WorkMinutes?.ToString(CultureInfo.InvariantCulture) ?? "null"}, Break={duty.BreakMinutes?.ToString(CultureInfo.InvariantCulture) ?? "null"}, Stops={duty.Stops.Count}";
+
+    private sealed class PlanningDutyPdfImportDiagnostics
+    {
+        public bool HeaderDetected { get; set; }
+        public bool StopsTableDetected { get; set; }
+        public bool DailyDistanceDetected { get; set; }
+        public bool DriverEmploymentDetected { get; set; }
+        public string SectionalSummary { get; set; } = "None";
+        public string GenericSummary { get; set; } = "None";
+        public string FallbackSummary { get; set; } = "None";
+    }
     internal static List<PlanningDutyPdfImportPreviewItemDto> ParseText(
         string? text,
         string sourceFileName,
@@ -199,9 +320,10 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
 
     private static PlanningDutyPdfImportPreviewItemDto? TryParseTransportDutySheet(
         string text,
-        string sourceFileName)
+        string sourceFileName,
+        TransportDutySections? knownSections = null)
     {
-        var sections = SplitTransportDutySections(text);
+        var sections = knownSections ?? SplitTransportDutySections(text);
         var dutyNumber = ExtractDutyNumber(sections.Header) ?? ExtractDutyNumber(sourceFileName);
         if (string.IsNullOrWhiteSpace(dutyNumber))
         {
@@ -701,6 +823,9 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
         return (stops, stops.Count > 0 ? 80 : 0);
     }
 
+    internal static Task<string> ExtractPdfTextForTestsAsync(Stream pdfStream, CancellationToken cancellationToken = default) =>
+        PdfTextExtractor.ExtractTextAsync(pdfStream, cancellationToken);
+
     private static class PdfTextExtractor
     {
         public static async Task<string> ExtractTextAsync(Stream pdfStream, CancellationToken cancellationToken)
@@ -709,17 +834,78 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             await pdfStream.CopyToAsync(memory, cancellationToken);
             var bytes = memory.ToArray();
             if (bytes.Length == 0) return string.Empty;
-            var raw = Encoding.Latin1.GetString(bytes);
-            var chunks = new List<string>();
-            foreach (Match streamMatch in Regex.Matches(raw, @"(?s)(?<dict><<.*?>>)\s*stream\r?\n(?<data>.*?)\r?\nendstream"))
+
+            var streams = ExtractStreams(bytes).ToList();
+            var streamTexts = streams.Select(x => Encoding.Latin1.GetString(x)).ToList();
+            var unicodeMap = BuildToUnicodeMap(streamTexts);
+            var positionedText = ExtractPositionedText(streamTexts, unicodeMap);
+            if (positionedText.Count > 0)
             {
-                var dictionary = streamMatch.Groups["dict"].Value;
-                var data = Encoding.Latin1.GetBytes(streamMatch.Groups["data"].Value);
-                if (dictionary.Contains("/FlateDecode", StringComparison.OrdinalIgnoreCase)) data = TryInflate(data) ?? Array.Empty<byte>();
-                if (data.Length > 0) chunks.Add(ExtractPdfStrings(Encoding.Latin1.GetString(data)));
+                return ReconstructLines(positionedText);
             }
-            if (chunks.Count == 0) chunks.Add(ExtractPdfStrings(raw));
+
+            var chunks = streamTexts
+                .Select(ExtractPdfStrings)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+            if (chunks.Count == 0)
+            {
+                chunks.Add(ExtractPdfStrings(Encoding.Latin1.GetString(bytes)));
+            }
+
             return string.Join("\n", chunks.Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+
+        private static IEnumerable<byte[]> ExtractStreams(byte[] bytes)
+        {
+            var streamMarker = Encoding.ASCII.GetBytes("stream");
+            var endMarker = Encoding.ASCII.GetBytes("endstream");
+            var position = 0;
+
+            while (position < bytes.Length)
+            {
+                var streamIndex = IndexOf(bytes, streamMarker, position);
+                if (streamIndex < 0) yield break;
+
+                var dataStart = streamIndex + streamMarker.Length;
+                if (dataStart < bytes.Length && bytes[dataStart] == (byte)'\r') dataStart++;
+                if (dataStart < bytes.Length && bytes[dataStart] == (byte)'\n') dataStart++;
+
+                var dataEnd = IndexOf(bytes, endMarker, dataStart);
+                if (dataEnd < 0) yield break;
+
+                var length = dataEnd - dataStart;
+                while (length > 0 && (bytes[dataStart + length - 1] == (byte)'\r' || bytes[dataStart + length - 1] == (byte)'\n'))
+                {
+                    length--;
+                }
+
+                var data = new byte[length];
+                Buffer.BlockCopy(bytes, dataStart, data, 0, length);
+                var inflated = TryInflate(data);
+                yield return inflated ?? data;
+                position = dataEnd + endMarker.Length;
+            }
+        }
+
+        private static int IndexOf(byte[] bytes, byte[] pattern, int start)
+        {
+            for (var index = start; index <= bytes.Length - pattern.Length; index++)
+            {
+                var found = true;
+                for (var offset = 0; offset < pattern.Length; offset++)
+                {
+                    if (bytes[index + offset] != pattern[offset])
+                    {
+                        found = false;
+                        break;
+                    }
+                }
+
+                if (found) return index;
+            }
+
+            return -1;
         }
 
         private static byte[]? TryInflate(byte[] data)
@@ -746,6 +932,162 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             }
         }
 
+        private sealed record TextFragment(decimal X, decimal Y, int Order, string Text);
+
+        private static List<TextFragment> ExtractPositionedText(IReadOnlyList<string> streamTexts, IReadOnlyDictionary<int, string> unicodeMap)
+        {
+            var fragments = new List<TextFragment>();
+            var order = 0;
+
+            foreach (var content in streamTexts.Where(x => x.Contains(" Tj", StringComparison.Ordinal) || x.Contains(" TJ", StringComparison.Ordinal)))
+            {
+                foreach (Match blockMatch in Regex.Matches(content, @"(?s)BT(?<body>.*?)ET"))
+                {
+                    var body = blockMatch.Groups["body"].Value;
+                    var matrixMatches = Regex.Matches(body, @"(?<a>-?\d+(?:\.\d+)?)\s+(?<b>-?\d+(?:\.\d+)?)\s+(?<c>-?\d+(?:\.\d+)?)\s+(?<d>-?\d+(?:\.\d+)?)\s+(?<x>-?\d+(?:\.\d+)?)\s+(?<y>-?\d+(?:\.\d+)?)\s+Tm");
+                    if (matrixMatches.Count == 0) continue;
+
+                    var matrix = matrixMatches[^1];
+                    if (!decimal.TryParse(matrix.Groups["x"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var x) ||
+                        !decimal.TryParse(matrix.Groups["y"].Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var y))
+                    {
+                        continue;
+                    }
+
+                    var value = ExtractTextFromTextObject(body, unicodeMap);
+                    if (string.IsNullOrWhiteSpace(value)) continue;
+
+                    fragments.Add(new TextFragment(x, y, order++, Regex.Replace(value, @"\s+", " ").Trim()));
+                }
+            }
+
+            return fragments;
+        }
+
+        private static string ExtractTextFromTextObject(string body, IReadOnlyDictionary<int, string> unicodeMap)
+        {
+            var values = new List<string>();
+            foreach (Match match in Regex.Matches(body, @"<(?<hex>[0-9A-Fa-f]+)>|\((?<literal>(?:\\.|[^\\)])*)\)"))
+            {
+                if (match.Groups["hex"].Success)
+                {
+                    values.Add(DecodeHexPdfString(match.Groups["hex"].Value, unicodeMap));
+                }
+                else
+                {
+                    values.Add(UnescapePdfString(match.Groups["literal"].Value));
+                }
+            }
+
+            return string.Concat(values);
+        }
+
+        private static string DecodeHexPdfString(string hex, IReadOnlyDictionary<int, string> unicodeMap)
+        {
+            if (hex.Length % 2 != 0) hex += "0";
+            var builder = new StringBuilder();
+            var useTwoByteCodes = hex.Length % 4 == 0 && unicodeMap.Count > 0;
+
+            if (useTwoByteCodes)
+            {
+                for (var index = 0; index < hex.Length; index += 4)
+                {
+                    var code = int.Parse(hex.Substring(index, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                    builder.Append(unicodeMap.TryGetValue(code, out var mapped) ? mapped : char.ConvertFromUtf32(code));
+                }
+            }
+            else
+            {
+                for (var index = 0; index < hex.Length; index += 2)
+                {
+                    var code = int.Parse(hex.Substring(index, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                    builder.Append((char)code);
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static string ReconstructLines(List<TextFragment> fragments)
+        {
+            var lines = new List<string>();
+            foreach (var row in fragments
+                .GroupBy(fragment => Math.Round(fragment.Y / 2m) * 2m)
+                .OrderByDescending(group => group.Key))
+            {
+                var line = string.Join(" ", row
+                    .OrderBy(fragment => fragment.X)
+                    .ThenBy(fragment => fragment.Order)
+                    .Select(fragment => fragment.Text));
+                line = Regex.Replace(line, @"\s+", " ").Trim();
+                if (!string.IsNullOrWhiteSpace(line)) lines.Add(line);
+            }
+
+            return string.Join("\n", lines);
+        }
+
+        private static Dictionary<int, string> BuildToUnicodeMap(IEnumerable<string> streamTexts)
+        {
+            var map = new Dictionary<int, string>();
+            foreach (var content in streamTexts.Where(x => x.Contains("beginbf", StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (Match section in Regex.Matches(content, @"(?s)beginbfchar(?<body>.*?)endbfchar"))
+                {
+                    foreach (Match pair in Regex.Matches(section.Groups["body"].Value, @"<(?<src>[0-9A-Fa-f]+)>\s+<(?<dst>[0-9A-Fa-f]+)>"))
+                    {
+                        AddUnicodeMapEntry(map, pair.Groups["src"].Value, pair.Groups["dst"].Value);
+                    }
+                }
+
+                foreach (Match section in Regex.Matches(content, @"(?s)beginbfrange(?<body>.*?)endbfrange"))
+                {
+                    foreach (Match range in Regex.Matches(section.Groups["body"].Value, @"<(?<start>[0-9A-Fa-f]+)>\s+<(?<end>[0-9A-Fa-f]+)>\s+<(?<dst>[0-9A-Fa-f]+)>"))
+                    {
+                        var start = int.Parse(range.Groups["start"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                        var end = int.Parse(range.Groups["end"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                        var dst = int.Parse(range.Groups["dst"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                        for (var code = start; code <= end; code++)
+                        {
+                            map[code] = char.ConvertFromUtf32(dst + code - start);
+                        }
+                    }
+
+                    foreach (Match range in Regex.Matches(section.Groups["body"].Value, @"<(?<start>[0-9A-Fa-f]+)>\s+<(?<end>[0-9A-Fa-f]+)>\s+\[(?<values>.*?)\]", RegexOptions.Singleline))
+                    {
+                        var code = int.Parse(range.Groups["start"].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+                        foreach (Match value in Regex.Matches(range.Groups["values"].Value, @"<(?<dst>[0-9A-Fa-f]+)>"))
+                        {
+                            map[code++] = DecodeUnicodeHex(value.Groups["dst"].Value);
+                        }
+                    }
+                }
+            }
+
+            return map;
+        }
+
+        private static void AddUnicodeMapEntry(Dictionary<int, string> map, string sourceHex, string destinationHex)
+        {
+            var source = int.Parse(sourceHex, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            map[source] = DecodeUnicodeHex(destinationHex);
+        }
+
+        private static string DecodeUnicodeHex(string hex)
+        {
+            if (hex.Length % 4 == 0)
+            {
+                var builder = new StringBuilder();
+                for (var index = 0; index < hex.Length; index += 4)
+                {
+                    builder.Append(char.ConvertFromUtf32(int.Parse(hex.Substring(index, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture)));
+                }
+
+                return builder.ToString();
+            }
+
+            return DecodeHexPdfString(hex, new Dictionary<int, string>());
+        }
+
         private static string ExtractPdfStrings(string content)
         {
             var values = new List<string>();
@@ -766,6 +1108,14 @@ public class PlanningDutyPdfImportService : IPlanningDutyPdfImportService
             .Replace("\\\\", "\\");
     }
 }
+
+
+
+
+
+
+
+
 
 
 

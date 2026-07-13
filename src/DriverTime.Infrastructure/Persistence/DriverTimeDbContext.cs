@@ -52,6 +52,8 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<PlanningDriverAvailability> PlanningDriverAvailabilities => Set<PlanningDriverAvailability>();
 
+    public DbSet<PlanningDriverDutyRule> PlanningDriverDutyRules => Set<PlanningDriverDutyRule>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -215,6 +217,9 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.CardIssuingCountry)
                 .HasMaxLength(10);
 
+            entity.Property(x => x.IncludeInPlanning)
+                .HasDefaultValue(true);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)
                 .HasForeignKey(x => x.CompanyId);
@@ -298,6 +303,8 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.Notes).HasMaxLength(4000);
             entity.Property(x => x.SourceFileName).HasMaxLength(500);
             entity.Property(x => x.DistanceKm).HasPrecision(10, 2);
+            entity.Property(x => x.ActiveDaysMask).HasDefaultValue(31);
+            entity.Property(x => x.IncludeHolidays).HasDefaultValue(false);
 
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.PlanningDuties)
@@ -410,6 +417,37 @@ public class DriverTimeDbContext : DbContext
                 .HasForeignKey(x => x.DriverId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<PlanningDriverDutyRule>(entity =>
+        {
+            entity.ToTable("PlanningDriverDutyRules");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.DriverId);
+            entity.HasIndex(x => x.PlanningDutyId);
+            entity.HasIndex(x => x.Type);
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.PlanningDutyId, x.Type, x.ValidFrom, x.ValidTo }).IsUnique();
+
+            entity.Property(x => x.Type)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.PlanningDuty)
+                .WithMany()
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
         modelBuilder.Entity<CardReadSession>(entity =>
         {
             entity.ToTable("CardReadSessions");
@@ -440,6 +478,9 @@ public class DriverTimeDbContext : DbContext
         });
     }
 }
+
+
+
 
 
 

@@ -1,4 +1,6 @@
-﻿using DriverTime.Infrastructure.Services;
+﻿using System.IO.Compression;
+using System.Text;
+using DriverTime.Infrastructure.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace DriverTime.Infrastructure.Tests.Planning;
@@ -334,4 +336,152 @@ Przy dowozie na PZ oczekiwać na linię K-173
         Assert.AreEqual(100, duty.Confidence.WorkingMinutes);
         Assert.AreEqual(100, duty.Confidence.BreakMinutes);
     }
+    [TestMethod]
+    public void ParseText_SectionalParserResult_IsNotOverwrittenByGenericTableValues()
+    {
+        const string text = """
+SŁUŻBA 141 WAŻNA OD DNIA 01.05.2026
+Autobus 41 miejscowy
+K-58
+Przystanki km
+4 29 H5
+WPO LUBIN BAZA 0 20:42
+Lubin, ul.Padarewskiego - obwodnica 6 20:52
+POLKOWICE GŁÓWNE 33 21:25
+WPO LUBIN BAZA 46 23:18
+DZIENNY PRZEBIEG: 92 km
+ZATRUDNIENIE KIEROWCY: 12:35 23:35 11:00 h
+praca 8 h
+w tym: w tym: przer.śniad. 17:25 17:40 0:15 h
+przerwa 17:40 20:40 2:00 h
+""";
+
+        var warnings = new List<string>();
+        var duties = PlanningDutyPdfImportService.ParseText(text, "Służba-141 św od 2026.05.01.pdf", warnings);
+
+        Assert.AreEqual(1, duties.Count);
+        var duty = duties[0];
+        Assert.AreEqual("141", duty.DutyNumber);
+        Assert.AreEqual(new DateOnly(2026, 5, 1), duty.ValidFrom);
+        Assert.AreEqual("Autobus 41 miejscowy", duty.VehicleRequirement);
+        Assert.AreEqual("K-58", duty.Lines.Single().LineCode);
+        Assert.AreEqual(92m, duty.DistanceKm);
+        Assert.AreEqual(new TimeOnly(12, 35), duty.StartTime);
+        Assert.AreEqual(new TimeOnly(23, 35), duty.EndTime);
+        Assert.AreEqual(480, duty.WorkMinutes);
+        Assert.AreEqual(135, duty.BreakMinutes);
+        Assert.IsFalse(duty.Lines.Any(x => x.LineCode is "4" or "29" or "H5"));
+        Assert.AreNotEqual(12m, duty.DistanceKm);
+        Assert.IsFalse(warnings.Any(x => x.Contains("Nie rozpoznano pełnej tabeli przystanków", StringComparison.OrdinalIgnoreCase)));
+    }
+    [TestMethod]
+    public async Task ExtractPdfTextForTestsAsync_PositionedCompressedStreams_ReturnsSectionalText()
+    {
+        var pdfBytes = CreateFakePdfWithCompressedStreams(
+            """
+BT
+/F1 12 Tf
+1 0 0 1 10 800 Tm
+(SLUZBA 141 WAZNA OD DNIA 01.05.2026) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 780 Tm
+(Autobus 41 miejscowy) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 760 Tm
+<004B002D00350038> Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 740 Tm
+(WPO LUBIN BAZA) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 300 740 Tm
+(0) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 340 740 Tm
+(20:42) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 720 Tm
+(DZIENNY PRZEBIEG: 92 km) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 700 Tm
+(ZATRUDNIENIE KIEROWCY: 12:35 23:35 11:00 h) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 680 Tm
+(praca 8 h) Tj
+ET
+BT
+/F1 10 Tf
+1 0 0 1 10 640 Tm
+(przerwa 17:40 20:40 2:00 h) Tj
+ET
+""",
+            """
+/CIDInit /ProcSet findresource begin
+begincmap
+1 beginbfchar
+<0003> <0020>
+endbfchar
+endcmap
+end
+""");
+
+        await using var stream = new MemoryStream(pdfBytes);
+        var text = await PlanningDutyPdfImportService.ExtractPdfTextForTestsAsync(stream);
+        var duties = PlanningDutyPdfImportService.ParseText(text, "Służba-141 św od 2026.05.01.pdf");
+
+        Assert.AreEqual(1, duties.Count);
+        Assert.AreEqual("141", duties[0].DutyNumber);
+        Assert.AreEqual("K-58", duties[0].Lines.Single().LineCode);
+        Assert.AreEqual(92m, duties[0].DistanceKm);
+        Assert.AreEqual("Autobus 41 miejscowy", duties[0].VehicleRequirement);
+        Assert.AreEqual(480, duties[0].WorkMinutes);
+        Assert.AreEqual(120, duties[0].BreakMinutes);
+        Assert.IsTrue(duties[0].Stops.Any(x => x.StopName == "WPO LUBIN BAZA" && x.Km == 0m && x.DepartureTime == new TimeOnly(20, 42)));
+    }
+
+    private static byte[] CreateFakePdfWithCompressedStreams(params string[] streams)
+    {
+        var builder = new StringBuilder("%PDF-1.7\n");
+        foreach (var stream in streams)
+        {
+            var compressed = Compress(Encoding.Latin1.GetBytes(stream));
+            builder.Append("<< /Filter /FlateDecode /Length ")
+                .Append(compressed.Length.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Append(" >>\nstream\n");
+            builder.Append(Encoding.Latin1.GetString(compressed));
+            builder.Append("\nendstream\n");
+        }
+
+        return Encoding.Latin1.GetBytes(builder.ToString());
+    }
+
+    private static byte[] Compress(byte[] bytes)
+    {
+        using var output = new MemoryStream();
+        using (var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            zlib.Write(bytes, 0, bytes.Length);
+        }
+
+        return output.ToArray();
+    }
 }
+
+
+
+

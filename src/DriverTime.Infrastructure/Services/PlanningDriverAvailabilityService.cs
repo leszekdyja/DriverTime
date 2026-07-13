@@ -57,6 +57,31 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
             throw new PlanningDutyValidationException(new[] { "Nie można dodać dostępności kierowcy spoza aktualnej firmy." });
         }
 
+        var type = ParseType(request.Type);
+        if (type == PlanningDriverAvailabilityType.Available)
+        {
+            var blockers = await _dbContext.PlanningDriverAvailabilities
+                .Where(x => x.CompanyId == companyId
+                    && x.DriverId == request.DriverId
+                    && x.DateFrom <= request.DateTo
+                    && x.DateTo >= request.DateFrom)
+                .ToListAsync(cancellationToken);
+            _dbContext.PlanningDriverAvailabilities.RemoveRange(blockers);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return new PlanningDriverAvailabilityDto
+            {
+                Id = Guid.Empty,
+                DriverId = driver.Id,
+                DriverFullName = FormatDriverName(driver),
+                DateFrom = request.DateFrom,
+                DateTo = request.DateTo,
+                Type = PlanningDriverAvailabilityType.Available.ToString(),
+                Note = NormalizeOptional(request.Note),
+                CreatedAtUtc = DateTime.UtcNow
+            };
+        }
+
         var now = DateTime.UtcNow;
         var availability = new PlanningDriverAvailability
         {
@@ -66,7 +91,7 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
             Driver = driver,
             DateFrom = request.DateFrom,
             DateTo = request.DateTo,
-            Type = ParseType(request.Type),
+            Type = type,
             Note = NormalizeOptional(request.Note),
             CreatedAt = now,
             CreatedAtUtc = now
@@ -190,3 +215,4 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
         }
     }
 }
+

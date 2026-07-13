@@ -7,6 +7,7 @@ export type Driver = {
     cardNumber: string;
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
+    includeInPlanning: boolean;
 };
 
 export async function getDrivers(): Promise<Driver[]> {
@@ -17,4 +18,18 @@ export async function getDrivers(): Promise<Driver[]> {
     }
 
     return response.json() as Promise<Driver[]>;
+}
+
+export async function updateDriverPlanning(id: string, includeInPlanning: boolean): Promise<Driver> {
+    const response = await apiFetch(`/api/drivers/${id}/planning`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includeInPlanning }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Nie udało się zapisać ustawienia planowania kierowcy.");
+    }
+
+    return response.json() as Promise<Driver>;
 }

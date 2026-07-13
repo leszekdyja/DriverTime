@@ -34,6 +34,10 @@ public class PlanningDuty : BaseEntity
 
     public string? SourceFileName { get; set; }
 
+    public int? ActiveDaysMask { get; set; }
+
+    public bool IncludeHolidays { get; set; }
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAtUtc { get; set; }
@@ -44,4 +48,5 @@ public class PlanningDuty : BaseEntity
 
     public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
 }
+
 

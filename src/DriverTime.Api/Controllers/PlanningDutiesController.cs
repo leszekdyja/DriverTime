@@ -130,6 +130,24 @@ public class PlanningDutiesController : ControllerBase
         }
     }
 
+
+    [HttpPut("{id:guid}/active-days")]
+    public async Task<ActionResult<PlanningDutyDetailsDto>> UpdateActiveDays(
+        Guid id,
+        [FromBody] PlanningDutyActiveDaysRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var duty = await _planningDutyService.UpdateActiveDaysAsync(id, request, cancellationToken);
+
+            return duty is null ? NotFound() : Ok(duty);
+        }
+        catch (PlanningDutyValidationException ex)
+        {
+            return BadRequest(new { errors = ex.Errors });
+        }
+    }
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -138,5 +156,6 @@ public class PlanningDutiesController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 }
+
 
 

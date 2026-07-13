@@ -26,10 +26,15 @@ public class PlanningDutyListDto
 
     public decimal? DistanceKm { get; set; }
 
+    public int? ActiveDaysMask { get; set; }
+
+    public bool IncludeHolidays { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
 
     public DateTime? UpdatedAtUtc { get; set; }
 
     public List<PlanningDutyLineDto> Lines { get; set; } = new();
 }
+
 
