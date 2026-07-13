@@ -88,6 +88,17 @@ public class DriversController : ControllerBase
         return Ok(createdDriver);
     }
 
+
+    [HttpPatch("{id:guid}/planning")]
+    public async Task<ActionResult<DriverDto>> UpdatePlanning(
+        Guid id,
+        [FromBody] UpdateDriverPlanningDto dto,
+        CancellationToken cancellationToken)
+    {
+        var driver = await _driverService.UpdatePlanningAsync(id, dto, cancellationToken);
+
+        return driver is null ? NotFound() : Ok(driver);
+    }
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(
         Guid id,
@@ -98,3 +109,4 @@ public class DriversController : ControllerBase
         return deleted ? NoContent() : NotFound();
     }
 }
+

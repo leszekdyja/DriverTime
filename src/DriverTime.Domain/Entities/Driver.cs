@@ -18,10 +18,13 @@ public class Driver
 
     public string CardIssuingCountry { get; set; } = string.Empty;
 
+    public bool IncludeInPlanning { get; set; } = true;
+
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
 
     public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
+
 

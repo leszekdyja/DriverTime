@@ -3,6 +3,7 @@ using System;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 {
     [DbContext(typeof(DriverTimeDbContext))]
-    partial class DriverTimeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260713111813_AddPlanningDriverDutyRules")]
+    partial class AddPlanningDriverDutyRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -395,11 +398,6 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<bool>("IncludeInPlanning")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -683,11 +681,6 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("ActiveDaysMask")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(31);
-
                     b.Property<int?>("BreakMinutes")
                         .HasColumnType("integer");
 
@@ -714,11 +707,6 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<TimeOnly?>("EndTime")
                         .HasColumnType("time without time zone");
-
-                    b.Property<bool>("IncludeHolidays")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1445,3 +1433,4 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
         }
     }
 }
+

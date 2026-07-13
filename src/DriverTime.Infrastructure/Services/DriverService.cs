@@ -1,4 +1,4 @@
-using DriverTime.Application.Drivers.DTOs;
+﻿using DriverTime.Application.Drivers.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
@@ -62,6 +62,7 @@ public class DriverService : IDriverService
                 CardNumber = x.CardNumber,
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
+                IncludeInPlanning = x.IncludeInPlanning,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .ToListAsync();
@@ -80,6 +81,7 @@ public class DriverService : IDriverService
                 CardNumber = x.CardNumber,
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
+                IncludeInPlanning = x.IncludeInPlanning,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .FirstOrDefaultAsync();
@@ -289,6 +291,7 @@ public class DriverService : IDriverService
             FirstName = dto.FirstName,
             LastName = dto.LastName,
             CardNumber = dto.CardNumber,
+            IncludeInPlanning = dto.IncludeInPlanning,
             CreatedAtUtc = DateTime.UtcNow
         };
 
@@ -304,10 +307,42 @@ public class DriverService : IDriverService
             CardNumber = driver.CardNumber,
             CardExpiryDate = driver.CardExpiryDate,
             CardIssuingCountry = driver.CardIssuingCountry,
+            IncludeInPlanning = driver.IncludeInPlanning,
             CreatedAtUtc = driver.CreatedAtUtc
         };
     }
 
+
+    public async Task<DriverDto?> UpdatePlanningAsync(
+        Guid id,
+        UpdateDriverPlanningDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var driver = await _dbContext.Drivers
+            .FirstOrDefaultAsync(
+                x => x.Id == id && x.CompanyId == _currentUser.CompanyId,
+                cancellationToken);
+
+        if (driver is null)
+        {
+            return null;
+        }
+
+        driver.IncludeInPlanning = dto.IncludeInPlanning;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new DriverDto
+        {
+            Id = driver.Id,
+            FirstName = driver.FirstName,
+            LastName = driver.LastName,
+            CardNumber = driver.CardNumber,
+            CardExpiryDate = driver.CardExpiryDate,
+            CardIssuingCountry = driver.CardIssuingCountry,
+            IncludeInPlanning = driver.IncludeInPlanning,
+            CreatedAtUtc = driver.CreatedAtUtc
+        };
+    }
     public async Task<bool> DeleteAsync(
         Guid id,
         CancellationToken cancellationToken = default)
@@ -411,3 +446,5 @@ public class DriverService : IDriverService
             complianceRun.DriverId == driverId;
     }
 }
+
+

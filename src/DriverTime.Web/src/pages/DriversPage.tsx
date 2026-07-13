@@ -21,12 +21,14 @@ type DriverDto = {
     cardNumber: string;
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
+    includeInPlanning: boolean;
 };
 
 type CreateDriverDto = {
     firstName: string;
     lastName: string;
     cardNumber: string;
+    includeInPlanning: boolean;
 };
 
 const driversApiUrl = `${API_URL}/api/drivers`;
@@ -38,6 +40,7 @@ export default function DriversPage() {
         firstName: "",
         lastName: "",
         cardNumber: "",
+        includeInPlanning: true,
     });
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -109,7 +112,7 @@ export default function DriversPage() {
                 throw new Error("Nie udało się dodać kierowcy.");
             }
 
-            setForm({ firstName: "", lastName: "", cardNumber: "" });
+            setForm({ firstName: "", lastName: "", cardNumber: "", includeInPlanning: true });
             await loadDrivers();
             setMessage("Kierowca został dodany.");
         } catch {
@@ -120,6 +123,31 @@ export default function DriversPage() {
         }
     }
 
+    async function toggleDriverPlanning(driver: DriverDto, includeInPlanning: boolean) {
+        setMessage("");
+        setIsError(false);
+        setDrivers((current) => current.map((item) => item.id === driver.id ? { ...item, includeInPlanning } : item));
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driver.id}/planning`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ includeInPlanning }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Nie udało się zapisać ustawienia planowania.");
+            }
+
+            const saved = (await response.json()) as DriverDto;
+            setDrivers((current) => current.map((item) => item.id === saved.id ? saved : item));
+            setMessage("Ustawienie planowania kierowcy zostało zapisane.");
+        } catch (error) {
+            setDrivers((current) => current.map((item) => item.id === driver.id ? driver : item));
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się zapisać ustawienia planowania.");
+        }
+    }
     async function deleteDriver() {
         if (!driverToDelete) return;
 
@@ -216,6 +244,17 @@ export default function DriversPage() {
                             }
                         />
                     </label>
+                    <label className="driver-planning-toggle">
+                        <input
+                            type="checkbox"
+                            checked={form.includeInPlanning}
+                            onChange={(event) => setForm({ ...form, includeInPlanning: event.target.checked })}
+                        />
+                        <span>
+                            Uwzględniaj w automatycznym planowaniu
+                            <small>Kierowca będzie uwzględniany przy automatycznym generowaniu grafików.</small>
+                        </span>
+                    </label>
 
                     <button type="submit" disabled={isSaving}>
                         {isSaving ? "Zapisywanie..." : "Dodaj kierowcę"}
@@ -252,7 +291,7 @@ export default function DriversPage() {
 
                     {isLoading ? (
                         drivers.length === 0 ? (
-                            <TableSkeleton rows={6} columns={6} />
+                            <TableSkeleton rows={6} columns={7} />
                         ) : null
                     ) : drivers.length === 0 ? (
                         <EmptyState
@@ -277,6 +316,7 @@ export default function DriversPage() {
                                         <th>Numer karty</th>
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
+                                        <th>Planowanie</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -292,6 +332,16 @@ export default function DriversPage() {
                                                     : "Brak danych"}
                                             </td>
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
+                                            <td>
+                                                <label className="driver-table-toggle">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={driver.includeInPlanning}
+                                                        onChange={(event) => void toggleDriverPlanning(driver, event.target.checked)}
+                                                    />
+                                                    <span>{driver.includeInPlanning ? "Tak" : "Nie"}</span>
+                                                </label>
+                                            </td>
                                             <td>
                                                 <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
@@ -358,3 +408,7 @@ export default function DriversPage() {
         </div>
     );
 }
+
+
+
+
