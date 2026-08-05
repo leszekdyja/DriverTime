@@ -5,6 +5,7 @@ import { getDrivers, type Driver } from "../../services/driversService";
 import { getPlanningDuties, updatePlanningDutyActiveDays, type PlanningDuty } from "../../services/planningDutiesService";
 import {
     autoGeneratePlanning,
+    previewAutoGeneratePlanning,
     createManualPlanningAssignment,
     createPlanningAssignmentRule,
     createPlanningDriverAvailability,
@@ -257,6 +258,16 @@ export default function PlanningSchedulesTab() {
             setIsSavingDutyDays(false);
         }
     }
+    async function previewAutomatically() {
+        setIsGenerating(true); setMessage(""); setIsError(false);
+        try {
+            const result = await previewAutoGeneratePlanning({ dateFrom: selectedRange.dateFrom, dateTo: selectedRange.dateTo });
+            setLastGenerationResult(result);
+            setMessage(`Podgląd zawiera ${result.generatedCount} przypisań i ${result.unassignedCount} nieobsadzonych służb. Żadne zmiany nie zostały zapisane.`);
+        } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się przygotować podglądu planu."); }
+        finally { setIsGenerating(false); }
+    }
+
     async function generateAutomatically() {
         setIsGenerating(true); setMessage(""); setIsError(false);
         try {
@@ -287,7 +298,7 @@ export default function PlanningSchedulesTab() {
                         <label>Nazwa<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label>Rok<input type="number" min="2000" max="2100" value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} required /></label><label>Miesiąc<input type="number" min="1" max="12" value={form.month} onChange={(event) => setForm({ ...form, month: event.target.value })} required /></label><label>Uwagi<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
                         <div className="driver-row-actions"><button type="submit" className="planning-primary-button" disabled={isSaving}>{isSaving ? "Zapisywanie..." : "Zapisz grafik"}</button>{selectedSchedule ? <button type="button" className="driver-delete-button" onClick={() => void removeSchedule(selectedSchedule.id)}>Usuń grafik</button> : null}</div>
                     </form>
-                    <div className="planning-month-primary"><div className="planning-validation-header"><div><h4>Plan miesięczny</h4><p>{selectedSchedule ? selectedSchedule.name : "Brak zapisanego grafiku dla tego miesiąca. Kliknij komórkę, aby utworzyć pierwszy wpis."}</p></div><div className="driver-row-actions"><button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating || !selectedSchedule}>{isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}</button><button className="planning-primary-button" type="button" onClick={() => void generateAutomatically()} disabled={isGenerating}>{isGenerating ? "Generowanie..." : "Generuj miesiąc"}</button></div></div><PlanningGenerationSummary result={lastGenerationResult} /><PlanningMonthlyGrid grid={grid} onCellClick={openEditor} /></div>
+                    <div className="planning-month-primary"><div className="planning-validation-header"><div><h4>Plan miesięczny</h4><p>{selectedSchedule ? selectedSchedule.name : "Brak zapisanego grafiku dla tego miesiąca. Kliknij komórkę, aby utworzyć pierwszy wpis."}</p></div><div className="driver-row-actions"><button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating || !selectedSchedule}>{isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}</button><button className="planning-secondary-button" type="button" onClick={() => void previewAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Podgląd generowania"}</button><button className="planning-primary-button" type="button" onClick={() => void generateAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Generuj i zapisz"}</button></div></div><PlanningGenerationSummary result={lastGenerationResult} /><PlanningMonthlyGrid grid={grid} onCellClick={openEditor} /></div>
                     <div className="planning-compact-info">
                         <span>Do planowania wybrano <strong>{planningEnabledDriversCount}</strong> z <strong>{drivers.length}</strong> kierowców.</span>
                         <Link className="planning-secondary-button" to="/drivers">Zarządzaj w zakładce Kierowcy</Link>

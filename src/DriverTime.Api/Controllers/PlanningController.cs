@@ -40,6 +40,22 @@ public class PlanningController : ControllerBase
         }
     }
 
+    [HttpPost("auto-generate/preview")]
+    public async Task<ActionResult<PlanningAutoGenerateResultDto>> PreviewAutoGenerate(
+        [FromBody] PlanningAutoGenerateRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _autoGeneratorService.PreviewAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (PlanningDutyValidationException ex)
+        {
+            return BadRequest(new { errors = ex.Errors });
+        }
+    }
+
     [HttpGet("assignments")]
     public async Task<ActionResult<List<PlanningAssignmentListItemDto>>> GetAssignments(
         [FromQuery] DateOnly dateFrom,

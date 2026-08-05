@@ -1,10 +1,12 @@
-﻿using DriverTime.Application.Interfaces;
+﻿using System.Diagnostics;
+using DriverTime.Application.Interfaces;
 using DriverTime.Application.Planning;
 using DriverTime.Application.Planning.DTOs;
 using DriverTime.Application.Planning.Services;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DriverTime.Infrastructure.Services;
 
@@ -19,23 +21,39 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
     private readonly PlanningWeeklyRestValidator _weeklyRestValidator = new();
     private readonly PlanningTechnicalAssignmentPlanner _technicalPlanner;
     private readonly PlanningAssignmentSwapPlanner _swapPlanner;
+    private readonly ILogger<PlanningAutoGeneratorService>? _logger;
 
     public PlanningAutoGeneratorService(
         DriverTimeDbContext dbContext,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        ILogger<PlanningAutoGeneratorService>? logger = null)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
+        _logger = logger;
         _candidateEvaluator = new PlanningCandidateEvaluator(new PlanningEligibilityChecker());
         _calendarService = new PlanningWorkingTimeCalendarService(new PolishPublicHolidayProvider());
         _technicalPlanner = new PlanningTechnicalAssignmentPlanner(_candidateEvaluator, _calendarService);
         _swapPlanner = new PlanningAssignmentSwapPlanner(new PlanningEligibilityChecker(), _calendarService);
     }
 
-    public async Task<PlanningAutoGenerateResultDto> GenerateAsync(
+    public Task<PlanningAutoGenerateResultDto> GenerateAsync(
         PlanningAutoGenerateRequestDto request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        GenerateInternalAsync(request, isPreview: false, cancellationToken);
+
+    public Task<PlanningAutoGenerateResultDto> PreviewAsync(
+        PlanningAutoGenerateRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        GenerateInternalAsync(request, isPreview: true, cancellationToken);
+
+    private async Task<PlanningAutoGenerateResultDto> GenerateInternalAsync(
+        PlanningAutoGenerateRequestDto request,
+        bool isPreview,
+        CancellationToken cancellationToken)
     {
+        var totalStopwatch = Stopwatch.StartNew();
+        var calendarStopwatch = Stopwatch.StartNew();
         var baseOptions = BuildOptions(request);
         var monthlyCalendars = EachMonth(request.DateFrom, request.DateTo)
             .Select(x => _calendarService.BuildMonthlyCalendar(x.Year, x.Month))
@@ -50,8 +68,12 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         {
             DateFrom = request.DateFrom,
             DateTo = request.DateTo,
+            IsPreview = isPreview,
             MonthlyCalendars = monthlyCalendars.Select(ToDto).ToList()
         };
+        void RecordTiming(string stage, long elapsedMilliseconds) => AddTiming(result, stage, elapsedMilliseconds);
+        RecordTiming("Budowa kalendarza", calendarStopwatch.ElapsedMilliseconds);
+        var dataStopwatch = Stopwatch.StartNew();
         var generationWarnings = new HashSet<string>();
         var forbiddenCandidateRejectionCount = 0;
 
@@ -130,12 +152,15 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 && x.DateTo >= contextDateFrom)
             .ToListAsync(cancellationToken);
 
+        RecordTiming("Pobranie danych", dataStopwatch.ElapsedMilliseconds);
+
         result.ManualAssignmentsPreserved = assignmentContext.Count(x =>
             x.Status == PlanningAssignmentStatus.Manual
             && x.Date >= request.DateFrom
             && x.Date <= request.DateTo);
 
         var generatedAssignments = new List<PlanningAssignment>();
+        var technicalStopwatch = Stopwatch.StartNew();
         var nightDutyPlan = _technicalPlanner.PlanNightDuties(
             drivers,
             allDuties,
@@ -150,6 +175,14 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         AddTechnicalPlanResult(nightDutyPlan, generatedAssignments, result.UnassignedDuties, result.Warnings, _dbContext);
         result.NightDutyGeneratedCount = nightDutyPlan.Assignments.Count;
         result.GeneratedCount += nightDutyPlan.Assignments.Count;
+
+        RecordTiming("Automatyczne RN", technicalStopwatch.ElapsedMilliseconds);
+
+        var assignmentsByDriver = BuildAssignmentsByDriver(assignmentContext);
+        var availabilitiesByDriver = BuildAvailabilitiesByDriver(availabilities);
+
+        var evaluationStopwatch = Stopwatch.StartNew();
+        var evaluatedCandidateCount = 0;
 
         var holidayDates = monthlyCalendars
             .SelectMany(x => x.Holidays)
@@ -166,12 +199,13 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                     drivers,
                     duty,
                     date,
-                    assignmentContext,
-                    availabilities,
+                    assignmentsByDriver,
+                    availabilitiesByDriver,
                     request.DateFrom,
                     request.DateTo,
                     options,
                     _calendarService);
+                evaluatedCandidateCount += evaluations.Count;
                 forbiddenCandidateRejectionCount += evaluations.Count(x => x.RejectionReasons.Contains(PlanningCandidateRejectionReason.DriverDutyForbidden));
                 var selected = _candidateEvaluator.ChooseBestCandidate(evaluations);
 
@@ -207,11 +241,15 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
 
                 _dbContext.PlanningAssignments.Add(assignment);
                 assignmentContext.Add(assignment);
+                AddAssignmentToIndex(assignmentsByDriver, assignment);
                 generatedAssignments.Add(assignment);
                 result.GeneratedCount++;
             }
         }
 
+        RecordTiming($"Ocena kandydatów ({evaluatedCandidateCount})", evaluationStopwatch.ElapsedMilliseconds);
+
+        var rescueStopwatch = Stopwatch.StartNew();
         var swapRescue = _swapPlanner.RescueUnassignedDuties(
             drivers,
             allDuties,
@@ -227,6 +265,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         ApplySwapRescueResult(swapRescue, generatedAssignments, result, _dbContext);
         result.GeneratedCount += swapRescue.Plans.Sum(x => x.AddedAssignments.Count) - swapRescue.Plans.Sum(x => x.RemovedAssignments.Count);
 
+        RecordTiming("Mechanizmy ratunkowe", rescueStopwatch.ElapsedMilliseconds);
+
+        var finalTechnicalStopwatch = Stopwatch.StartNew();
         var reservePlan = _technicalPlanner.PlanReserves(
             drivers,
             allDuties,
@@ -257,6 +298,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         result.DayOffGeneratedCount = dayOffPlan.Assignments.Count;
         result.GeneratedCount += dayOffPlan.Assignments.Count;
 
+        RecordTiming("Rezerwy i dni wolne", finalTechnicalStopwatch.ElapsedMilliseconds);
+
+        var diagnosticsStopwatch = Stopwatch.StartNew();
         AddConstraintDiagnostics(result, drivers, generatedAssignments, allDuties, options, companyId);
         result.ForbiddenCandidateRejectionCount += forbiddenCandidateRejectionCount;
         AddVehicleRequirementWarnings(result, allDuties);
@@ -267,6 +311,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             result.Warnings.Add($"Nie obsadzono {result.UnassignedCount} służb. Szczegóły są dostępne w UnassignedDuties.");
         }
         result.Warnings.AddRange(generationWarnings.OrderBy(x => x));
+        RecordTiming("Diagnostyka ograniczeń", diagnosticsStopwatch.ElapsedMilliseconds);
+
+        var restSummaryStopwatch = Stopwatch.StartNew();
         result.DriverSummaries = BuildDriverSummaries(
             drivers,
             initialAssignmentContext,
@@ -280,8 +327,27 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             monthlyCalendars,
             _weeklyRestValidator);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        result.Messages.Add($"Wygenerowano {result.GeneratedCount} przypisań automatycznych.");
+        RecordTiming("Walidacja odpoczynku i podsumowania", restSummaryStopwatch.ElapsedMilliseconds);
+
+        result.ProposedAssignments = BuildProposedAssignments(generatedAssignments, drivers);
+
+        var saveStopwatch = Stopwatch.StartNew();
+        if (isPreview)
+        {
+            _dbContext.ChangeTracker.Clear();
+            RecordTiming("Podgląd bez zapisu", saveStopwatch.ElapsedMilliseconds);
+        }
+        else
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            RecordTiming("Zapis przypisań", saveStopwatch.ElapsedMilliseconds);
+        }
+
+        RecordTiming("Całkowity czas wykonania", totalStopwatch.ElapsedMilliseconds);
+        LogTimings(result, drivers.Count, duties.Count, request.DateFrom, request.DateTo);
+        result.Messages.Add(isPreview
+            ? $"Przygotowano podgląd {result.GeneratedCount} przypisań w {totalStopwatch.ElapsedMilliseconds} ms. Nie zapisano zmian."
+            : $"Wygenerowano {result.GeneratedCount} przypisań automatycznych w {totalStopwatch.ElapsedMilliseconds} ms.");
 
         return result;
     }
@@ -321,6 +387,88 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .ToListAsync(cancellationToken);
     }
 
+
+    internal static List<PlanningAssignmentListItemDto> BuildProposedAssignments(
+        IEnumerable<PlanningAssignment> assignments,
+        IEnumerable<Driver> drivers)
+    {
+        var driverNames = drivers.ToDictionary(x => x.Id, FormatDriverName);
+        return assignments
+            .OrderBy(x => x.Date)
+            .ThenBy(x => x.StartDateTime)
+            .ThenBy(x => x.DriverId)
+            .Select(x => new PlanningAssignmentListItemDto
+            {
+                Id = x.Id,
+                WorkDate = x.Date,
+                DriverId = x.DriverId,
+                DriverFullName = driverNames.GetValueOrDefault(x.DriverId, string.Empty),
+                PlanningDutyId = x.PlanningDutyId,
+                DutyNumber = x.PlanningDuty?.DutyNumber,
+                StartDateTime = x.StartDateTime,
+                EndDateTime = x.EndDateTime,
+                Status = x.Status.ToString()
+            })
+            .ToList();
+    }
+
+    private static Dictionary<Guid, List<PlanningAssignment>> BuildAssignmentsByDriver(IEnumerable<PlanningAssignment> assignments) =>
+        assignments
+            .GroupBy(x => x.DriverId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+    private static Dictionary<Guid, List<PlanningDriverAvailability>> BuildAvailabilitiesByDriver(IEnumerable<PlanningDriverAvailability> availabilities) =>
+        availabilities
+            .GroupBy(x => x.DriverId)
+            .ToDictionary(x => x.Key, x => x.ToList());
+
+    private static void AddAssignmentToIndex(
+        IDictionary<Guid, List<PlanningAssignment>> assignmentsByDriver,
+        PlanningAssignment assignment)
+    {
+        if (!assignmentsByDriver.TryGetValue(assignment.DriverId, out var assignments))
+        {
+            assignments = new List<PlanningAssignment>();
+            assignmentsByDriver[assignment.DriverId] = assignments;
+        }
+
+        assignments.Add(assignment);
+    }
+
+    private static void AddTiming(
+        PlanningAutoGenerateResultDto result,
+        string stage,
+        long elapsedMilliseconds)
+    {
+        result.Timings.Add(new PlanningGenerationTimingDto
+        {
+            Stage = stage,
+            ElapsedMilliseconds = elapsedMilliseconds
+        });
+    }
+
+    private void LogTimings(
+        PlanningAutoGenerateResultDto result,
+        int driverCount,
+        int dutyCount,
+        DateOnly dateFrom,
+        DateOnly dateTo)
+    {
+        if (_logger is null)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Planning auto-generation completed for {DateFrom}-{DateTo}. Drivers={DriverCount}, Duties={DutyCount}, Generated={GeneratedCount}, Unassigned={UnassignedCount}, Timings={Timings}",
+            dateFrom,
+            dateTo,
+            driverCount,
+            dutyCount,
+            result.GeneratedCount,
+            result.UnassignedCount,
+            string.Join("; ", result.Timings.Select(x => $"{x.Stage}: {x.ElapsedMilliseconds} ms")));
+    }
     internal static AssignmentInterval? BuildInterval(DateOnly workDate, PlanningDuty duty)
     {
         if (!PlanningWorkInterval.TryCreate(workDate, duty, out var interval))
@@ -947,17 +1095,3 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
 }
 
 public readonly record struct AssignmentInterval(DateTime Start, DateTime End);
-
-
-
-
-
-
-
-
-
-
-
-
-
-

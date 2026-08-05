@@ -171,6 +171,8 @@ export type PlanningMonthlyWorkingTimeCalendar = {
 export type PlanningAutoGenerateResult = {
     dateFrom: string;
     dateTo: string;
+    isPreview: boolean;
+    proposedAssignments: PlanningAssignmentListItem[];
     generatedCount: number;
     conflictCount: number;
     candidateRejectionCount: number;
@@ -198,6 +200,7 @@ export type PlanningAutoGenerateResult = {
     monthlyCalendars: PlanningMonthlyWorkingTimeCalendar[];
     warnings: string[];
     messages: string[];
+    timings: Array<{ stage: string; elapsedMilliseconds: number }>;
 };
 export type PlanningDriverDutyRule = {
     id: string;
@@ -302,15 +305,29 @@ export type PlanningScheduleValidation = {
 
 async function readJson<T>(response: Response, fallbackMessage: string): Promise<T> {
     if (!response.ok) {
-        let message = fallbackMessage;
-        try {
-            const body = await response.json();
-            if (Array.isArray(body?.errors) && body.errors.length > 0) {
-                message = body.errors.join(" ");
-            }
-        } catch {
-            // Keep fallback message.
+        if (response.status === 504) {
+            throw new Error("Generator przekroczył limit czasu odpowiedzi serwera. Spróbuj ponownie po zawężeniu zakresu albo sprawdź logi backendu z czasami etapów generowania.");
         }
+
+        let message = fallbackMessage;
+        const text = await response.text().catch(() => "");
+        if (text) {
+            try {
+                const body = JSON.parse(text);
+                if (Array.isArray(body?.errors) && body.errors.length > 0) {
+                    message = body.errors.join(" ");
+                } else if (typeof body?.detail === "string" && body.detail.trim()) {
+                    message = body.detail;
+                } else if (typeof body?.message === "string" && body.message.trim()) {
+                    message = body.message;
+                } else if (typeof body?.title === "string" && body.title.trim()) {
+                    message = body.title;
+                }
+            } catch {
+                message = text;
+            }
+        }
+
         throw new Error(message);
     }
 
@@ -442,6 +459,15 @@ export async function autoGeneratePlanning(payload: PlanningAutoGeneratePayload)
     return readJson<PlanningAutoGenerateResult>(response, "Nie udało się wygenerować planu automatycznie.");
 }
 
+export async function previewAutoGeneratePlanning(payload: PlanningAutoGeneratePayload): Promise<PlanningAutoGenerateResult> {
+    const response = await apiFetch("/api/planning/auto-generate/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    return readJson<PlanningAutoGenerateResult>(response, "Nie udało się przygotować podglądu planu.");
+}
+
 export async function getPlanningAssignments(dateFrom: string, dateTo: string): Promise<PlanningAssignmentListItem[]> {
     const params = new URLSearchParams({ dateFrom, dateTo });
     const response = await apiFetch(`/api/planning/assignments?${params.toString()}`);
@@ -469,16 +495,3 @@ export async function deletePlanningDriverAvailability(id: string): Promise<void
         throw new Error(response.status === 404 ? "Nie znaleziono wpisu dostępności." : "Nie udało się usunąć dostępności kierowcy.");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1128,6 +1128,64 @@ public class PlanningAutoGeneratorServiceTests
 
         Assert.IsFalse(PlanningAutoGeneratorService.IsDriverEligibleForAutoPlanning(otherCompanyDriver, companyId, Array.Empty<Guid>()));
     }
+
+    [TestMethod]
+    public void CandidateEvaluation_IndexedDriverContextMatchesCollectionBasedEvaluation()
+    {
+        var companyId = Guid.NewGuid();
+        var availableDriver = CreateDriver(companyId, "Available", "Driver");
+        var busyDriver = CreateDriver(companyId, "Busy", "Driver");
+        var absentDriver = CreateDriver(companyId, "Absent", "Driver");
+        var drivers = new[] { availableDriver, busyDriver, absentDriver };
+        var date = new DateOnly(2026, 8, 10);
+        var duty = CreateDuty(companyId, "D1", new TimeOnly(8, 0), new TimeOnly(16, 0), workMinutes: 480);
+        var assignments = new[]
+        {
+            CreateAssignment(companyId, busyDriver.Id, date, new DateTime(2026, 8, 10, 7, 0, 0), new DateTime(2026, 8, 10, 12, 0, 0)),
+            CreateAssignment(companyId, availableDriver.Id, date.AddDays(-2), new DateTime(2026, 8, 8, 8, 0, 0), new DateTime(2026, 8, 8, 16, 0, 0))
+        };
+        var availabilities = new[]
+        {
+            new PlanningDriverAvailability
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = companyId,
+                DriverId = absentDriver.Id,
+                DateFrom = date,
+                DateTo = date,
+                Type = PlanningDriverAvailabilityType.Vacation
+            }
+        };
+        var assignmentsByDriver = assignments.GroupBy(x => x.DriverId).ToDictionary(x => x.Key, x => x.ToList());
+        var availabilitiesByDriver = availabilities.GroupBy(x => x.DriverId).ToDictionary(x => x.Key, x => x.ToList());
+        var evaluator = new PlanningCandidateEvaluator(new PlanningEligibilityChecker());
+        var calendarService = new PlanningWorkingTimeCalendarService(new PolishPublicHolidayProvider());
+        var dateFrom = new DateOnly(2026, 8, 1);
+        var dateTo = new DateOnly(2026, 8, 31);
+
+        var collectionBased = evaluator.EvaluateCandidates(
+            drivers, duty, date, assignments, availabilities, dateFrom, dateTo, DefaultOptions, calendarService);
+        var indexed = evaluator.EvaluateCandidates(
+            drivers, duty, date, assignmentsByDriver, availabilitiesByDriver, dateFrom, dateTo, DefaultOptions, calendarService);
+
+        Assert.AreEqual(collectionBased.Count, indexed.Count);
+        for (var index = 0; index < collectionBased.Count; index++)
+        {
+            var expected = collectionBased[index];
+            var actual = indexed[index];
+            Assert.AreEqual(expected.DriverId, actual.DriverId);
+            Assert.AreEqual(expected.IsEligible, actual.IsEligible);
+            Assert.AreEqual(expected.Score, actual.Score);
+            Assert.AreEqual(expected.MonthlyWorkMinutesBefore, actual.MonthlyWorkMinutesBefore);
+            Assert.AreEqual(expected.WeeklyWorkMinutesBefore, actual.WeeklyWorkMinutesBefore);
+            Assert.AreEqual(expected.ConsecutiveWorkDaysAfter, actual.ConsecutiveWorkDaysAfter);
+            CollectionAssert.AreEqual(expected.RejectionReasons, actual.RejectionReasons);
+        }
+
+        Assert.AreEqual(
+            evaluator.ChooseBestCandidate(collectionBased)?.DriverId,
+            evaluator.ChooseBestCandidate(indexed)?.DriverId);
+    }
     private static PlanningCandidateEvaluation Evaluate(
         Driver driver,
         PlanningDuty duty,
@@ -1311,14 +1369,3 @@ public class PlanningAutoGeneratorServiceTests
         public PlanningAssignmentSwapPlanner Planner { get; init; } = null!;
     }
 }
-
-
-
-
-
-
-
-
-
-
-

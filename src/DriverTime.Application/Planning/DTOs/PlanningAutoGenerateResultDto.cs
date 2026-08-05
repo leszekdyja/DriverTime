@@ -6,6 +6,10 @@ public class PlanningAutoGenerateResultDto
 
     public DateOnly DateTo { get; set; }
 
+    public bool IsPreview { get; set; }
+
+    public List<PlanningAssignmentListItemDto> ProposedAssignments { get; set; } = new();
+
     public int GeneratedCount { get; set; }
 
     public int ConflictCount { get; set; }
@@ -59,5 +63,15 @@ public class PlanningAutoGenerateResultDto
     public List<string> Warnings { get; set; } = new();
 
     public List<string> Messages { get; set; } = new();
+
+    public List<PlanningGenerationTimingDto> Timings { get; set; } = new();
+}
+
+
+public class PlanningGenerationTimingDto
+{
+    public string Stage { get; set; } = string.Empty;
+
+    public long ElapsedMilliseconds { get; set; }
 }
 

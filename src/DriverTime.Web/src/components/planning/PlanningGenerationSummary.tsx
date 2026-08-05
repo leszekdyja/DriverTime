@@ -24,13 +24,36 @@ export function PlanningGenerationSummary({ result }: PlanningGenerationSummaryP
     ] as const;
 
     return (
-        <div className="planning-generation-summary">
-            {items.map(([label, value]) => (
-                <span key={label}>
-                    <small>{label}</small>
-                    <strong>{value}</strong>
-                </span>
-            ))}
-        </div>
+        <>
+            {result.isPreview ? <p className="drivers-message">Podgląd — poniższe przypisania nie zostały zapisane.</p> : null}
+            <div className="planning-generation-summary">
+                {items.map(([label, value]) => (
+                    <span key={label}>
+                        <small>{label}</small>
+                        <strong>{value}</strong>
+                    </span>
+                ))}
+            </div>
+            {result.isPreview ? (
+                <div className="drivers-table-wrapper">
+                    <table className="drivers-table planning-table">
+                        <thead><tr><th>Data</th><th>Kierowca</th><th>Nr służby</th><th>Start</th><th>Koniec</th></tr></thead>
+                        <tbody>
+                            {result.proposedAssignments.length === 0 ? (
+                                <tr><td colSpan={5}>Brak proponowanych przypisań.</td></tr>
+                            ) : result.proposedAssignments.map((assignment) => (
+                                <tr key={assignment.id}>
+                                    <td>{assignment.workDate}</td>
+                                    <td>{assignment.driverFullName}</td>
+                                    <td>{assignment.dutyNumber ?? "-"}</td>
+                                    <td>{assignment.startDateTime ? new Date(assignment.startDateTime).toLocaleString("pl-PL") : "-"}</td>
+                                    <td>{assignment.endDateTime ? new Date(assignment.endDateTime).toLocaleString("pl-PL") : "-"}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : null}
+        </>
     );
 }

@@ -14,6 +14,9 @@ public class PlanningCandidateEvaluator
     private const decimal ReducedWeeklyRestPenaltyWeight = 600m;
     private const decimal InsufficientWeeklyRestPenaltyWeight = 5000m;
 
+    private static readonly List<PlanningAssignment> EmptyAssignments = new();
+    private static readonly List<PlanningDriverAvailability> EmptyAvailabilities = new();
+
     private readonly PlanningEligibilityChecker _eligibilityChecker;
 
     public PlanningCandidateEvaluator(PlanningEligibilityChecker eligibilityChecker)
@@ -91,6 +94,62 @@ public class PlanningCandidateEvaluator
         return evaluations;
     }
 
+
+    public List<PlanningCandidateEvaluation> EvaluateCandidates(
+        IReadOnlyList<Driver> drivers,
+        PlanningDuty duty,
+        DateOnly date,
+        IReadOnlyDictionary<Guid, List<PlanningAssignment>> assignmentsByDriver,
+        IReadOnlyDictionary<Guid, List<PlanningDriverAvailability>> availabilitiesByDriver,
+        DateOnly generationDateFrom,
+        DateOnly generationDateTo,
+        PlanningGenerationOptions options,
+        PlanningWorkingTimeCalendarService calendarService)
+    {
+        PlanningWorkInterval? interval = PlanningWorkInterval.TryCreate(date, duty, out var createdInterval)
+            ? createdInterval
+            : null;
+        var candidateWorkMinutes = interval.HasValue
+            ? PlanningWorkloadCalculator.ResolveDutyWorkMinutes(duty, date, interval.Value).WorkMinutes
+            : 0;
+
+        var evaluations = new List<PlanningCandidateEvaluation>(drivers.Count);
+        foreach (var driver in drivers)
+        {
+            var driverAssignments = assignmentsByDriver.TryGetValue(driver.Id, out var assignments)
+                ? assignments
+                : EmptyAssignments;
+            var driverAvailabilities = availabilitiesByDriver.TryGetValue(driver.Id, out var availabilities)
+                ? availabilities
+                : EmptyAvailabilities;
+
+            var evaluation = _eligibilityChecker.Evaluate(
+                driver,
+                duty,
+                date,
+                interval,
+                candidateWorkMinutes,
+                driverAssignments,
+                driverAvailabilities,
+                options,
+                generationDateFrom,
+                generationDateTo,
+                calendarService);
+
+            var assignmentCount = PlanningWorkloadCalculator.WorkAssignmentCount(
+                driver.Id,
+                driverAssignments,
+                generationDateFrom,
+                generationDateTo,
+                options);
+            evaluation.ScoreBreakdown = BuildScoreBreakdown(evaluation, assignmentCount);
+            evaluation.Score = evaluation.ScoreBreakdown.TotalScore;
+
+            evaluations.Add(evaluation);
+        }
+
+        return evaluations;
+    }
     public PlanningCandidateEvaluation? ChooseBestCandidate(IReadOnlyCollection<PlanningCandidateEvaluation> evaluations) =>
         evaluations
             .Where(x => x.IsEligible)
