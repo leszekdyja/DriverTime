@@ -25,36 +25,48 @@ public class DownloadScheduleService : IDownloadScheduleService
             .Where(x => x.CompanyId == companyId)
             .Select(x => new
             {
-                Driver = x,
-                LastActivityUtc = x.DddFiles
-                    .SelectMany(file => file.DriverActivities)
-                    .Select(activity => (DateTime?)activity.EndUtc)
-                    .Max()
+                x.Id,
+                x.FirstName,
+                x.LastName,
+                x.CardNumber
             })
-            .OrderBy(x => x.Driver.LastName)
-            .ThenBy(x => x.Driver.FirstName)
+            .OrderBy(x => x.LastName)
+            .ThenBy(x => x.FirstName)
             .ToListAsync(cancellationToken);
+
+        var lastActivities = await _dbContext.DriverActivities
+            .AsNoTracking()
+            .Where(x =>
+                x.DddFile.CompanyId == companyId
+                && x.DddFile.DriverId.HasValue)
+            .GroupBy(x => x.DddFile.DriverId!.Value)
+            .Select(x => new
+            {
+                DriverId = x.Key,
+                LastActivityUtc = (DateTime?)x.Max(activity => activity.EndUtc)
+            })
+            .ToDictionaryAsync(x => x.DriverId, x => x.LastActivityUtc, cancellationToken);
 
         return drivers
             .Select(x => new DriverDownloadDto
             {
-                DriverId = x.Driver.Id,
-                FirstName = x.Driver.FirstName,
-                LastName = x.Driver.LastName,
-                CardNumber = x.Driver.CardNumber,
-                LastDownloadUtc = x.LastActivityUtc,
+                DriverId = x.Id,
+                FirstName = x.FirstName,
+                LastName = x.LastName,
+                CardNumber = x.CardNumber,
+                LastDownloadUtc = lastActivities.GetValueOrDefault(x.Id),
                 NextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                    x.LastActivityUtc,
+                    lastActivities.GetValueOrDefault(x.Id),
                     DownloadScheduleCalculator.DriverDownloadIntervalDays),
                 DaysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
                     DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                        x.LastActivityUtc,
+                        lastActivities.GetValueOrDefault(x.Id),
                         DownloadScheduleCalculator.DriverDownloadIntervalDays),
                     nowUtc),
                 Status = DownloadScheduleCalculator.GetStatus(
                     DownloadScheduleCalculator.GetDaysUntilDue(
                         DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                            x.LastActivityUtc,
+                            lastActivities.GetValueOrDefault(x.Id),
                             DownloadScheduleCalculator.DriverDownloadIntervalDays),
                         nowUtc))
             })
