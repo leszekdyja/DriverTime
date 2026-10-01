@@ -646,6 +646,60 @@ public class PlanningAutoGeneratorServiceTests
     }
 
     [TestMethod]
+    public void TechnicalPlanner_NightDutyReusesCurrentMonthDriverWhenFreshRotationCannotFillBlock()
+    {
+        var companyId = Guid.NewGuid();
+        var drivers = Enumerable.Range(1, 2).Select(index => CreateDriver(companyId, $"D{index}", "RN")).ToList();
+        var rnDuty = CreateDuty(companyId, "RN", new TimeOnly(20, 0), new TimeOnly(6, 0), workMinutes: 480);
+        var schedule = CreateSchedule(companyId, 2026, 8);
+        var schedules = new Dictionary<(int Year, int Month), PlanningSchedule> { [(2026, 8)] = schedule };
+        var context = drivers.Select(driver => CreateAssignment(
+            companyId,
+            driver.Id,
+            new DateOnly(2026, 8, 2),
+            new DateTime(2026, 8, 2, 20, 0, 0),
+            new DateTime(2026, 8, 3, 6, 0, 0),
+            duty: rnDuty)).ToList();
+        var planner = new PlanningTechnicalAssignmentPlanner(
+            new PlanningCandidateEvaluator(new PlanningEligibilityChecker()),
+            new PlanningWorkingTimeCalendarService(new PolishPublicHolidayProvider()));
+
+        var result = planner.PlanNightDuties(
+            drivers, new[] { rnDuty }, schedules, context, Array.Empty<PlanningDriverAvailability>(),
+            new DateOnly(2026, 8, 9), new DateOnly(2026, 8, 14), DefaultOptions, companyId, DateTime.UtcNow);
+
+        Assert.AreEqual(12, result.Assignments.Count);
+        Assert.AreEqual(0, result.UnassignedDuties.Count);
+        Assert.AreEqual(2, result.Assignments.Select(x => x.DriverId).Distinct().Count());
+    }
+
+    [TestMethod]
+    public void TechnicalPlanner_NightDutyRejectsDriverUsedForRnInPreviousMonth()
+    {
+        var companyId = Guid.NewGuid();
+        var previousMonthDriver = CreateDriver(companyId, "Previous", "RN");
+        var freshDrivers = Enumerable.Range(1, 2).Select(index => CreateDriver(companyId, $"Fresh{index}", "RN")).ToList();
+        var drivers = new[] { previousMonthDriver }.Concat(freshDrivers).ToList();
+        var rnDuty = CreateDuty(companyId, "RN", new TimeOnly(20, 0), new TimeOnly(6, 0), workMinutes: 480);
+        var schedule = CreateSchedule(companyId, 2026, 8);
+        var schedules = new Dictionary<(int Year, int Month), PlanningSchedule> { [(2026, 8)] = schedule };
+        var context = new List<PlanningAssignment>
+        {
+            CreateAssignment(companyId, previousMonthDriver.Id, new DateOnly(2026, 7, 25), new DateTime(2026, 7, 25, 20, 0, 0), new DateTime(2026, 7, 26, 6, 0, 0), duty: rnDuty)
+        };
+        var planner = new PlanningTechnicalAssignmentPlanner(
+            new PlanningCandidateEvaluator(new PlanningEligibilityChecker()),
+            new PlanningWorkingTimeCalendarService(new PolishPublicHolidayProvider()));
+
+        var result = planner.PlanNightDuties(
+            drivers, new[] { rnDuty }, schedules, context, Array.Empty<PlanningDriverAvailability>(),
+            new DateOnly(2026, 8, 2), new DateOnly(2026, 8, 7), DefaultOptions, companyId, DateTime.UtcNow);
+
+        Assert.AreEqual(12, result.Assignments.Count);
+        Assert.IsFalse(result.Assignments.Any(x => x.DriverId == previousMonthDriver.Id));
+    }
+
+    [TestMethod]
     public void TechnicalPlanner_FinalDayOffsFillEmptyCellsWithWgAndW()
     {
         var companyId = Guid.NewGuid();

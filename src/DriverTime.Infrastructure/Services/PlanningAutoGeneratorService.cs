@@ -123,15 +123,18 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .ToListAsync(cancellationToken);
         _dbContext.PlanningAssignments.RemoveRange(oldGenerated);
 
+        var previousMonthStart = new DateOnly(request.DateFrom.Year, request.DateFrom.Month, 1).AddMonths(-1);
         var contextDateFrom = options.IncludeAssignmentsOutsideGeneratedRangeForRestChecks
-            ? request.DateFrom.AddDays(-Math.Max(8, options.MaxConsecutiveWorkDays + 2))
-            : request.DateFrom;
+            ? DateOnly.FromDayNumber(Math.Min(
+                request.DateFrom.AddDays(-Math.Max(8, options.MaxConsecutiveWorkDays + 2)).DayNumber,
+                previousMonthStart.DayNumber))
+            : previousMonthStart;
         var contextDateTo = options.IncludeAssignmentsOutsideGeneratedRangeForRestChecks
             ? request.DateTo.AddDays(8)
             : request.DateTo;
 
         // Pobieramy jeden bufor kontekstowy dla odpoczynku dobowego, kolejnych dni pracy,
-        // tygodniowego odpoczynku i sąsiednich miesięcy. Dalej wszystkie oceny kandydatów
+        // tygodniowego odpoczynku i pełnego poprzedniego miesiąca (rotacja RN). Dalej wszystkie oceny kandydatów
         // działają w pamięci, bez zapytań EF per dzień, kierowca lub kandydat.
         var assignmentContext = await _dbContext.PlanningAssignments
             .Include(x => x.PlanningDuty)
