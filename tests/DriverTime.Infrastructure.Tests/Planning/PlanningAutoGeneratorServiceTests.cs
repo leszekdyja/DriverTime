@@ -1047,6 +1047,57 @@ public class PlanningAutoGeneratorServiceTests
     }
 
     [TestMethod]
+    public void Evaluator_FixedDutyRejectsDriversWithoutFixedAssignment()
+    {
+        var companyId = Guid.NewGuid();
+        var fixedDriver = CreateDriver(companyId, "Adam", "Stały");
+        var otherDriver = CreateDriver(companyId, "Beata", "Inna");
+        var duty = CreateDuty(companyId, "21", new TimeOnly(8, 0), new TimeOnly(16, 0));
+        var options = DefaultOptions with
+        {
+            AssignmentRules = new[]
+            {
+                new PlanningAssignmentRule { CompanyId = companyId, DriverId = fixedDriver.Id, DutyId = duty.Id, Type = PlanningAssignmentRuleType.Fixed }
+            }
+        };
+
+        var fixedEvaluation = Evaluate(fixedDriver, duty, new DateOnly(2026, 8, 3), Array.Empty<PlanningAssignment>(), options: options);
+        var otherEvaluation = Evaluate(otherDriver, duty, new DateOnly(2026, 8, 3), Array.Empty<PlanningAssignment>(), options: options);
+
+        Assert.IsTrue(fixedEvaluation.IsEligible);
+        Assert.IsTrue(fixedEvaluation.MatchesPreference);
+        CollectionAssert.Contains(fixedEvaluation.ConstraintMatches, "Stałe przypisanie: 21");
+        Assert.IsFalse(otherEvaluation.IsEligible);
+        CollectionAssert.Contains(otherEvaluation.RejectionReasons, PlanningCandidateRejectionReason.DutyFixedToOtherDriver);
+    }
+
+    [TestMethod]
+    public void Evaluator_FixedDutyRespectsValidityDates()
+    {
+        var companyId = Guid.NewGuid();
+        var fixedDriver = CreateDriver(companyId, "Adam", "Stały");
+        var otherDriver = CreateDriver(companyId, "Beata", "Inna");
+        var duty = CreateDuty(companyId, "21", new TimeOnly(8, 0), new TimeOnly(16, 0));
+        var options = DefaultOptions with
+        {
+            AssignmentRules = new[]
+            {
+                new PlanningAssignmentRule
+                {
+                    CompanyId = companyId, DriverId = fixedDriver.Id, DutyId = duty.Id,
+                    Type = PlanningAssignmentRuleType.Fixed,
+                    DateFrom = new DateOnly(2026, 9, 1)
+                }
+            }
+        };
+
+        var evaluation = Evaluate(otherDriver, duty, new DateOnly(2026, 8, 3), Array.Empty<PlanningAssignment>(), options: options);
+
+        Assert.IsTrue(evaluation.IsEligible);
+        CollectionAssert.DoesNotContain(evaluation.RejectionReasons, PlanningCandidateRejectionReason.DutyFixedToOtherDriver);
+    }
+
+    [TestMethod]
     public void Evaluator_PreferenceDoesNotOverrideVacation()
     {
         var companyId = Guid.NewGuid();

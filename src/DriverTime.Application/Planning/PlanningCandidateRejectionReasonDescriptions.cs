@@ -26,6 +26,7 @@ public static class PlanningCandidateRejectionReasonDescriptions
         PlanningCandidateRejectionReason.DriverSaturdayBlocked => "Kierowca ma włączoną blokadę pracy w soboty.",
         PlanningCandidateRejectionReason.DriverHolidayBlocked => "Kierowca ma włączoną blokadę pracy w święta.",
         PlanningCandidateRejectionReason.DriverDayOffBlocked => "Kierowca ma włączoną blokadę pracy w dni wolne.",
+        PlanningCandidateRejectionReason.DutyFixedToOtherDriver => "Służba ma stałe przypisanie do innego kierowcy.",
         _ => "Kierowca nie spełnia warunków kwalifikacji."
     };
 

@@ -56,7 +56,7 @@ export type PlanningAssignmentRule = {
     driverId: string;
     dutyId?: string | null;
     dutyNumber?: string | null;
-    type: "Forbidden" | "Preferred" | string;
+    type: "Forbidden" | "Preferred" | "Fixed" | string;
     dateFrom?: string | null;
     dateTo?: string | null;
     note?: string | null;
@@ -209,7 +209,7 @@ export type PlanningDriverDutyRule = {
     dutyId: string;
     dutyNumber: string;
     dutyName: string;
-    type: "Forbidden" | "Preferred" | string;
+    type: "Forbidden" | "Preferred" | "Fixed" | string;
     validFrom: string | null;
     validTo: string | null;
     notes: string | null;

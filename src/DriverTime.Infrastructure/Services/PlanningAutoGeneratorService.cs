@@ -560,9 +560,12 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 continue;
             }
 
-            var type = string.Equals(item.Type, "Preferred", StringComparison.OrdinalIgnoreCase)
-                ? PlanningAssignmentRuleType.Preferred
-                : PlanningAssignmentRuleType.Forbidden;
+            var type = item.Type?.Trim().ToUpperInvariant() switch
+            {
+                "PREFERRED" => PlanningAssignmentRuleType.Preferred,
+                "FIXED" => PlanningAssignmentRuleType.Fixed,
+                _ => PlanningAssignmentRuleType.Forbidden
+            };
 
             rules.Add(new PlanningAssignmentRule
             {
@@ -595,7 +598,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 DutyId = x.PlanningDutyId,
                 Type = x.Type == PlanningDriverDutyRuleType.Preferred
                     ? PlanningAssignmentRuleType.Preferred
-                    : PlanningAssignmentRuleType.Forbidden,
+                    : x.Type == PlanningDriverDutyRuleType.Fixed
+                        ? PlanningAssignmentRuleType.Fixed
+                        : PlanningAssignmentRuleType.Forbidden,
                 DateFrom = x.ValidFrom,
                 DateTo = x.ValidTo,
                 Note = x.Notes

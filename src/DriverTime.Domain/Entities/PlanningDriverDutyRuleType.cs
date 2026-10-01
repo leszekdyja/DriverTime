@@ -3,5 +3,6 @@
 public enum PlanningDriverDutyRuleType
 {
     Forbidden,
-    Preferred
+    Preferred,
+    Fixed
 }
