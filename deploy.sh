@@ -4,7 +4,7 @@ set -e
 cd /var/www/DriverTime
 
 git fetch origin main
-git checkout main
+git checkout -f main
 git reset --hard origin/main
 
 docker compose down
