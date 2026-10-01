@@ -20,6 +20,7 @@ public static class PlanningCandidateRejectionReasonDescriptions
         PlanningCandidateRejectionReason.MonthlyWorkMinutesExceeded => "Przydział przekroczyłby miesięczną normę przy włączonym twardym limicie.",
         PlanningCandidateRejectionReason.InsufficientWeeklyRest => "Kierowca nie zachowałby minimalnego odpoczynku tygodniowego.",
         PlanningCandidateRejectionReason.DriverDutyForbidden => "Kierowca ma zakaz tej służby.",
+        PlanningCandidateRejectionReason.DriverPairSameShift => "Drugi kierowca z pary ma już służbę na tej samej zmianie.",
         _ => "Kierowca nie spełnia warunków kwalifikacji."
     };
 

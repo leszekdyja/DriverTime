@@ -63,6 +63,13 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
 
         var companyId = _currentUser.CompanyId;
         options = options with { AssignmentRules = await LoadMergedAssignmentRulesAsync(options.AssignmentRules, companyId, cancellationToken) };
+        options = options with
+        {
+            DriverPairs = await _dbContext.PlanningDriverPairs.AsNoTracking()
+                .Where(x => x.CompanyId == companyId && x.IsActive)
+                .Select(x => new PlanningDriverPairRule(x.FirstDriverId, x.SecondDriverId, x.IsNightDutyPair, x.PreventSameShift))
+                .ToListAsync(cancellationToken)
+        };
         var now = DateTime.UtcNow;
         var result = new PlanningAutoGenerateResultDto
         {

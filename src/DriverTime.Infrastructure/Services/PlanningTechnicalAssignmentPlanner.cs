@@ -338,6 +338,18 @@ public class PlanningTechnicalAssignmentPlanner
             .Select(x => x.Driver)
             .ToList();
 
+        var eligibleIds = candidates.Select(x => x.Driver.Id).ToHashSet();
+        var rnPair = options.DriverPairs
+            .Where(x => x.IsNightDutyPair)
+            .Select(x => new[] { x.FirstDriverId, x.SecondDriverId })
+            .Where(x => x.All(eligibleIds.Contains))
+            .OrderBy(x => x.Sum(id => candidates.Single(candidate => candidate.Driver.Id == id).Score))
+            .FirstOrDefault();
+        if (required == 2 && rnPair is not null)
+        {
+            return rnPair.Select(id => candidates.Single(x => x.Driver.Id == id).Driver).ToList();
+        }
+
         if (unusedThisMonth.Count >= required)
         {
             return unusedThisMonth;

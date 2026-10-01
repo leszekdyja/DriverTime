@@ -12,18 +12,43 @@ public class PlanningController : ControllerBase
     private readonly IPlanningDriverAvailabilityService _driverAvailabilityService;
     private readonly IPlanningDriverDutyRuleService _driverDutyRuleService;
     private readonly IPlanningManualAssignmentService _manualAssignmentService;
+    private readonly IPlanningDriverPairService _driverPairService;
 
     public PlanningController(
         IPlanningAutoGeneratorService autoGeneratorService,
         IPlanningDriverAvailabilityService driverAvailabilityService,
         IPlanningDriverDutyRuleService driverDutyRuleService,
-        IPlanningManualAssignmentService manualAssignmentService)
+        IPlanningManualAssignmentService manualAssignmentService,
+        IPlanningDriverPairService driverPairService)
     {
         _autoGeneratorService = autoGeneratorService;
         _driverAvailabilityService = driverAvailabilityService;
         _driverDutyRuleService = driverDutyRuleService;
         _manualAssignmentService = manualAssignmentService;
+        _driverPairService = driverPairService;
     }
+
+    [HttpGet("driver-pairs")]
+    public async Task<ActionResult<List<PlanningDriverPairDto>>> GetDriverPairs(CancellationToken cancellationToken) =>
+        Ok(await _driverPairService.GetAsync(cancellationToken));
+
+    [HttpPost("driver-pairs")]
+    public async Task<ActionResult<PlanningDriverPairDto>> CreateDriverPair([FromBody] PlanningDriverPairRequestDto request, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _driverPairService.CreateAsync(request, cancellationToken)); }
+        catch (PlanningDutyValidationException ex) { return BadRequest(new { errors = ex.Errors }); }
+    }
+
+    [HttpPut("driver-pairs/{id:guid}")]
+    public async Task<ActionResult<PlanningDriverPairDto>> UpdateDriverPair(Guid id, [FromBody] PlanningDriverPairRequestDto request, CancellationToken cancellationToken)
+    {
+        try { var pair = await _driverPairService.UpdateAsync(id, request, cancellationToken); return pair is null ? NotFound() : Ok(pair); }
+        catch (PlanningDutyValidationException ex) { return BadRequest(new { errors = ex.Errors }); }
+    }
+
+    [HttpDelete("driver-pairs/{id:guid}")]
+    public async Task<IActionResult> DeleteDriverPair(Guid id, CancellationToken cancellationToken) =>
+        await _driverPairService.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
     [HttpPost("auto-generate")]
     public async Task<ActionResult<PlanningAutoGenerateResultDto>> AutoGenerate(
         [FromBody] PlanningAutoGenerateRequestDto request,

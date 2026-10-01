@@ -17,5 +17,6 @@ public enum PlanningCandidateRejectionReason
     WeeklyWorkMinutesExceeded,
     MonthlyWorkMinutesExceeded,
     InsufficientWeeklyRest,
-    DriverDutyForbidden
+    DriverDutyForbidden,
+    DriverPairSameShift
 }

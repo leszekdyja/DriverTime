@@ -36,4 +36,8 @@ public record PlanningGenerationOptions
     public int? PreferredWeeklyRestMinutes { get; init; } = DefaultPreferredWeeklyRestMinutes;
 
     public IReadOnlyCollection<PlanningAssignmentRule> AssignmentRules { get; init; } = Array.Empty<PlanningAssignmentRule>();
+
+    public IReadOnlyCollection<PlanningDriverPairRule> DriverPairs { get; init; } = Array.Empty<PlanningDriverPairRule>();
 }
+
+public record PlanningDriverPairRule(Guid FirstDriverId, Guid SecondDriverId, bool IsNightDutyPair, bool PreventSameShift);
