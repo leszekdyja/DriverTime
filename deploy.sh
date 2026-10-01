@@ -3,7 +3,9 @@ set -e
 
 cd /var/www/DriverTime
 
-git pull origin main
+git fetch origin main
+git checkout main
+git reset --hard origin/main
 
 docker compose down
 docker compose build --no-cache
