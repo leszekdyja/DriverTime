@@ -54,6 +54,8 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<PlanningDriverDutyRule> PlanningDriverDutyRules => Set<PlanningDriverDutyRule>();
 
+    public DbSet<PlanningDriverPair> PlanningDriverPairs => Set<PlanningDriverPair>();
+
     public DbSet<DriverWorkEvidenceEntry> DriverWorkEvidenceEntries => Set<DriverWorkEvidenceEntry>();
 
     public DbSet<MobileAppInvite> MobileAppInvites => Set<MobileAppInvite>();
@@ -452,6 +454,18 @@ public class DriverTimeDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.PlanningDutyId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningDriverPair>(entity =>
+        {
+            entity.ToTable("PlanningDriverPairs");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => new { x.CompanyId, x.FirstDriverId, x.SecondDriverId, x.IsNightDutyPair }).IsUnique();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.FirstDriver).WithMany().HasForeignKey(x => x.FirstDriverId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SecondDriver).WithMany().HasForeignKey(x => x.SecondDriverId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DriverWorkEvidenceEntry>(entity =>

@@ -9,14 +9,17 @@ import {
     createManualPlanningAssignment,
     createPlanningAssignmentRule,
     createPlanningDriverAvailability,
+    createPlanningDriverPair,
     createSchedule,
     deletePlanningAssignment,
     deletePlanningAssignmentRule,
     deletePlanningDriverAvailability,
+    deletePlanningDriverPair,
     deleteSchedule,
     getPlanningAssignments,
     getPlanningAssignmentRules,
     getPlanningDriverAvailability,
+    getPlanningDriverPairs,
     getSchedule,
     getSchedules,
     updatePlanningAssignment,
@@ -28,6 +31,7 @@ import {
     type PlanningDriverDutyRule,
     type PlanningDriverAvailability,
     type PlanningDriverAvailabilityType,
+    type PlanningDriverPair,
     type PlanningSchedule,
     type PlanningScheduleListItem,
     type PlanningScheduleValidation,
@@ -42,6 +46,7 @@ import { PlanningMonthlyGrid } from "./PlanningMonthlyGrid";
 type RuleForm = { driverId: string; dutyId: string; type: "Forbidden" | "Preferred"; validFrom: string; validTo: string; notes: string; };
 type AvailabilityForm = { driverId: string; dateFrom: string; dateTo: string; type: PlanningDriverAvailabilityType; note: string; };
 type ScheduleForm = { name: string; year: string; month: string; notes: string; };
+type PairForm = { firstDriverId: string; secondDriverId: string; isNightDutyPair: boolean; preventSameShift: boolean; notes: string; };
 
 
 const availabilityTypeLabels: Record<PlanningDriverAvailabilityType, string> = {
@@ -101,6 +106,8 @@ export default function PlanningSchedulesTab() {
     const [autoAssignments, setAutoAssignments] = useState<PlanningAssignmentListItem[]>([]);
     const [driverAvailability, setDriverAvailability] = useState<PlanningDriverAvailability[]>([]);
     const [assignmentRules, setAssignmentRules] = useState<PlanningDriverDutyRule[]>([]);
+    const [driverPairs, setDriverPairs] = useState<PlanningDriverPair[]>([]);
+    const [pairForm, setPairForm] = useState<PairForm>({ firstDriverId: "", secondDriverId: "", isNightDutyPair: false, preventSameShift: false, notes: "" });
     const [lastGenerationResult, setLastGenerationResult] = useState<PlanningAutoGenerateResult | null>(null);
     const [isEditingSchedule, setIsEditingSchedule] = useState(false);
     const [editor, setEditor] = useState<PlanningAssignmentEditorState | null>(null);
@@ -110,6 +117,7 @@ export default function PlanningSchedulesTab() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSavingAvailability, setIsSavingAvailability] = useState(false);
     const [isSavingRule, setIsSavingRule] = useState(false);
+    const [isSavingPair, setIsSavingPair] = useState(false);
     const [validation, setValidation] = useState<PlanningScheduleValidation | null>(null);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
@@ -143,8 +151,8 @@ export default function PlanningSchedulesTab() {
     async function loadInitialData() {
         setIsLoading(true); setMessage(""); setIsError(false);
         try {
-            const [loadedSchedules, loadedDrivers, loadedDuties, loadedRules] = await Promise.all([getSchedules(), getDrivers(), getPlanningDuties(), getPlanningAssignmentRules()]);
-            setSchedules(loadedSchedules); setDrivers(loadedDrivers); setDuties(loadedDuties); setAssignmentRules(loadedRules);
+            const [loadedSchedules, loadedDrivers, loadedDuties, loadedRules, loadedPairs] = await Promise.all([getSchedules(), getDrivers(), getPlanningDuties(), getPlanningAssignmentRules(), getPlanningDriverPairs()]);
+            setSchedules(loadedSchedules); setDrivers(loadedDrivers); setDuties(loadedDuties); setAssignmentRules(loadedRules); setDriverPairs(loadedPairs);
             await refreshMonth(selectedYear, selectedMonth, loadedSchedules);
         } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się pobrać danych grafików."); }
         finally { setIsLoading(false); }
@@ -235,6 +243,16 @@ export default function PlanningSchedulesTab() {
         finally { setIsSavingAvailability(false); }
     }
     async function removeDriverAvailability(id: string) { setIsSavingAvailability(true); setMessage(""); setIsError(false); try { await deletePlanningDriverAvailability(id); setDriverAvailability(await getPlanningDriverAvailability(selectedRange.dateFrom, selectedRange.dateTo)); setMessage("Wpis dostępności został usunięty."); } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się usunąć dostępności kierowcy."); } finally { setIsSavingAvailability(false); } }
+    async function saveDriverPair() {
+        setIsSavingPair(true); setMessage(""); setIsError(false);
+        try {
+            await createPlanningDriverPair({ ...pairForm, isActive: true, notes: pairForm.notes.trim() || null });
+            setPairForm({ firstDriverId: "", secondDriverId: "", isNightDutyPair: false, preventSameShift: false, notes: "" });
+            setDriverPairs(await getPlanningDriverPairs()); setMessage("Para kierowców została zapisana.");
+        } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się zapisać pary kierowców."); }
+        finally { setIsSavingPair(false); }
+    }
+    async function removeDriverPair(id: string) { setIsSavingPair(true); setMessage(""); setIsError(false); try { await deletePlanningDriverPair(id); setDriverPairs(await getPlanningDriverPairs()); setMessage("Para kierowców została usunięta."); } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się usunąć pary kierowców."); } finally { setIsSavingPair(false); } }
     function getDutyMask(duty: PlanningDuty) {
         return getPlanningDutyMask(duty.activeDaysMask);
     }
@@ -315,6 +333,7 @@ export default function PlanningSchedulesTab() {
                         </div>
                     </div>
                     <details className="planning-details-panel"><summary>Widok listy i narzędzia planowania</summary>
+                        <div className="planning-validation-panel"><div className="planning-validation-header"><div><h4>Pary kierowców</h4><p>Pary RN są dobierane atomowo do pełnych bloków nocnych. Opcja jednej zmiany chroni zwykłą parę przed równoczesnym przydziałem na tę samą zmianę.</p></div></div><div className="planning-schedule-form"><label>Pierwszy kierowca<select value={pairForm.firstDriverId} onChange={(event) => setPairForm({ ...pairForm, firstDriverId: event.target.value })}><option value="">Wybierz kierowcę</option>{drivers.map((driver) => <option key={driver.id} value={driver.id}>{formatDriverLastFirst(driver)}</option>)}</select></label><label>Drugi kierowca<select value={pairForm.secondDriverId} onChange={(event) => setPairForm({ ...pairForm, secondDriverId: event.target.value })}><option value="">Wybierz kierowcę</option>{drivers.map((driver) => <option key={driver.id} value={driver.id}>{formatDriverLastFirst(driver)}</option>)}</select></label><label><input type="checkbox" checked={pairForm.isNightDutyPair} onChange={(event) => setPairForm({ ...pairForm, isNightDutyPair: event.target.checked })} /> Para RN</label><label><input type="checkbox" checked={pairForm.preventSameShift} onChange={(event) => setPairForm({ ...pairForm, preventSameShift: event.target.checked })} /> Nie planuj na jednej zmianie</label><label>Notatka<input value={pairForm.notes} onChange={(event) => setPairForm({ ...pairForm, notes: event.target.value })} /></label><div className="driver-row-actions"><button className="planning-primary-button" type="button" onClick={() => void saveDriverPair()} disabled={isSavingPair || !pairForm.firstDriverId || !pairForm.secondDriverId}>{isSavingPair ? "Zapisywanie..." : "Dodaj parę"}</button></div></div>{driverPairs.length === 0 ? <p className="drivers-status">Brak zapisanych par kierowców.</p> : <div className="planning-availability-list">{driverPairs.map((pair) => <div key={pair.id} className="planning-availability-item"><strong>{pair.firstDriverName} + {pair.secondDriverName}</strong><span>{pair.isNightDutyPair ? "Para RN" : "Para stała"}{pair.preventSameShift ? " · różne zmiany" : ""}</span>{pair.notes ? <small>{pair.notes}</small> : null}<button className="driver-delete-button" type="button" onClick={() => void removeDriverPair(pair.id)} disabled={isSavingPair}>Usuń</button></div>)}</div>}</div>
                         <div className="planning-validation-panel"><div className="planning-validation-header"><div><h4>Widok listy</h4><p>Szczegółowa lista przypisań dla wybranego miesiąca.</p></div><button className="planning-secondary-button" type="button" onClick={() => void refreshMonth()} disabled={isGenerating}>Odśwież dane</button></div><div className="drivers-table-wrapper"><table className="drivers-table planning-table"><thead><tr><th>Data</th><th>Kierowca</th><th>Nr służby</th><th>Start</th><th>Koniec</th><th>Status</th></tr></thead><tbody>{autoAssignments.length === 0 ? <tr><td colSpan={6}>Brak przypisań w wybranym miesiącu.</td></tr> : autoAssignments.map((assignment) => <tr key={assignment.id}><td>{assignment.workDate}</td><td>{assignment.driverFullName}</td><td>{assignment.dutyNumber ?? "-"}</td><td>{formatDateTime(assignment.startDateTime)}</td><td>{formatDateTime(assignment.endDateTime)}</td><td>{formatStatus(assignment.status)}</td></tr>)}</tbody></table></div></div>
                         <div className="planning-validation-panel"><div className="planning-validation-header"><div><h4>Walidacja grafiku</h4><p>Sprawdź podstawowe konflikty i braki w grafiku miesięcznym.</p></div><button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating || !selectedSchedule}>{isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}</button></div>{validation ? <div className="planning-validation-results"><div className="planning-validation-summary"><span><strong>{validation.errorCount}</strong> błędów</span><span><strong>{validation.warningCount}</strong> ostrzeżeń</span></div>{validation.warnings.length === 0 ? <p className="drivers-status">Nie znaleziono problemów w grafiku.</p> : <ul className="planning-validation-list">{validation.warnings.map((warning, index) => <li key={`${warning.assignmentId ?? warning.code}-${index}`} className={`planning-validation-item ${warning.severity.toLowerCase()}`}><span className="planning-validation-severity">{warning.severity === "Error" ? "Błąd" : warning.severity === "Warning" ? "Ostrzeżenie" : "Info"}</span><span>{warning.date ?? "Brak daty"}</span><span>{warning.driverName ?? "Brak kierowcy"}</span><span>{warning.code}</span><strong>{warning.message}</strong></li>)}</ul>}</div> : null}</div>
                         <div className="planning-validation-panel"><div className="planning-validation-header"><div><h4>Ograniczenia i preferencje</h4><p>Zakazy blokują przydział kierowcy do służby, preferencje wzmacniają wybór.</p></div><button className="planning-secondary-button" type="button" onClick={() => void loadAssignmentRules()} disabled={isSavingRule}>Odśwież reguły</button></div><div className="planning-schedule-form"><label>Kierowca<select value={ruleForm.driverId} onChange={(event) => setRuleForm({ ...ruleForm, driverId: event.target.value })}><option value="">Wybierz kierowcę</option>{drivers.map((driver) => <option key={driver.id} value={driver.id}>{formatDriverLastFirst(driver)}</option>)}</select></label><label>Służba<select value={ruleForm.dutyId} onChange={(event) => setRuleForm({ ...ruleForm, dutyId: event.target.value })}><option value="">Wybierz służbę</option>{duties.map((duty) => <option key={duty.id} value={duty.id}>{duty.dutyNumber} · {duty.name}</option>)}</select></label><label>Typ<select value={ruleForm.type} onChange={(event) => setRuleForm({ ...ruleForm, type: event.target.value as RuleForm["type"] })}><option value="Forbidden">Zakaz</option><option value="Preferred">Preferencja</option></select></label><label>Ważne od<input type="date" value={ruleForm.validFrom} onChange={(event) => setRuleForm({ ...ruleForm, validFrom: event.target.value })} /></label><label>Ważne do<input type="date" value={ruleForm.validTo} onChange={(event) => setRuleForm({ ...ruleForm, validTo: event.target.value })} /></label><label>Notatka<input value={ruleForm.notes} onChange={(event) => setRuleForm({ ...ruleForm, notes: event.target.value })} /></label><div className="driver-row-actions"><button className="planning-primary-button" type="button" onClick={() => void saveAssignmentRule()} disabled={isSavingRule || !ruleForm.driverId || !ruleForm.dutyId}>{isSavingRule ? "Zapisywanie..." : "Dodaj regułę"}</button></div></div>{assignmentRules.length === 0 ? <p className="drivers-status">Brak zapisanych zakazów i preferencji.</p> : <div className="planning-availability-list">{assignmentRules.map((rule) => <div key={rule.id} className="planning-availability-item"><strong>{rule.driverFullName} · {rule.dutyNumber}</strong><span>{rule.type === "Forbidden" ? "Zakaz" : "Preferencja"}{rule.validFrom || rule.validTo ? ` · ${rule.validFrom ?? "..."} - ${rule.validTo ?? "..."}` : ""}</span>{rule.notes ? <small>{rule.notes}</small> : null}<button className="driver-delete-button" type="button" onClick={() => void removeAssignmentRule(rule.id)} disabled={isSavingRule}>Usuń</button></div>)}</div>}</div>

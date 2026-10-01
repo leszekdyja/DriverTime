@@ -60,6 +60,8 @@ public static class DependencyInjection
 
         services.AddScoped<IPlanningDriverDutyRuleService, PlanningDriverDutyRuleService>();
 
+        services.AddScoped<IPlanningDriverPairService, PlanningDriverPairService>();
+
         services.AddScoped<IPlanningManualAssignmentService, PlanningManualAssignmentService>();
 
         services.AddScoped<IPlanningAutoGeneratorService, PlanningAutoGeneratorService>();

@@ -276,9 +276,27 @@ public class PlanningTechnicalAssignmentPlanner
         PlanningGenerationOptions options)
     {
         var candidates = new List<(Driver Driver, int Score)>();
+        var blockMonthStart = new DateOnly(block.First().Year, block.First().Month, 1);
+        var blockMonthEnd = blockMonthStart.AddMonths(1).AddDays(-1);
+        var previousMonthStart = blockMonthStart.AddMonths(-1);
+        var previousMonthEnd = blockMonthStart.AddDays(-1);
         foreach (var driver in drivers)
         {
-            var monthRnCount = assignmentContext.Count(x => x.DriverId == driver.Id && PlanningEntryClassifier.Classify(x).Kind == PlanningEntryKind.NightDuty && x.Date >= dateFrom && x.Date <= dateTo);
+            var previousMonthRnCount = assignmentContext.Count(x =>
+                x.DriverId == driver.Id
+                && PlanningEntryClassifier.Classify(x).Kind == PlanningEntryKind.NightDuty
+                && x.Date >= previousMonthStart
+                && x.Date <= previousMonthEnd);
+            if (previousMonthRnCount > 0)
+            {
+                continue;
+            }
+
+            var monthRnCount = assignmentContext.Count(x =>
+                x.DriverId == driver.Id
+                && PlanningEntryClassifier.Classify(x).Kind == PlanningEntryKind.NightDuty
+                && x.Date >= blockMonthStart
+                && x.Date <= blockMonthEnd);
             if (block.Any(day => HasAnyAssignment(driver.Id, day, assignmentContext) || HasAvailability(driver.Id, day, availabilities)))
             {
                 continue;
@@ -300,13 +318,18 @@ public class PlanningTechnicalAssignmentPlanner
                 continue;
             }
 
-            var score = monthRnCount * 1000
+            var score = monthRnCount * 100_000
                 + PlanningWorkloadCalculator.WorkAssignmentCount(driver.Id, assignmentContext, dateFrom, dateTo, options) * 20
                 + Math.Abs(driver.Id.GetHashCode() % 1000);
             candidates.Add((driver, score));
         }
 
-        return candidates
+        var unusedThisMonth = candidates
+            .Where(x => !assignmentContext.Any(assignment =>
+                assignment.DriverId == x.Driver.Id
+                && PlanningEntryClassifier.Classify(assignment).Kind == PlanningEntryKind.NightDuty
+                && assignment.Date >= blockMonthStart
+                && assignment.Date <= blockMonthEnd))
             .OrderBy(x => x.Score)
             .ThenBy(x => x.Driver.LastName)
             .ThenBy(x => x.Driver.FirstName)
@@ -314,6 +337,38 @@ public class PlanningTechnicalAssignmentPlanner
             .Take(required)
             .Select(x => x.Driver)
             .ToList();
+
+        var eligibleIds = candidates.Select(x => x.Driver.Id).ToHashSet();
+        var rnPair = options.DriverPairs
+            .Where(x => x.IsNightDutyPair)
+            .Select(x => new[] { x.FirstDriverId, x.SecondDriverId })
+            .Where(x => x.All(eligibleIds.Contains))
+            .OrderBy(x => x.Sum(id => candidates.Single(candidate => candidate.Driver.Id == id).Score))
+            .FirstOrDefault();
+        if (required == 2 && rnPair is not null)
+        {
+            return rnPair.Select(id => candidates.Single(x => x.Driver.Id == id).Driver).ToList();
+        }
+
+        if (unusedThisMonth.Count >= required)
+        {
+            return unusedThisMonth;
+        }
+
+        // v504: rotacja „jeden blok RN na kierowcę” jest preferencją. Jeżeli nie
+        // ma pełnej nowej obsady, uzupełniamy ją kierowcą z wcześniejszego bloku
+        // bieżącego miesiąca, nadal respektując wszystkie twarde walidacje.
+        var selectedIds = unusedThisMonth.Select(x => x.Id).ToHashSet();
+        unusedThisMonth.AddRange(candidates
+            .Where(x => !selectedIds.Contains(x.Driver.Id))
+            .OrderBy(x => x.Score)
+            .ThenBy(x => x.Driver.LastName)
+            .ThenBy(x => x.Driver.FirstName)
+            .ThenBy(x => x.Driver.Id)
+            .Take(required - unusedThisMonth.Count)
+            .Select(x => x.Driver));
+
+        return unusedThisMonth;
     }
 
     private static PlanningAssignment CreateAssignment(

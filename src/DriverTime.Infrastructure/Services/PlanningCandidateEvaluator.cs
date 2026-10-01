@@ -79,6 +79,8 @@ public class PlanningCandidateEvaluator
                 generationDateTo,
                 calendarService);
 
+            AddPairShiftRejection(evaluation, driver.Id, date, interval, existingAssignments, options);
+
             var assignmentCount = PlanningWorkloadCalculator.WorkAssignmentCount(
                 driver.Id,
                 existingAssignments,
@@ -136,6 +138,13 @@ public class PlanningCandidateEvaluator
                 generationDateTo,
                 calendarService);
 
+            var partnerAssignments = options.DriverPairs
+                .Where(x => x.PreventSameShift && (x.FirstDriverId == driver.Id || x.SecondDriverId == driver.Id))
+                .Select(x => x.FirstDriverId == driver.Id ? x.SecondDriverId : x.FirstDriverId)
+                .Where(assignmentsByDriver.ContainsKey)
+                .SelectMany(id => assignmentsByDriver[id]);
+            AddPairShiftRejection(evaluation, driver.Id, date, interval, partnerAssignments, options);
+
             var assignmentCount = PlanningWorkloadCalculator.WorkAssignmentCount(
                 driver.Id,
                 driverAssignments,
@@ -164,6 +173,28 @@ public class PlanningCandidateEvaluator
             .ThenBy(x => x.ScoreBreakdown.ConsecutiveDaysScore)
             .ThenBy(x => x.DriverId)
             .FirstOrDefault();
+
+    private static void AddPairShiftRejection(
+        PlanningCandidateEvaluation evaluation,
+        Guid driverId,
+        DateOnly date,
+        PlanningWorkInterval? candidateInterval,
+        IEnumerable<PlanningAssignment> assignments,
+        PlanningGenerationOptions options)
+    {
+        if (!candidateInterval.HasValue) return;
+        var partnerIds = options.DriverPairs
+            .Where(x => x.PreventSameShift && (x.FirstDriverId == driverId || x.SecondDriverId == driverId))
+            .Select(x => x.FirstDriverId == driverId ? x.SecondDriverId : x.FirstDriverId)
+            .ToHashSet();
+        if (partnerIds.Count == 0) return;
+        var candidateShift = candidateInterval.Value.Start.Hour < 12 ? 1 : 2;
+        var sameShift = assignments.Where(x => partnerIds.Contains(x.DriverId) && x.Date == date)
+            .Select(PlanningWorkloadCalculator.ResolveAssignmentInterval)
+            .Any(x => x.HasValue && (x.Value.Start.Hour < 12 ? 1 : 2) == candidateShift);
+        if (sameShift && !evaluation.RejectionReasons.Contains(PlanningCandidateRejectionReason.DriverPairSameShift))
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverPairSameShift);
+    }
 
     private static PlanningCandidateScoreBreakdown BuildScoreBreakdown(
         PlanningCandidateEvaluation evaluation,

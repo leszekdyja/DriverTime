@@ -267,6 +267,18 @@ export type PlanningDriverAvailabilityPayload = {
     type: PlanningDriverAvailabilityType;
     note?: string | null;
 };
+export type PlanningDriverPair = {
+    id: string;
+    firstDriverId: string;
+    firstDriverName: string;
+    secondDriverId: string;
+    secondDriverName: string;
+    isNightDutyPair: boolean;
+    preventSameShift: boolean;
+    isActive: boolean;
+    notes: string | null;
+};
+export type PlanningDriverPairPayload = Omit<PlanningDriverPair, "id" | "firstDriverName" | "secondDriverName">;
 export type PlanningSchedule = PlanningScheduleListItem & {
     assignments: PlanningAssignment[];
 };
@@ -494,4 +506,19 @@ export async function deletePlanningDriverAvailability(id: string): Promise<void
     if (!response.ok) {
         throw new Error(response.status === 404 ? "Nie znaleziono wpisu dostępności." : "Nie udało się usunąć dostępności kierowcy.");
     }
+}
+
+export async function getPlanningDriverPairs(): Promise<PlanningDriverPair[]> {
+    const response = await apiFetch("/api/planning/driver-pairs");
+    return readJson<PlanningDriverPair[]>(response, "Nie udało się pobrać par kierowców.");
+}
+
+export async function createPlanningDriverPair(payload: PlanningDriverPairPayload): Promise<PlanningDriverPair> {
+    const response = await apiFetch("/api/planning/driver-pairs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return readJson<PlanningDriverPair>(response, "Nie udało się zapisać pary kierowców.");
+}
+
+export async function deletePlanningDriverPair(id: string): Promise<void> {
+    const response = await apiFetch(`/api/planning/driver-pairs/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(response.status === 404 ? "Nie znaleziono pary kierowców." : "Nie udało się usunąć pary kierowców.");
 }
