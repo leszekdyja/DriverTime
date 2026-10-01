@@ -16,6 +16,11 @@ public class CurrentUserService : ICurrentUserService
 
     public Guid CompanyId => GetGuidClaim("company_id");
 
+    public Guid DriverId => GetGuidClaim("driver_id");
+
+    public bool IsMobileDriver =>
+        _httpContextAccessor.HttpContext?.User.FindFirstValue("token_type") == "mobile_driver";
+
     public bool IsAuthenticated =>
         _httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true;
 

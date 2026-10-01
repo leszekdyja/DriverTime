@@ -72,27 +72,48 @@ public class DashboardService : IDashboardService
             .Distinct()
             .CountAsync(cancellationToken);
 
-        var activityRows = await _dbContext.DriverActivities
+        var activityQuery = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
                 && x.EndUtc >= rangeStartUtc
-                && x.StartUtc <= rangeEndUtc)
+                && x.StartUtc <= rangeEndUtc);
+
+        var activityCountRows = await activityQuery
+            .GroupBy(x => x.ActivityType)
+            .Select(x => new
+            {
+                ActivityType = x.Key,
+                Count = x.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var activityCounts = activityCountRows
+            .GroupBy(x => ActivityIntervalAggregationHelper.NormalizeActivityType(x.ActivityType))
+            .ToDictionary(x => x.Key, x => x.Sum(row => row.Count));
+
+        var distinctActivityRows = await activityQuery
+            .Select(x => new
+            {
+                x.ActivityType,
+                x.StartUtc,
+                x.EndUtc
+            })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var activityRows = distinctActivityRows
             .Select(x => new ActivityInterval(
-                x.Id,
+                Guid.Empty,
                 x.ActivityType,
                 x.StartUtc,
                 x.EndUtc))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var mergedActivities = ActivityIntervalAggregationHelper.ClipAndMergeByType(
             activityRows,
             rangeStartUtc,
             rangeEndUtc);
-
-        var activityCounts = activityRows
-            .GroupBy(x => ActivityIntervalAggregationHelper.NormalizeActivityType(x.ActivityType))
-            .ToDictionary(x => x.Key, x => x.Count());
 
         var activitySummaries = mergedActivities
             .GroupBy(x => ActivityIntervalAggregationHelper.NormalizeActivityType(x.ActivityType))

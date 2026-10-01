@@ -43,6 +43,11 @@ build/
 coverage/
 *.exe
 
+# Android local/build artifacts
+.gradle/
+**/local.properties
+**/*.apk
+
 # =========================
 # Local Tkinter planning artifacts
 # =========================

@@ -1,0 +1,236 @@
+.work-evidence-page {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.work-evidence-heading,
+.work-evidence-controls,
+.work-evidence-report-header,
+.work-evidence-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.work-evidence-heading h2,
+.work-evidence-report-header h3 {
+    margin: 0;
+}
+
+.work-evidence-heading p,
+.work-evidence-report-header p {
+    margin: 4px 0 0;
+    color: var(--color-muted);
+}
+
+.work-evidence-controls {
+    justify-content: flex-start;
+    padding: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.work-evidence-controls label,
+.work-evidence-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+.work-evidence-controls select,
+.work-evidence-controls input,
+.work-evidence-form select,
+.work-evidence-form input,
+.work-evidence-form textarea {
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--color-surface-muted);
+    color: var(--text);
+}
+
+.work-evidence-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.work-evidence-form,
+.work-evidence-report {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.work-evidence-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.work-evidence-time-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.work-evidence-checkbox {
+    flex-direction: row !important;
+    align-items: center;
+    color: var(--text);
+}
+
+.work-evidence-checkbox input {
+    min-height: auto;
+    width: 18px;
+    height: 18px;
+}
+
+.work-evidence-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.work-evidence-summary span {
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--color-surface-muted);
+    color: var(--text);
+    font-size: 0.85rem;
+}
+
+.work-evidence-message {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
+}
+
+.work-evidence-message.error {
+    background: rgba(239, 68, 68, 0.12);
+    color: #b91c1c;
+}
+
+.work-evidence-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: 0.9rem;
+}
+
+.work-evidence-table th,
+.work-evidence-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 8px;
+    vertical-align: top;
+    text-align: left;
+}
+
+.work-evidence-table th {
+    color: var(--color-muted);
+    font-weight: 700;
+}
+
+.work-evidence-entry-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.work-evidence-entry {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.work-evidence-entry span,
+.work-evidence-entry small,
+.work-evidence-muted {
+    color: var(--color-muted);
+}
+
+.work-evidence-entry-actions {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.work-evidence-entry-actions button,
+.work-evidence-form-actions button,
+.secondary-button {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--color-surface-muted);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.work-evidence-form-actions button:first-child {
+    border-color: transparent;
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.work-evidence-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--color-muted);
+}
+
+@media (max-width: 1000px) {
+    .work-evidence-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .work-evidence-heading,
+    .work-evidence-controls,
+    .work-evidence-report-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .work-evidence-summary {
+        justify-content: flex-start;
+    }
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #work-evidence-print-area,
+    #work-evidence-print-area * {
+        visibility: visible;
+    }
+
+    #work-evidence-print-area {
+        position: absolute;
+        inset: 0;
+        border: 0;
+        padding: 0;
+        background: #fff;
+        color: #111;
+    }
+
+    .work-evidence-actions-col {
+        display: none;
+    }
+
+    .work-evidence-table th,
+    .work-evidence-table td {
+        border-color: #ddd;
+        color: #111;
+    }
+}

@@ -31,6 +31,15 @@ type CreateDriverDto = {
     includeInPlanning: boolean;
 };
 
+type DriverMobileInviteDto = {
+    driverId: string;
+    driverFullName: string;
+    token: string;
+    apiBaseUrl: string;
+    inviteLink: string;
+    expiresAtUtc: string;
+};
+
 const driversApiUrl = `${API_URL}/api/drivers`;
 const pageSize = 8;
 
@@ -50,6 +59,8 @@ export default function DriversPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [driverToDelete, setDriverToDelete] = useState<DriverDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isCreatingInviteFor, setIsCreatingInviteFor] = useState<string | null>(null);
+    const [mobileInvite, setMobileInvite] = useState<DriverMobileInviteDto | null>(null);
     const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     const filteredDrivers = useMemo(() => {
@@ -183,6 +194,53 @@ export default function DriversPage() {
         }
     }
 
+    async function createMobileInvite(driver: DriverDto) {
+        setMessage("");
+        setIsError(false);
+        setIsCreatingInviteFor(driver.id);
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driver.id}/mobile-invite`, {
+                method: "POST",
+            });
+
+            if (!response.ok) {
+                throw new Error("Nie udało się utworzyć linku do aplikacji.");
+            }
+
+            const invite = (await response.json()) as DriverMobileInviteDto;
+            setMobileInvite(invite);
+
+            if (navigator.clipboard) {
+                await navigator.clipboard.writeText(invite.inviteLink);
+                setMessage("Link do aplikacji został utworzony i skopiowany do schowka.");
+            } else {
+                setMessage("Link do aplikacji został utworzony.");
+            }
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się utworzyć linku do aplikacji.");
+        } finally {
+            setIsCreatingInviteFor(null);
+        }
+    }
+
+    async function shareMobileInvite() {
+        if (!mobileInvite) return;
+
+        const text = `DriverTime - konfiguracja aplikacji dla kierowcy ${mobileInvite.driverFullName}: ${mobileInvite.inviteLink}`;
+
+        if (navigator.share) {
+            await navigator.share({
+                title: "DriverTime - aplikacja kierowcy",
+                text,
+            });
+            return;
+        }
+
+        window.location.href = `mailto:?subject=${encodeURIComponent("DriverTime - aplikacja kierowcy")}&body=${encodeURIComponent(text)}`;
+    }
+
     useEffect(() => {
         void loadDrivers();
     }, [loadDrivers]);
@@ -291,7 +349,7 @@ export default function DriversPage() {
 
                     {isLoading ? (
                         drivers.length === 0 ? (
-                            <TableSkeleton rows={6} columns={7} />
+                            <TableSkeleton rows={6} columns={8} />
                         ) : null
                     ) : drivers.length === 0 ? (
                         <EmptyState
@@ -317,6 +375,7 @@ export default function DriversPage() {
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
                                         <th>Planowanie</th>
+                                        <th>Aplikacja</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -341,6 +400,16 @@ export default function DriversPage() {
                                                     />
                                                     <span>{driver.includeInPlanning ? "Tak" : "Nie"}</span>
                                                 </label>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className="driver-details-link"
+                                                    type="button"
+                                                    onClick={() => void createMobileInvite(driver)}
+                                                    disabled={isCreatingInviteFor === driver.id}
+                                                >
+                                                    {isCreatingInviteFor === driver.id ? "Tworzenie..." : "Wyślij link"}
+                                                </button>
                                             </td>
                                             <td>
                                                 <div className="driver-row-actions">
@@ -400,6 +469,41 @@ export default function DriversPage() {
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? "Usuwanie..." : "Usuń kierowcę"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
+            {mobileInvite && (
+                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => setMobileInvite(null)}>
+                    <section
+                        className="driver-delete-modal driver-mobile-invite-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="driver-mobile-invite-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h3 id="driver-mobile-invite-title">Link do aplikacji kierowcy</h3>
+                        <p>
+                            Link zawiera jednorazową konfigurację aplikacji dla kierowcy {mobileInvite.driverFullName}.
+                            Wygasa {new Date(mobileInvite.expiresAtUtc).toLocaleString("pl-PL")}.
+                        </p>
+                        <label>
+                            Link konfiguracji
+                            <textarea readOnly value={mobileInvite.inviteLink} rows={4} />
+                        </label>
+                        <div className="driver-delete-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => void navigator.clipboard?.writeText(mobileInvite.inviteLink)}
+                            >
+                                Kopiuj
+                            </button>
+                            <button type="button" onClick={() => void shareMobileInvite()}>
+                                Wyślij
+                            </button>
+                            <button type="button" onClick={() => setMobileInvite(null)}>
+                                Zamknij
                             </button>
                         </div>
                     </section>

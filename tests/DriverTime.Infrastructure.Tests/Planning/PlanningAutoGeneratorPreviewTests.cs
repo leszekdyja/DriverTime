@@ -139,6 +139,10 @@ public class PlanningAutoGeneratorPreviewTests
 
         public Guid CompanyId { get; } = companyId;
 
+        public Guid DriverId => Guid.Empty;
+
+        public bool IsMobileDriver => false;
+
         public bool IsAuthenticated => true;
     }
 }

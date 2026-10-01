@@ -54,6 +54,10 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<PlanningDriverDutyRule> PlanningDriverDutyRules => Set<PlanningDriverDutyRule>();
 
+    public DbSet<DriverWorkEvidenceEntry> DriverWorkEvidenceEntries => Set<DriverWorkEvidenceEntry>();
+
+    public DbSet<MobileAppInvite> MobileAppInvites => Set<MobileAppInvite>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -164,6 +168,7 @@ public class DriverTimeDbContext : DbContext
         modelBuilder.Entity<DriverActivity>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EndUtc, x.StartUtc, x.DddFileId });
         });
 
         modelBuilder.Entity<VehicleUse>(entity =>
@@ -446,6 +451,64 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.PlanningDuty)
                 .WithMany()
                 .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DriverWorkEvidenceEntry>(entity =>
+        {
+            entity.ToTable("DriverWorkEvidenceEntries");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.Date });
+            entity.HasIndex(x => new { x.DriverId, x.StartDateTime, x.EndDateTime });
+
+            entity.Property(x => x.ActivityType)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Source)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.StartDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.EndDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.VehicleRegistration)
+                .HasMaxLength(50);
+            entity.Property(x => x.CountryCode)
+                .HasMaxLength(10);
+            entity.Property(x => x.DistanceKm)
+                .HasPrecision(10, 2);
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.WorkEvidenceEntries)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MobileAppInvite>(entity =>
+        {
+            entity.ToTable("MobileAppInvites");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.CreatedAtUtc });
+
+            entity.Property(x => x.TokenHash)
+                .HasMaxLength(128);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.MobileAppInvites)
+                .HasForeignKey(x => x.DriverId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<CardReadSession>(entity =>

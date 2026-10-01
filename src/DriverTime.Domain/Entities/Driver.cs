@@ -24,6 +24,10 @@ public class Driver
 
     public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
 
+    public ICollection<DriverWorkEvidenceEntry> WorkEvidenceEntries { get; set; } = new List<DriverWorkEvidenceEntry>();
+
+    public ICollection<MobileAppInvite> MobileAppInvites { get; set; } = new List<MobileAppInvite>();
+
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
 

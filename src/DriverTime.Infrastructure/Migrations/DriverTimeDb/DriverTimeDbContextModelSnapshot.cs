@@ -446,7 +446,71 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.HasIndex("VehicleId");
 
+                    b.HasIndex("EndUtc", "StartUtc", "DddFileId");
+
                     b.ToTable("DriverActivities");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.DriverWorkEvidenceEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("DistanceKm")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistration")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "DriverId", "Date");
+
+                    b.HasIndex("DriverId", "StartDateTime", "EndDateTime");
+
+                    b.ToTable("DriverWorkEvidenceEntries", (string)null);
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
@@ -484,6 +548,47 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.HasIndex("CompanyId");
 
                     b.ToTable("ImportFile");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.MobileAppInvite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "DriverId", "CreatedAtUtc");
+
+                    b.ToTable("MobileAppInvites", (string)null);
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Notification", b =>
@@ -1181,6 +1286,25 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("DddFile");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.DriverWorkEvidenceEntry", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany("WorkEvidenceEntries")
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
                 {
                     b.HasOne("DriverTime.Domain.Entities.Company", "Company")
@@ -1190,6 +1314,25 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .IsRequired();
 
                     b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.MobileAppInvite", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany("MobileAppInvites")
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Notification", b =>
@@ -1410,7 +1553,11 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                 {
                     b.Navigation("DddFiles");
 
+                    b.Navigation("MobileAppInvites");
+
                     b.Navigation("PlanningAssignments");
+
+                    b.Navigation("WorkEvidenceEntries");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>

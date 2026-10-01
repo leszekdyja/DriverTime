@@ -79,23 +79,21 @@ public class DownloadScheduleService : IDownloadScheduleService
             })
             .ToListAsync(cancellationToken);
 
-        var vehicleUses = await _dbContext.VehicleUses
+        var vehicleRegistrations = await _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
                 && x.RegistrationNumber != null
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5)
-            .Select(x => new VehicleUseDownloadSource
-            {
-                RegistrationNumber = x.RegistrationNumber
-            })
+            .Select(x => x.RegistrationNumber)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        var normalizedVehicleUses = vehicleUses
-            .Select(x => new NormalizedVehicleUseDownloadSource
+        var normalizedVehicleUses = vehicleRegistrations
+            .Select(registrationNumber => new NormalizedVehicleUseDownloadSource
             {
-                RegistrationNumber = NormalizeVehicleRegistration(x.RegistrationNumber),
-                CompactRegistrationNumber = GetVehicleRegistrationCompactValue(x.RegistrationNumber)
+                RegistrationNumber = NormalizeVehicleRegistration(registrationNumber),
+                CompactRegistrationNumber = GetVehicleRegistrationCompactValue(registrationNumber)
             })
             .Where(x => x.CompactRegistrationNumber.Length >= 5)
             .ToList();
@@ -199,11 +197,6 @@ public class DownloadScheduleService : IDownloadScheduleService
             .OrderByDescending(x => GetVehicleRegistrationCompactValue(x).Length)
             .ThenBy(x => x)
             .FirstOrDefault() ?? NormalizeVehicleRegistration(vehicleRegistrationNumber);
-    }
-
-    private sealed class VehicleUseDownloadSource
-    {
-        public string RegistrationNumber { get; set; } = string.Empty;
     }
 
     private sealed class NormalizedVehicleUseDownloadSource

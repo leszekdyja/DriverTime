@@ -6,4 +6,6 @@ namespace DriverTime.Application.Interfaces;
 public interface ITokenService
 {
     AuthResponseDto CreateToken(User user);
+
+    AuthResponseDto CreateMobileDriverToken(Company company, Driver driver);
 }

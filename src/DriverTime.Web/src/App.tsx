@@ -18,11 +18,13 @@ import ImportMonitoringPage from "./pages/ImportMonitoringPage";
 import ImportsPage from "./pages/ImportsPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import MobileSetupPage from "./pages/MobileSetupPage";
 import PlanningPage from "./pages/PlanningPage";
 import ReportsPage from "./pages/ReportsPage";
 import VehicleDetailsPage from "./pages/VehicleDetailsPage";
 import VehiclesPage from "./pages/VehiclesPage";
 import ViolationsPage from "./pages/ViolationsPage";
+import WorkEvidencePage from "./pages/WorkEvidencePage";
 
 export default function App() {
     return (
@@ -32,6 +34,7 @@ export default function App() {
                     <Routes>
                         <Route path="/welcome" element={<LandingPage />} />
                         <Route path="/login" element={<LoginPage />} />
+                        <Route path="/mobile/setup" element={<MobileSetupPage />} />
                         <Route element={<ProtectedRoute />}>
                             <Route path="/" element={<AppLayout />}>
                                 <Route index element={<DashboardPage />} />
@@ -45,6 +48,7 @@ export default function App() {
                                 <Route path="downloads" element={<DownloadsPage />} />
                                 <Route path="vehicles" element={<VehiclesPage />} />
                                 <Route path="planning" element={<PlanningPage />} />
+                                <Route path="work-evidence" element={<WorkEvidencePage />} />
                                 <Route path="vehicles/:vehicleId" element={<VehicleDetailsPage />} />
                                 <Route path="reports" element={<ReportsPage />} />
                                 <Route path="violations" element={<ViolationsPage />} />

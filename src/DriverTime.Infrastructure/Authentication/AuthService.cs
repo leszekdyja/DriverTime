@@ -115,6 +115,30 @@ public class AuthService : IAuthService
             return null;
         }
 
+        if (_currentUser.IsMobileDriver && _currentUser.DriverId != Guid.Empty)
+        {
+            var driver = await _dbContext.Drivers
+                .Include(x => x.Company)
+                .FirstOrDefaultAsync(x =>
+                    x.Id == _currentUser.DriverId
+                    && x.CompanyId == _currentUser.CompanyId,
+                    cancellationToken);
+
+            return driver is null
+                ? null
+                : new CurrentUserDto
+                {
+                    Id = driver.Id,
+                    CompanyId = driver.CompanyId,
+                    CompanyName = driver.Company?.Name ?? string.Empty,
+                    FirstName = driver.FirstName,
+                    LastName = driver.LastName,
+                    Email = $"driver-{driver.Id:N}@mobile.drivertime.local",
+                    Role = "MobileDriver",
+                    DriverId = driver.Id
+                };
+        }
+
         var user = await UserQuery()
             .FirstOrDefaultAsync(x => x.Id == _currentUser.UserId, cancellationToken);
 

@@ -12,15 +12,21 @@ public class DriversController : ControllerBase
     private readonly IDriverService _driverService;
     private readonly IDriverViolationService _driverViolationService;
     private readonly IDriverActivityCalendarService _activityCalendarService;
+    private readonly IDriverMobileAppInviteService _mobileAppInviteService;
+    private readonly IConfiguration _configuration;
 
     public DriversController(
         IDriverService driverService,
         IDriverViolationService driverViolationService,
-        IDriverActivityCalendarService activityCalendarService)
+        IDriverActivityCalendarService activityCalendarService,
+        IDriverMobileAppInviteService mobileAppInviteService,
+        IConfiguration configuration)
     {
         _driverService = driverService;
         _driverViolationService = driverViolationService;
         _activityCalendarService = activityCalendarService;
+        _mobileAppInviteService = mobileAppInviteService;
+        _configuration = configuration;
     }
 
     [HttpGet]
@@ -99,6 +105,40 @@ public class DriversController : ControllerBase
 
         return driver is null ? NotFound() : Ok(driver);
     }
+
+    [HttpPost("{id:guid}/mobile-invite")]
+    public async Task<ActionResult<DriverMobileAppInviteDto>> CreateMobileInvite(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var mobileSetupBaseUrl = BuildMobileSetupBaseUrl();
+        var invite = await _mobileAppInviteService.CreateInviteAsync(
+            id,
+            apiBaseUrl,
+            mobileSetupBaseUrl,
+            cancellationToken);
+
+        return invite is null ? NotFound() : Ok(invite);
+    }
+
+    private string BuildMobileSetupBaseUrl()
+    {
+        var configured = _configuration["PublicAppUrl"]
+            ?? _configuration["PUBLIC_APP_URL"];
+
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return $"{configured.TrimEnd('/')}/mobile/setup";
+        }
+
+        var host = Request.Host.Host;
+        var port = Request.Host.Port == 8080 ? 3000 : Request.Host.Port;
+        var hostString = port.HasValue ? $"{host}:{port.Value}" : host;
+
+        return $"{Request.Scheme}://{hostString}/mobile/setup";
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(
         Guid id,

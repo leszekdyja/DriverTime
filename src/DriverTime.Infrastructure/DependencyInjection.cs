@@ -78,6 +78,10 @@ public static class DependencyInjection
 
         services.AddScoped<IDriverActivityCalendarService, DriverActivityCalendarService>();
 
+        services.AddScoped<IDriverWorkEvidenceService, DriverWorkEvidenceService>();
+
+        services.AddScoped<IDriverMobileAppInviteService, DriverMobileAppInviteService>();
+
         services.AddScoped<IDriverViolationService, DriverViolationService>();
 
         services.AddScoped<IViolationDetectionService, ViolationDetectionService>();

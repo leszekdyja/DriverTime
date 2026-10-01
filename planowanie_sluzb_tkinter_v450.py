@@ -4,7 +4,7 @@ import base64
 import hashlib
 import json
 import calendar
-from collections import defaultdict
+from collections import Counter, defaultdict
 import getpass
 import csv
 import html
@@ -30,7 +30,105 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v443_recomp"
+APP_VERSION = "v504_mandatory_rn_reuses_current_month_driver"
+# v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
+# dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
+# przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
+# tego samego miesiaca. Nie RN, RN z poprzedniego miesiaca, wpisy reczne,
+# odpoczynki, limit 6 dni, limit tygodniowy i RBH nadal sa twarde.
+# v503: datowane wymagania z zakladki „Sluzby sob./niedz.” sa twardymi wpisami
+# recznymi. Automat nie moze zdejmowac ani przenosic wymaganych R/R2/RN do
+# ratowania innych sluzb. Dzieki temu wpisy licza sie do RBH od poczatku i nie
+# sa odtwarzane dopiero po kontroli normy, co powodowalo 184 zamiast 176 RBH.
+# v502: kartoteka kierowcy ma prostą opcję „Nie planuj sob./niedz.” korzystającą
+# z twardej blokady weekendowej automatu. Aktywne pary RN są nierozdzielne także
+# w głównym planowaniu bloków RN: niedostępność partnera wyklucza obie osoby.
+# v501: ręczne wymagania z zakładki „Służby sob./niedz.” przechowują liczbę
+# obsad. R, R2 oraz RN można wskazać wielokrotnie dla tej samej daty, a automat
+# planuje i raportuje każdą wymaganą obsadę osobno.
+# v500: zakładka „Służby sob./niedz.” używa pełnej listy wielokrotnego wyboru
+# zamiast pola na numery. Lista obejmuje wszystkie realne służby, w tym RN,
+# R i R2. Datowany wybór R/R2 jest świadomym wyjątkiem od miesięcznego zakazu
+# automatu i obowiązuje wyłącznie we wskazaną sobotę albo niedzielę.
+# v499: końcowy ratunek łańcuchowy uwzględnia również naprawdę puste komórki,
+# a nie tylko automatyczne WG/W. Dzięki temu kierowca z pełnym nominałem może
+# oddać wcześniejszą służbę kierowcy z niedoborem i objąć brak wysokiego
+# priorytetu na końcu miesiąca. R/R2 pozostaje twardo wyłączone, jeśli zostało
+# zaznaczone jako „nie planować”.
+# v498: zaznaczenie R lub R2 jako „nie planować” jest twardym zakazem dla
+# wszystkich ścieżek automatu, również dobijania RBH i końcowych ratunków.
+# Wpis ręczny R/R2 pozostaje dozwolony.
+# v497: jeżeli po końcowym planowaniu nadal brakuje realnej służby, automat
+# może usunąć R/R2 tego samego kierowcy z innego dnia, wpisać tam WG/W i
+# przenieść jego pracę na dzień braku. R/R2 nie jest obowiązkowe i nie może
+# blokować obsady realnej służby; zamiana nadal przechodzi kontrolę odpoczynków.
+# v496: nowa zakładka planowania pozwala wskazać konkretną sobotę lub
+# niedzielę i numery zwykłych służb wymaganych wyjątkowo tego dnia. Wyjątek
+# datowany ma pierwszeństwo przed ogólnymi flagami dni oraz wykluczeniem
+# miesiąca, jest uwzględniany przez generator i raport brakujących służb.
+# v492: po RN rozpoczetym w piatek i zakonczonym w sobote kolejna sluzba
+# rozpoczynajaca sie w niedziele wymaga co najmniej 24 h odpoczynku. Kontrola
+# dziala niezaleznie od kolejnosci dodawania wpisow i nie narzuca 24 h na kazdej
+# zwyklej granicy weekendu.
+# v491: sobotnie RN nie moze trafic do kierowcy z sasiadujacego pelnego bloku
+# RN niedziela-piatek. Dodatkowa kontrola liczy maksymalnie 6 roznych dni
+# rozpoczecia pracy bez rzeczywistej przerwy co najmniej 24 h, rowniez wtedy,
+# gdy na poczatku badanego zakresu nie ma wczesniejszej sluzby odniesienia.
+# v490: oznaczenie zmiany jest rozpoznawane po pelnym koncowym symbolu I/II,
+# a nie po fragmencie tekstu. Dzięki temu np. „III zm I” pozostaje I zmiana
+# i opcja „Nie planuj pary na jednej zmianie” blokuje także R/R2 dopisywane
+# podczas końcowego uzupełniania RBH.
+# v489: kolejnosc automatu jest twarda: wpisy reczne, wszystkie sluzby
+# weekendowe, pelne bloki RN, sluzby wysokiego priorytetu i na koncu niski
+# priorytet. RN nie jest rozbijane ratunkiem pojedynczych dni. Przy wlaczonej
+# kontroli odpoczynku tygodniowego limit 6 dni wynika z rzeczywistych godzin
+# zakonczenia i rozpoczecia sluzb, a nie z samych kolejnych dat kalendarzowych.
+# v488: automatyczny blok RN niedziela-piatek jest sprawdzany narastajaco jako
+# jedna niepodzielna calosc. Kandydat musi miec legalne odpoczynki oraz miejsce
+# w limicie RBH na wszystkie 6 dni, aby RN nie urywalo sie przed piatkiem.
+# v487: kwalifikacja odpoczynku tygodniowego może pominąć pośrednią przerwę
+# >=24 h, jeżeli do następnego długiego odpoczynku kierowca pracuje najwyżej
+# przez 6 różnych dni. Dzięki temu RN przed ręcznym WG i UW nie tworzy
+# sztucznie drugiego skróconego odpoczynku tygodniowego.
+# v486: sobotnie RN preferuje kierowcę z II zmianą w następnym tygodniu, ale
+# dopuszcza też poniedziałkowe WG albo I zmianę, gdy rzeczywiste godziny potwierdzą
+# wcześniejszy odpoczynek tygodniowy, odpoczynek dobowy po RN i kolejny odpoczynek
+# przed upływem sześciu dób. Pełna kontrola odpoczynków pozostaje twarda.
+# v485: RN jest obsadzane obowiązkowo także wtedy, gdy dla pełnej pary znaleziono
+# początkowo tylko jednego legalnego kandydata. RN z soboty dostaje kierowca,
+# który w następnym tygodniu rozpoczyna II zmianę. Dla obowiązkowego RN można
+# wykorzystać również kierowcę pracującego w sobotę, ale tylko po pełnej kontroli
+# rzeczywistych godzin odpoczynku i pozostałych twardych ograniczeń.
+# v484: „Nie planuj RN” jest twardym zakazem we wszystkich etapach automatu.
+# Ręcznie zapisana zmiana startowa dla bieżącego miesiąca jest twarda w jego
+# pierwszym tygodniu, a formularz nie pokazuje wartości odziedziczonej jako
+# ręcznie zaznaczonego ustawienia dla tego miesiąca.
+# v483: odpoczynek tygodniowy nie jest przywiązany do soboty, niedzieli ani
+# poniedziałku. Automat pilnuje ruchomego terminu: kolejny odpoczynek >=24 h
+# musi rozpocząć się najpóźniej 6 dób po zakończeniu poprzedniego odpoczynku
+# tygodniowego. RN nie jest wpisywane automatycznie mimo blokady odpoczynku,
+# a zmiana równoważnej sekwencji nie może ukryć nowego naruszenia krótki->krótki.
+# v482: stary układ krótkich odpoczynków z poprzedniego miesiąca nie blokuje
+# wszystkich nowych służb. Kandydat jest odrzucany tylko wtedy, gdy rzeczywiście
+# zwiększa liczbę naruszeń krótki->krótki, a nie gdy zmienia ich równoważne daty.
+# v481: odpoczynki tygodniowe są wybierane z rzeczywistych przerw jako jedna
+# legalna sekwencja. Automat może pominąć nadmiarową przerwę >=24 h, jeżeli
+# następny wybrany odpoczynek zaczyna się w ciągu 6 dób. Dzięki temu nie wymusza
+# dwóch regularnych odpoczynków 45 h pod rząd i może wykorzystać zbędne WG na RBH.
+# v480: globalna para na autobusie może mieć zaznaczone „Nie planuj pary na
+# jednej zmianie”. Automat twardo blokuje tego samego dnia dwie służby I albo
+# dwie służby II zmiany dla kierowców pary; wpisy ręczne są tylko raportowane.
+# v479: po skróconym odpoczynku tygodniowym 24-45 h następny odpoczynek
+# tygodniowy musi mieć co najmniej 45 h; raport i generator używają tej samej
+# sekwencji rzeczywistych przerw między zakończeniem i rozpoczęciem służb.
+# v478: odpoczynek liczony z rzeczywistego końca poprzedniej i początku kolejnej
+# służby. NAJEM/NAJEM2/ZAGŁĘBIE uczestniczą w kontroli. Przejście z pracy
+# kończącej się w sobotę do niedzielnej służby wymaga co najmniej 24 godzin.
+# v471_merged: scalono linię v470 z aktualnym generatorem. Twarda kolejność to:
+# wszystkie realne służby weekendowe i RN -> pozostałe służby -> R/R2 -> tylko
+# przepisowe WG/W. Usunięto limity 2 weekendów i weekendów z rzędu, zachowując
+# zakaz sobota+niedziela. Dodano równoważenie weekendów, globalne dopasowanie
+# braków, analizę służby do przekazania i 20 rund bezpiecznej ciągłości tygodnia.
 # v443: eksport CSV pokazuje RBH tym samym licznikiem co program; ręczny WG/W opisany jako urlop wypoczynkowy w dniu roboczym ma 8 RBH, a weekendowy urlop 0 RBH.
 # v442: zakaz służba-kierowca jest globalny/do odwołania dla wszystkich miesięcy; UI i walidacje jasno traktują go jako twardy globalny filtr.
 # v441: twarde filtrowanie zakazów służba-kierowca w głównym add_entry, korektach tygodniowych/propozycjach i zamianach par; zakaz nie może być nadpisany przez ratunek.
@@ -334,7 +432,8 @@ POLISH_MONTHS = [
 ]
 MONTH_VALUES = [m for m, _name in POLISH_MONTHS]
 DEFAULT_EXCLUDED_DUTY_CODES = {"UW", "UO", "CH", "SZK", "NAJEM", "NAJEM2", "BO", "UB", "BHP", "ZAGLEBIE"}
-# v306: NAJEM/NAJEM2 są ręcznym całodniowym zajęciem, ale nie tworzą godzinowego przedziału pracy do odpoczynków.
+# Ręczne wyjazdy mogą występować u kilku kierowców tego samego dnia, ale ich
+# zapisane godziny rozpoczęcia i zakończenia nadal uczestniczą w odpoczynkach.
 FULL_DAY_MANUAL_SPECIAL_CODES = {"NAJEM", "NAJEM2"}
 # Wzorcowy podział autobusów z pliku "Podział na autobusy.xlsx".
 # Import wykonywany jest jednorazowo do lokalnej bazy programu v169.
@@ -5852,6 +5951,17 @@ class DutyPlannerApp(tk.Tk):
                 PRIMARY KEY(month_key, driver_id),
                 FOREIGN KEY(driver_id) REFERENCES drivers(id) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS weekend_duty_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_date TEXT NOT NULL,
+                duty_id INTEGER NOT NULL,
+                required_count INTEGER NOT NULL DEFAULT 1,
+                note TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(plan_date, duty_id),
+                FOREIGN KEY(duty_id) REFERENCES duties(id) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS fixed_driver_duties (
                 month_key TEXT NOT NULL,
                 driver_id INTEGER NOT NULL,
@@ -5882,6 +5992,7 @@ class DutyPlannerApp(tk.Tk):
                 car_id INTEGER,
                 driver1_id INTEGER NOT NULL,
                 driver2_id INTEGER,
+                avoid_same_shift INTEGER DEFAULT 0,
                 note TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -5897,6 +6008,7 @@ class DutyPlannerApp(tk.Tk):
                 car_id INTEGER NOT NULL UNIQUE,
                 driver1_id INTEGER NOT NULL,
                 driver2_id INTEGER,
+                avoid_same_shift INTEGER DEFAULT 0,
                 note TEXT,
                 active INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -5998,6 +6110,7 @@ class DutyPlannerApp(tk.Tk):
             CREATE INDEX IF NOT EXISTS idx_planned_schedule_date ON planned_schedule(plan_date);
             CREATE INDEX IF NOT EXISTS idx_monthly_excluded_month ON monthly_excluded_duties(month_key);
             CREATE INDEX IF NOT EXISTS idx_monthly_excluded_drivers_month ON monthly_excluded_drivers(month_key);
+            CREATE INDEX IF NOT EXISTS idx_weekend_duty_overrides_date ON weekend_duty_overrides(plan_date);
             CREATE INDEX IF NOT EXISTS idx_fixed_driver_duties_month ON fixed_driver_duties(month_key);
             CREATE INDEX IF NOT EXISTS idx_driver_pairs_month ON driver_pairs(month_key);
 
@@ -6018,6 +6131,9 @@ class DutyPlannerApp(tk.Tk):
             self.conn.execute("ALTER TABLE planned_schedule ADD COLUMN pair_no TEXT")
         if "entry_source" not in existing_columns:
             self.conn.execute("ALTER TABLE planned_schedule ADD COLUMN entry_source TEXT DEFAULT 'manual'")
+        weekend_override_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(weekend_duty_overrides)")}
+        if "required_count" not in weekend_override_columns:
+            self.conn.execute("ALTER TABLE weekend_duty_overrides ADD COLUMN required_count INTEGER NOT NULL DEFAULT 1")
         self.conn.execute(
             """
             UPDATE planned_schedule
@@ -6049,7 +6165,10 @@ class DutyPlannerApp(tk.Tk):
         pair_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(driver_pairs)")}
         if "pair_order" not in pair_columns:
             self.conn.execute("ALTER TABLE driver_pairs ADD COLUMN pair_order INTEGER DEFAULT 0")
+        if "avoid_same_shift" not in pair_columns:
+            self.conn.execute("ALTER TABLE driver_pairs ADD COLUMN avoid_same_shift INTEGER DEFAULT 0")
         self.conn.execute("UPDATE driver_pairs SET pair_order=0 WHERE pair_order IS NULL")
+        self.conn.execute("UPDATE driver_pairs SET avoid_same_shift=0 WHERE avoid_same_shift IS NULL")
         self.conn.execute(
             """
             UPDATE driver_pairs
@@ -6060,7 +6179,10 @@ class DutyPlannerApp(tk.Tk):
         permanent_pair_columns = {row[1] for row in self.conn.execute("PRAGMA table_info(permanent_driver_pairs)")}
         if "pair_order" not in permanent_pair_columns:
             self.conn.execute("ALTER TABLE permanent_driver_pairs ADD COLUMN pair_order INTEGER DEFAULT 0")
+        if "avoid_same_shift" not in permanent_pair_columns:
+            self.conn.execute("ALTER TABLE permanent_driver_pairs ADD COLUMN avoid_same_shift INTEGER DEFAULT 0")
         self.conn.execute("UPDATE permanent_driver_pairs SET pair_order=0 WHERE pair_order IS NULL")
+        self.conn.execute("UPDATE permanent_driver_pairs SET avoid_same_shift=0 WHERE avoid_same_shift IS NULL")
         self.conn.execute(
             """
             UPDATE permanent_driver_pairs
@@ -6357,7 +6479,8 @@ class DutyPlannerApp(tk.Tk):
         """Przenieś pary z dawnej kopii miesięcznej do globalnej tabeli par."""
         rows = self.rows(
             """
-            SELECT pair_no, COALESCE(pair_order, 0) AS pair_order, car_id, driver1_id, driver2_id, COALESCE(note, '') AS note
+            SELECT pair_no, COALESCE(pair_order, 0) AS pair_order, car_id, driver1_id, driver2_id,
+                   COALESCE(avoid_same_shift, 0) AS avoid_same_shift, COALESCE(note, '') AS note
             FROM driver_pairs
             WHERE month_key=? AND car_id IS NOT NULL AND driver1_id IS NOT NULL
             ORDER BY CASE WHEN COALESCE(pair_order, 0)>0 THEN 0 ELSE 1 END,
@@ -6382,6 +6505,7 @@ class DutyPlannerApp(tk.Tk):
                 int(row["driver2_id"]) if row["driver2_id"] is not None else None,
                 row["note"] or "",
                 old_order,
+                bool(int(row["avoid_same_shift"] or 0)),
             )
             saved += 1
         if saved:
@@ -9683,6 +9807,7 @@ class DutyPlannerApp(tk.Tk):
         self.create_start_tab()
         self.create_plan_tab()
         self.create_manual_plan_tab()
+        self.create_weekend_duty_overrides_tab()
         self.create_excluded_drivers_tab()
         self.create_planned_months_tab()
         self.create_result_plan_tab()
@@ -10215,11 +10340,13 @@ class DutyPlannerApp(tk.Tk):
         self.driver_db_employee_var = tk.StringVar(value="")
         self.driver_db_no_rn_var = tk.IntVar(value=0)
         ttk.Checkbutton(form, text="Nie planuj RN", variable=self.driver_db_no_rn_var).grid(row=0, column=2, rowspan=2, sticky="w", padx=(0, 10), pady=(3, 0))
-        ttk.Button(form, text="Dodaj nowego kierowcę", command=self.prepare_new_driver_record).grid(row=1, column=3, sticky="w", padx=(0, 6), pady=(3, 0))
-        ttk.Button(form, text="Zapisz / aktualizuj", command=self.save_driver_record).grid(row=1, column=4, sticky="w", padx=(0, 6), pady=(3, 0))
-        ttk.Button(form, text="Wyczyść", command=self.clear_driver_form).grid(row=1, column=5, sticky="w", padx=(0, 6), pady=(3, 0))
-        ttk.Button(form, text="Usuń zaznaczonego", command=self.delete_selected_driver_record).grid(row=1, column=6, sticky="w", padx=(0, 6), pady=(3, 0))
-        ttk.Button(form, text="Uzupełnij LP", command=self.assign_missing_driver_lps).grid(row=1, column=7, sticky="w", pady=(3, 0))
+        self.driver_db_no_weekends_var = tk.IntVar(value=0)
+        ttk.Checkbutton(form, text="Nie planuj sob./niedz.", variable=self.driver_db_no_weekends_var).grid(row=0, column=3, rowspan=2, sticky="w", padx=(0, 10), pady=(3, 0))
+        ttk.Button(form, text="Dodaj nowego kierowcę", command=self.prepare_new_driver_record).grid(row=1, column=4, sticky="w", padx=(0, 6), pady=(3, 0))
+        ttk.Button(form, text="Zapisz / aktualizuj", command=self.save_driver_record).grid(row=1, column=5, sticky="w", padx=(0, 6), pady=(3, 0))
+        ttk.Button(form, text="Wyczyść", command=self.clear_driver_form).grid(row=1, column=6, sticky="w", padx=(0, 6), pady=(3, 0))
+        ttk.Button(form, text="Usuń zaznaczonego", command=self.delete_selected_driver_record).grid(row=1, column=7, sticky="w", padx=(0, 6), pady=(3, 0))
+        ttk.Button(form, text="Uzupełnij LP", command=self.assign_missing_driver_lps).grid(row=1, column=8, sticky="w", pady=(3, 0))
         form.columnconfigure(1, weight=1)
         self.driver_db_selected_id: int | None = None
 
@@ -10235,10 +10362,10 @@ class DutyPlannerApp(tk.Tk):
         search.bind("<KeyRelease>", lambda _event: self.load_drivers_tree())
         ttk.Button(search_bar, text="Wyczyść", command=lambda: (self.driver_db_search_var.set(""), self.load_drivers_tree())).pack(side="left")
 
-        cols = ("lp", "name", "no_rn", "planned")
+        cols = ("lp", "name", "no_rn", "no_weekends", "planned")
         self.drivers_tree = ttk.Treeview(tab, columns=cols, show="headings", selectmode="browse")
-        headings = {"lp": "Lp", "name": "Kierowca", "no_rn": "Nie RN", "planned": "Wpisy planu"}
-        widths = {"lp": 55, "name": 260, "no_rn": 70, "planned": 90}
+        headings = {"lp": "Lp", "name": "Kierowca", "no_rn": "Nie RN", "no_weekends": "Nie sob./niedz.", "planned": "Wpisy planu"}
+        widths = {"lp": 55, "name": 250, "no_rn": 70, "no_weekends": 110, "planned": 90}
         for col in cols:
             self.drivers_tree.heading(col, text=headings[col])
             self.drivers_tree.column(col, width=widths[col], anchor="center" if col in {"lp", "no_rn", "planned"} else "w")
@@ -11016,8 +11143,14 @@ class DutyPlannerApp(tk.Tk):
         ttk.Label(pair_form, text="Uwagi:").grid(row=2, column=0, sticky="w", pady=(6, 0))
         self.pair_note_var = tk.StringVar()
         ttk.Entry(pair_form, textvariable=self.pair_note_var).grid(row=3, column=0, columnspan=3, sticky="ew", padx=(0, 8), pady=(3, 0))
+        self.pair_avoid_same_shift_var = tk.IntVar(value=0)
+        ttk.Checkbutton(
+            pair_form,
+            text="Nie planuj pary na jednej zmianie",
+            variable=self.pair_avoid_same_shift_var,
+        ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(7, 0))
         button_box = ttk.Frame(pair_form)
-        button_box.grid(row=4, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        button_box.grid(row=5, column=0, columnspan=4, sticky="w", pady=(8, 0))
         ttk.Button(button_box, text="Zapisz parę", command=self.save_driver_pair).pack(side="left", padx=(0, 6))
         ttk.Button(button_box, text="Wczytaj zaznaczoną", command=self.load_pair_selection_to_form).pack(side="left", padx=(0, 6))
         ttk.Button(button_box, text="Wyczyść", command=self.clear_pair_form).pack(side="left", padx=(0, 6))
@@ -11030,7 +11163,7 @@ class DutyPlannerApp(tk.Tk):
 
         hint = ttk.Label(
             pairs_frame,
-            text="Kierowcy w parze są traktowani jako obsada jednego auta. Numer pary jest jednocześnie kolejnością druku i obowiązuje globalnie we wszystkich miesiącach. Podgląd i wydruk układają kierowców wyłącznie według pola 'Nr pary / druk'. Numer auta nie wpływa na sortowanie. Wpisanie numeru użytego przez inną parę zamienia numerację par oraz automatyczne służby miejscami.",
+            text="Kierowcy w parze są traktowani jako obsada jednego auta. Opcja 'Nie planuj pary na jednej zmianie' blokuje tego samego dnia dwie służby I albo dwie służby II zmiany dla tej pary. Numer pary jest jednocześnie kolejnością druku i obowiązuje globalnie we wszystkich miesiącach. Podgląd i wydruk układają kierowców wyłącznie według pola 'Nr pary / druk'. Numer auta nie wpływa na sortowanie.",
             style="Hint.TLabel",
             wraplength=900,
         )
@@ -11044,9 +11177,9 @@ class DutyPlannerApp(tk.Tk):
         lists_notebook.add(month_pairs_tab, text="Pary globalne")
         lists_notebook.add(permanent_pairs_tab, text="Źródło globalne")
 
-        pair_cols = ("pair", "car", "driver1", "driver2", "note")
-        headings = {"pair": "Nr pary / druk", "car": "Auto", "driver1": "Kierowca 1", "driver2": "Kierowca 2", "note": "Uwagi"}
-        widths = {"pair": 110, "car": 140, "driver1": 230, "driver2": 230, "note": 300}
+        pair_cols = ("pair", "car", "driver1", "driver2", "different_shift", "note")
+        headings = {"pair": "Nr pary / druk", "car": "Auto", "driver1": "Kierowca 1", "driver2": "Kierowca 2", "different_shift": "Różne zmiany", "note": "Uwagi"}
+        widths = {"pair": 110, "car": 140, "driver1": 210, "driver2": 210, "different_shift": 115, "note": 260}
 
         month_tree_box = ttk.Frame(month_pairs_tab)
         month_tree_box.pack(fill="both", expand=True)
@@ -11135,6 +11268,11 @@ class DutyPlannerApp(tk.Tk):
         proposals_box.pack(fill="x", pady=(0, 10))
         ttk.Button(
             proposals_box,
+            text="Analiza służby do przekazania",
+            command=self.analyze_monthly_duty_handover,
+        ).pack(side="left", padx=(0, 12))
+        ttk.Button(
+            proposals_box,
             text="Propozycje zmian",
             command=self.preview_change_proposals_report,
         ).pack(side="left", padx=(0, 8))
@@ -11183,6 +11321,143 @@ class DutyPlannerApp(tk.Tk):
             wraplength=1100,
         ).pack(side="left", fill="x", expand=True)
         ttk.Button(info, text="Otwórz ręczne planowanie", command=lambda: self.select_tab(getattr(self, "manual_plan_tab", None))).pack(side="right", padx=(12, 0))
+
+    def create_weekend_duty_overrides_tab(self) -> None:
+        tab = self.create_scrollable_tab("Służby sob./niedz.", padding=10)
+        self.weekend_duty_overrides_tab = tab
+
+        top = ttk.LabelFrame(tab, text="Wyjątkowe służby w sobotę lub niedzielę", padding=10)
+        top.pack(fill="x", pady=(0, 10))
+        self.create_month_picker(top)
+        ttk.Button(top, text="Odśwież listę", command=self.load_weekend_duty_overrides_tree).pack(side="left", padx=(12, 0))
+        ttk.Label(
+            top,
+            text="Wpis dotyczy tylko wskazanej daty i nie zmienia standardowych ustawień służby.",
+            style="Hint.TLabel",
+        ).pack(side="left", padx=(12, 0))
+
+        form = ttk.LabelFrame(tab, text="Dodaj służby wymagane w dniu wolnym", padding=10)
+        form.pack(fill="x", pady=(0, 10))
+        ttk.Label(form, text="Data soboty lub niedzieli:").grid(row=0, column=0, sticky="w")
+        self.weekend_override_date_var = tk.StringVar()
+        self.weekend_override_date_entry = ttk.Entry(form, textvariable=self.weekend_override_date_var, width=14)
+        self.weekend_override_date_entry.grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(3, 0))
+        ttk.Button(
+            form,
+            text="📅",
+            width=3,
+            command=lambda: self.open_manual_date_calendar(
+                self.weekend_override_date_var,
+                self.weekend_override_date_entry,
+            ),
+        ).grid(row=1, column=1, sticky="w", padx=(0, 12), pady=(3, 0))
+        self.weekend_override_date_entry.bind(
+            "<Double-1>",
+            lambda _event: self.open_manual_date_calendar(
+                self.weekend_override_date_var,
+                self.weekend_override_date_entry,
+            ),
+        )
+
+        ttk.Label(form, text="Służby z listy (Ctrl/Shift — wybór wielu):").grid(row=0, column=2, sticky="w")
+        duty_choice_box = ttk.Frame(form)
+        duty_choice_box.grid(row=1, column=2, sticky="nsew", padx=(0, 12), pady=(3, 0))
+        self.weekend_override_duty_listbox = tk.Listbox(
+            duty_choice_box,
+            selectmode="extended",
+            exportselection=False,
+            height=9,
+            width=58,
+        )
+        weekend_duty_scroll = ttk.Scrollbar(
+            duty_choice_box,
+            orient="vertical",
+            command=self.weekend_override_duty_listbox.yview,
+        )
+        self.weekend_override_duty_listbox.configure(yscrollcommand=weekend_duty_scroll.set)
+        self.weekend_override_duty_listbox.pack(side="left", fill="both", expand=True)
+        weekend_duty_scroll.pack(side="left", fill="y")
+        self.weekend_override_duty_ids_by_index: list[int] = []
+        form.columnconfigure(2, weight=1)
+
+        ttk.Label(form, text="Liczba obsad:").grid(row=0, column=3, sticky="w")
+        self.weekend_override_count_var = tk.StringVar(value="1")
+        ttk.Spinbox(
+            form,
+            from_=1,
+            to=50,
+            textvariable=self.weekend_override_count_var,
+            width=8,
+        ).grid(row=1, column=3, sticky="nw", padx=(0, 12), pady=(3, 0))
+
+        ttk.Label(form, text="Uwagi:").grid(row=0, column=4, sticky="w")
+        self.weekend_override_note_var = tk.StringVar()
+        ttk.Entry(form, textvariable=self.weekend_override_note_var, width=34).grid(
+            row=1, column=4, sticky="ew", padx=(0, 12), pady=(3, 0)
+        )
+        form.columnconfigure(4, weight=1)
+
+        button_box = ttk.Frame(form)
+        button_box.grid(row=1, column=5, sticky="ne", pady=(3, 0))
+        ttk.Button(button_box, text="Zapisz wybrane", command=self.save_weekend_duty_overrides).pack(fill="x", pady=(0, 6))
+        ttk.Button(button_box, text="Najbliższy weekend", command=self.set_default_weekend_override_date).pack(fill="x", pady=(0, 6))
+        ttk.Button(button_box, text="Wyczyść wybór", command=self.clear_weekend_duty_override_form).pack(fill="x")
+
+        self.weekend_override_day_label_var = tk.StringVar(value="")
+        ttk.Label(form, textvariable=self.weekend_override_day_label_var, style="Hint.TLabel").grid(
+            row=2, column=0, columnspan=6, sticky="w", pady=(6, 0)
+        )
+        ttk.Label(
+            form,
+            text=(
+                "Wybierz jedną lub kilka służb z pełnej listy. Dla R, R2 i RN możesz ustawić liczbę obsad większą niż 1. "
+                "Po ponownym planowaniu wskazane pozycje będą obowiązkowe wyłącznie tego dnia; "
+                "datowane R/R2 mają pierwszeństwo przed miesięcznym ustawieniem „nie planować”."
+            ),
+            style="Hint.TLabel",
+            wraplength=1120,
+        ).grid(row=3, column=0, columnspan=6, sticky="w", pady=(3, 0))
+        self.weekend_override_date_var.trace_add("write", lambda *_args: self.update_weekend_override_day_label())
+
+        list_box = ttk.LabelFrame(tab, text="Zapisane wyjątki dla wybranego miesiąca", padding=10)
+        list_box.pack(fill="both", expand=True)
+        columns = ("date", "day", "code", "count", "name", "shift", "work", "note")
+        self.weekend_duty_overrides_tree = ttk.Treeview(
+            list_box,
+            columns=columns,
+            show="headings",
+            selectmode="extended",
+            height=18,
+        )
+        headings = {
+            "date": "Data",
+            "day": "Dzień",
+            "code": "Nr służby",
+            "count": "Liczba",
+            "name": "Nazwa",
+            "shift": "Zmiana",
+            "work": "Godziny pracy",
+            "note": "Uwagi",
+        }
+        widths = {"date": 110, "day": 90, "code": 95, "count": 70, "name": 250, "shift": 150, "work": 170, "note": 300}
+        for column in columns:
+            self.set_sortable_heading(self.weekend_duty_overrides_tree, column, headings[column])
+            self.weekend_duty_overrides_tree.column(
+                column,
+                width=widths[column],
+                anchor="center" if column in {"date", "day", "code", "count"} else "w",
+            )
+        y_scroll = ttk.Scrollbar(list_box, orient="vertical", command=self.weekend_duty_overrides_tree.yview)
+        self.weekend_duty_overrides_tree.configure(yscrollcommand=y_scroll.set)
+        self.weekend_duty_overrides_tree.pack(side="left", fill="both", expand=True)
+        y_scroll.pack(side="left", fill="y")
+        actions = ttk.Frame(tab)
+        actions.pack(fill="x", pady=(8, 0))
+        ttk.Button(actions, text="Usuń zaznaczone wyjątki", command=self.delete_weekend_duty_overrides).pack(side="left")
+        ttk.Button(actions, text="Przejdź do automatycznego planowania", command=lambda: self.select_tab(self.plan_tab)).pack(side="right")
+        self.configure_tree_zebra(self.weekend_duty_overrides_tree)
+        self.set_default_weekend_override_date()
+        self.load_weekend_override_duty_choices()
 
     def create_manual_plan_tab(self) -> None:
         tab = self.create_scrollable_tab("Ręczne planowanie", padding=10)
@@ -11816,6 +12091,242 @@ class DutyPlannerApp(tk.Tk):
         last_day = calendar.monthrange(year, month)[1]
         return date(year, month, 1).isoformat(), date(year, month, last_day).isoformat()
 
+    def update_weekend_override_day_label(self) -> None:
+        if not hasattr(self, "weekend_override_day_label_var"):
+            return
+        value = self.weekend_override_date_var.get().strip() if hasattr(self, "weekend_override_date_var") else ""
+        if not value:
+            self.weekend_override_day_label_var.set("")
+            return
+        try:
+            day_obj = datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            self.weekend_override_day_label_var.set("Nieprawidłowa data. Użyj formatu RRRR-MM-DD.")
+            return
+        day_name = "sobota" if day_obj.weekday() == 5 else "niedziela" if day_obj.weekday() == 6 else POLISH_WEEKDAYS[day_obj.weekday()]
+        suffix = "— data weekendowa" if day_obj.weekday() in {5, 6} else "— wybierz sobotę albo niedzielę"
+        self.weekend_override_day_label_var.set(f"{day_obj.strftime('%d.%m.%Y')} ({day_name}) {suffix}")
+
+    def set_default_weekend_override_date(self) -> None:
+        if not hasattr(self, "weekend_override_date_var"):
+            return
+        target = self.get_target_year_month()
+        if target is None:
+            return
+        year, month = target
+        today = date.today()
+        current = today if (today.year, today.month) == (year, month) else date(year, month, 1)
+        last_day = date(year, month, calendar.monthrange(year, month)[1])
+        while current <= last_day and current.weekday() not in {5, 6}:
+            current += timedelta(days=1)
+        if current > last_day:
+            current = date(year, month, 1)
+            while current.weekday() not in {5, 6}:
+                current += timedelta(days=1)
+        self.weekend_override_date_var.set(current.isoformat())
+
+    def clear_weekend_duty_override_form(self) -> None:
+        duty_listbox = getattr(self, "weekend_override_duty_listbox", None)
+        if duty_listbox is not None:
+            duty_listbox.selection_clear(0, tk.END)
+        if hasattr(self, "weekend_override_note_var"):
+            self.weekend_override_note_var.set("")
+        if hasattr(self, "weekend_override_count_var"):
+            self.weekend_override_count_var.set("1")
+
+    def load_weekend_override_duty_choices(self) -> None:
+        """Wczytaj pełną listę realnych służb, również RN oraz R/R2."""
+        duty_listbox = getattr(self, "weekend_override_duty_listbox", None)
+        if duty_listbox is None:
+            return
+        duty_listbox.delete(0, tk.END)
+        self.weekend_override_duty_ids_by_index = []
+        rows = self.rows(
+            """
+            SELECT id, code, name, duty_type, shift, work_range
+            FROM duties
+            WHERE TRIM(COALESCE(code, '')) <> ''
+            ORDER BY CASE WHEN TRIM(COALESCE(code, '')) GLOB '[0-9]*' THEN 0 ELSE 1 END,
+                     CASE WHEN TRIM(COALESCE(code, '')) GLOB '[0-9]*' THEN CAST(code AS INTEGER) ELSE 9999 END,
+                     UPPER(TRIM(COALESCE(code, ''))), id
+            """
+        )
+        for row in rows:
+            if self.is_day_off_duty(row):
+                continue
+            code = str(row["code"] or "").strip()
+            name = str(row["name"] or "").strip()
+            shift = str(row["shift"] or "").strip()
+            work_range = str(row["work_range"] or "").strip()
+            details = " | ".join(part for part in (name, shift, work_range) if part and part != code)
+            label = f"{code} — {details}" if details else code
+            duty_listbox.insert(tk.END, label)
+            self.weekend_override_duty_ids_by_index.append(int(row["id"]))
+
+    def selected_weekend_override_duty_ids(self) -> list[int]:
+        duty_listbox = getattr(self, "weekend_override_duty_listbox", None)
+        duty_ids = getattr(self, "weekend_override_duty_ids_by_index", [])
+        if duty_listbox is None:
+            return []
+        selected: list[int] = []
+        for index_raw in duty_listbox.curselection():
+            try:
+                duty_id = int(duty_ids[int(index_raw)])
+            except (IndexError, TypeError, ValueError):
+                continue
+            if duty_id not in selected:
+                selected.append(duty_id)
+        return selected
+
+    def load_weekend_duty_overrides_tree(self) -> None:
+        tree = getattr(self, "weekend_duty_overrides_tree", None)
+        if tree is None:
+            return
+        tree.delete(*tree.get_children())
+        selected = self.selected_month_range()
+        if selected is None:
+            return
+        start, end = selected
+        rows = self.rows(
+            """
+            SELECT o.id, o.plan_date, d.code, COALESCE(o.required_count, 1) AS required_count,
+                   d.name, d.shift, d.work_range, COALESCE(o.note, '') AS note
+            FROM weekend_duty_overrides o
+            JOIN duties d ON d.id=o.duty_id
+            WHERE o.plan_date BETWEEN ? AND ?
+            ORDER BY o.plan_date,
+                     CASE WHEN TRIM(COALESCE(d.code, '')) GLOB '[0-9]*' THEN CAST(d.code AS INTEGER) ELSE 9999 END,
+                     d.code
+            """,
+            (start, end),
+        )
+        for row_index, row in enumerate(rows):
+            try:
+                day_obj = datetime.strptime(str(row["plan_date"]), "%Y-%m-%d").date()
+                day_label = "sobota" if day_obj.weekday() == 5 else "niedziela" if day_obj.weekday() == 6 else POLISH_WEEKDAYS[day_obj.weekday()]
+            except ValueError:
+                day_label = ""
+            tree.insert(
+                "",
+                "end",
+                iid=str(int(row["id"])),
+                tags=("evenrow" if row_index % 2 == 0 else "oddrow",),
+                values=(
+                    row["plan_date"],
+                    day_label,
+                    row["code"] or "",
+                    max(1, int(row["required_count"] or 1)),
+                    row["name"] or "",
+                    row["shift"] or "",
+                    row["work_range"] or "",
+                    row["note"] or "",
+                ),
+            )
+
+    def save_weekend_duty_overrides(self) -> None:
+        try:
+            day_obj = datetime.strptime(self.weekend_override_date_var.get().strip(), "%Y-%m-%d").date()
+        except ValueError:
+            messagebox.showerror("Służby weekendowe", "Podaj prawidłową datę w formacie RRRR-MM-DD.")
+            return
+        if day_obj.weekday() not in {5, 6}:
+            messagebox.showerror("Służby weekendowe", "Wybrana data musi przypadać w sobotę albo niedzielę.")
+            return
+        duty_ids = self.selected_weekend_override_duty_ids()
+        if not duty_ids:
+            messagebox.showerror("Służby weekendowe", "Wybierz z listy co najmniej jedną służbę.")
+            return
+
+        try:
+            required_count = int(self.weekend_override_count_var.get().strip())
+        except (TypeError, ValueError):
+            messagebox.showerror("Służby weekendowe", "Liczba obsad musi być liczbą całkowitą od 1 do 50.")
+            return
+        if required_count < 1 or required_count > 50:
+            messagebox.showerror("Służby weekendowe", "Liczba obsad musi mieścić się w zakresie od 1 do 50.")
+            return
+
+        placeholders = ",".join("?" for _ in duty_ids)
+        duty_rows = self.rows(
+            f"""
+            SELECT id, code, name, duty_type, shift, line
+            FROM duties
+            WHERE id IN ({placeholders})
+            """,
+            tuple(duty_ids),
+        )
+        by_id = {int(row["id"]): row for row in duty_rows}
+        missing_ids = [duty_id for duty_id in duty_ids if duty_id not in by_id]
+        if missing_ids:
+            messagebox.showerror("Służby weekendowe", "Nie znaleziono wybranych służb w bazie.")
+            return
+        if required_count > 1:
+            invalid_multiple_codes = [
+                str(by_id[duty_id]["code"] or duty_id)
+                for duty_id in duty_ids
+                if self.normalize_code(by_id[duty_id]["code"]) not in {"R", "R2", "RN"}
+            ]
+            if invalid_multiple_codes:
+                messagebox.showerror(
+                    "Służby weekendowe",
+                    "Liczbę większą niż 1 można ustawić tylko dla R, R2 lub RN. "
+                    f"Pozostałe wybrane służby: {', '.join(invalid_multiple_codes)}.",
+                )
+                return
+
+        note = self.weekend_override_note_var.get().strip()
+        saved = 0
+        try:
+            for duty_id in duty_ids:
+                duty = by_id[duty_id]
+                if self.is_day_off_duty(duty):
+                    raise ValueError(f"Kod {duty['code']} jest oznaczeniem wolnego, a nie służbą.")
+                self.conn.execute(
+                    """
+                    INSERT INTO weekend_duty_overrides(plan_date, duty_id, required_count, note, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(plan_date, duty_id) DO UPDATE SET
+                        required_count=excluded.required_count,
+                        note=excluded.note,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (day_obj.isoformat(), int(duty_id), required_count, note),
+                )
+                saved += 1
+            self.conn.commit()
+        except Exception as exc:
+            self.conn.rollback()
+            self.log_exception("save_weekend_duty_overrides", exc)
+            messagebox.showerror("Służby weekendowe", f"Nie udało się zapisać wyjątków.\n\n{exc}")
+            return
+        self.target_year_var.set(str(day_obj.year))
+        self.target_month_var.set(f"{day_obj.month:02d}")
+        self.load_weekend_duty_overrides_tree()
+        self.clear_weekend_duty_override_form()
+        self.set_status(
+            f"Zapisano {saved} pozycji po {required_count} obsad na {day_obj.isoformat()}. Uruchom ponownie planowanie miesiąca.",
+            "Good.TLabel",
+        )
+
+    def delete_weekend_duty_overrides(self) -> None:
+        tree = getattr(self, "weekend_duty_overrides_tree", None)
+        if tree is None:
+            return
+        selected_ids = [int(item_id) for item_id in tree.selection() if str(item_id).isdigit()]
+        if not selected_ids:
+            messagebox.showinfo("Służby weekendowe", "Zaznacz co najmniej jeden wyjątek do usunięcia.")
+            return
+        if not messagebox.askyesno(
+            "Usuń wyjątki weekendowe",
+            f"Usunąć zaznaczone wyjątki ({len(selected_ids)})? Istniejący plan zmieni się dopiero po ponownym planowaniu miesiąca.",
+        ):
+            return
+        placeholders = ",".join("?" for _ in selected_ids)
+        self.conn.execute(f"DELETE FROM weekend_duty_overrides WHERE id IN ({placeholders})", tuple(selected_ids))
+        self.conn.commit()
+        self.load_weekend_duty_overrides_tree()
+        self.set_status(f"Usunięto {len(selected_ids)} wyjątków weekendowych.", "Good.TLabel")
+
     def selected_month_range(self) -> tuple[str, str] | None:
         value = self.get_target_year_month()
         if value is None:
@@ -12062,6 +12573,9 @@ class DutyPlannerApp(tk.Tk):
         self.load_planned_months_tree()
         if hasattr(self, "plan_list_tree"):
             self.load_plan_list_tree()
+        if hasattr(self, "weekend_duty_overrides_tree"):
+            self.set_default_weekend_override_date()
+            self.load_weekend_duty_overrides_tree()
         self.set_status(f"Ustawiono miesiąc {month_key}. Gotowy plan i rbh ustawiono na ten miesiąc.", "Good.TLabel")
 
     def each_date(self, start: str, end: str) -> list[str]:
@@ -12246,6 +12760,8 @@ class DutyPlannerApp(tk.Tk):
         for attr in ("duty_block_1_var", "duty_block_2_var"):
             if hasattr(self, attr) and duty_labels and getattr(self, attr).get() not in self.duty_label_to_id:
                 getattr(self, attr).set(duty_labels[0])
+        if hasattr(self, "weekend_override_duty_listbox"):
+            self.load_weekend_override_duty_choices()
         self.load_car_reference_data()
 
     def refresh_all(self) -> None:
@@ -12261,6 +12777,8 @@ class DutyPlannerApp(tk.Tk):
         if hasattr(self, "duty_driver_exclusions_tree"):
             self.load_duty_driver_exclusions_tree()
         self.load_plan_list_tree()
+        if hasattr(self, "weekend_duty_overrides_tree"):
+            self.load_weekend_duty_overrides_tree()
         self.load_result_plan_tree()
         self.load_compliance_tree()
 
@@ -12798,9 +13316,10 @@ class DutyPlannerApp(tk.Tk):
         driver_id = self.resolve_driver_id_from_text(self.duty_driver_exclusion_driver_var.get(), allow_none=False) if hasattr(self, "duty_driver_exclusion_driver_var") else None
         value = "auto"
         if month_key and driver_id is not None:
-            info = self.driver_month_start_shift_effective_info(int(driver_id), month_key)
-            if info is not None and info[0] in {"morning", "afternoon"}:
-                value = info[0]
+            # Radio pokazuje wyłącznie zapis wykonany dokładnie dla wskazanego
+            # miesiąca. Wartość odziedziczona nadal jest widoczna w tabeli wraz
+            # ze źródłem, ale nie może wyglądać jak ręcznie zapisany wybór.
+            value = self.driver_month_start_shift_map(month_key).get(int(driver_id), "auto")
         self.driver_month_start_shift_var.set(value)
 
     def save_driver_month_start_shift_preference(self) -> None:
@@ -13570,6 +14089,52 @@ class DutyPlannerApp(tk.Tk):
     def is_planning_weekend_or_holiday(self, day: date) -> bool:
         return self.planning_weekday(day) >= 5
 
+    def weekend_first_planning_day_numbers(self, year: int, month: int) -> list[int]:
+        """Najpierw weekendy i święta, potem dni robocze; wewnątrz grup chronologicznie."""
+        month_days = calendar.monthrange(int(year), int(month))[1]
+        day_numbers = list(range(1, month_days + 1))
+        return sorted(
+            day_numbers,
+            key=lambda day_no: (
+                0 if self.is_planning_weekend_or_holiday(date(int(year), int(month), int(day_no))) else 1,
+                int(day_no),
+            ),
+        )
+
+    @staticmethod
+    def weekly_rest_buffer_rbh_rank(
+        monthly_norm_hours: float,
+        current_hours: float,
+        duty_hours: float,
+        same_week_service: bool,
+        shift_mismatch: bool,
+        work_count: int,
+        driver_id: int,
+    ) -> tuple[object, ...]:
+        """Deterministyczna kolejność odbiorców służby z bufora przerwy.
+
+        Najpierw domykamy RBH możliwie dokładnie, a dopiero przy podobnym
+        niedoborze premiujemy tę samą służbę i zgodną zmianę.
+        """
+        deficit = max(0.0, float(monthly_norm_hours) - float(current_hours))
+        remaining_after = max(0.0, deficit - float(duty_hours))
+        return (
+            remaining_after,
+            0 if bool(same_week_service) else 1,
+            0 if not bool(shift_mismatch) else 1,
+            -deficit,
+            int(work_count),
+            int(driver_id),
+        )
+
+    def planning_shift_reference_date(self, day: date) -> date:
+        """Sobota dziedziczy zmianę z piątku, a niedziela z następującego poniedziałku."""
+        if day.weekday() == 5:
+            return day - timedelta(days=1)
+        if day.weekday() == 6:
+            return day + timedelta(days=1)
+        return day
+
     def is_calendar_workday_for_norm(self, day: date) -> bool:
         """Dzień roboczy używany do miesięcznej normy rbh: pn.-pt. bez świąt."""
         return day.weekday() <= 4 and not self.is_public_holiday(day)
@@ -14301,12 +14866,16 @@ class DutyPlannerApp(tk.Tk):
         suggestions = {
             "DOBOWY_CZAS_PRACY": "Skróć lub zmień kierowcę.",
             "ODPOCZYNEK_DOBOWY": "Przesuń służbę lub zmień kierowcę.",
+            "ODPOCZYNEK_TYGODNIOWY_PRZEJSCIE": "Zmień obsadę służby niedzielnej albo zapewnij pełne 24 h od końca poprzedniej służby.",
             "TYGODNIOWY_CZAS_PRACY": "Zdejmij lub skróć służbę.",
             "CIAG_DNI_PRACY": "Zmień obsadę albo zostaw dzień odpoczynku; W/WG/urlop są liczone jako odpoczynek.",
             "SREDNIA_TYGODNIOWA": "Dodaj wolne lub skróć służby.",
             "MIESIECZNA_NORMA_RBH": "Zdejmij lub skróć służbę.",
             "ODPOCZYNEK_TYGODNIOWY": "Sprawdź sąsiednie realne służby; W/WG/urlop są liczone jako odpoczynek.",
             "ODPOCZYNEK_TYGODNIOWY_561": "Sprawdź realne służby i rekompensatę; W/WG/urlop są liczone jako odpoczynek.",
+            "ODPOCZYNEK_TYGODNIOWY_TERMIN_6_DOB": "Zdejmij lub przesuń służbę przed terminem i rozpocznij ciągły odpoczynek co najmniej 24 h.",
+            "ODPOCZYNEK_TYGODNIOWY_45_PO_SKROCONYM": "Po skróconym odpoczynku pozostaw kolejny ciągły odpoczynek co najmniej 45 h.",
+            "PARA_TA_SAMA_ZMIANA": "Zmień jednemu kierowcy służbę na przeciwną zmianę albo wyłącz blokadę w ustawieniach pary.",
             "PRACA_SOBOTA_NIEDZIELA": "Zmień niedzielną służbę.",
             "DWA_WEEKENDY_POD_RZAD": "Zamień weekend.",
             "SLUZBA_ZAKAZ_DLA_KIEROWCY": "Usuń zakaz lub zmień obsadę.",
@@ -14348,12 +14917,10 @@ class DutyPlannerApp(tk.Tk):
         return "WOLNE GRAFIKOWE" in normalized
 
     def is_full_day_manual_special_duty(self, duty: sqlite3.Row | dict[str, object]) -> bool:
-        """NAJEM/NAJEM2 traktuj jako całodniowy ręczny wpis bez godzin odpoczynku.
+        """Czy wpis jest ręcznym wyjazdem wielokrotnym NAJEM/NAJEM2.
 
-        Wpis blokuje całą komórkę kierowcy w danym dniu i może liczyć RBH, ale
-        nie tworzy przedziału start-koniec do kontroli odpoczynku. Dzięki temu
-        program nie dopisuje sztucznego WG przed NAJEM tylko dlatego, że w bazie
-        NAJEM ma techniczne godziny.
+        Ta klasyfikacja steruje zapisem i możliwością wielu przydziałów w dniu.
+        Nie wyłącza godzin służby z kontroli odpoczynku.
         """
         try:
             code = self.normalize_code(duty["code"])
@@ -14396,9 +14963,19 @@ class DutyPlannerApp(tk.Tk):
         """
         if self.is_rn_duty(duty):
             return True
-        if self.is_full_day_manual_special_duty(duty):
-            return False
         return not self.is_day_off_duty(duty)
+
+    def counts_as_workday(self, duty: sqlite3.Row | dict[str, object]) -> bool:
+        """Czy wpis zajmuje dzień pracy w limicie kolejnych dni.
+
+        NAJEM/NAJEM2 oraz ZAGŁĘBIE są realnymi dniami pracy. Do kontroli
+        odpoczynku używane są zapisane godziny rozpoczęcia i zakończenia służby.
+        """
+        return bool(
+            self.is_full_day_manual_special_duty(duty)
+            or self.is_zaglebie_duty(duty)
+            or self.is_rest_relevant_duty(duty)
+        )
 
     def is_vacation_duty_code(self, code: object) -> bool:
         return self.normalize_code(code) in {"UW", "UO", "CH"}
@@ -14614,6 +15191,7 @@ class DutyPlannerApp(tk.Tk):
         )
 
         entries_by_driver: dict[int, list[dict[str, object]]] = defaultdict(list)
+        workday_entries_by_driver: dict[int, list[dict[str, object]]] = defaultdict(list)
         rbh_entries_by_driver: dict[int, list[dict[str, object]]] = defaultdict(list)
         violations: list[dict[str, object]] = []
 
@@ -14648,11 +15226,12 @@ class DutyPlannerApp(tk.Tk):
             }
             if active_work:
                 entries_by_driver[int(row["driver_id"])].append(entry)
-            # v306/v342: NAJEM/NAJEM2 liczy RBH jako całodniowy wpis ręczny, ale
-            # nie wchodzi do listy godzinowych przedziałów odpoczynku. UW liczy 8 rbh
-            # w bilansie planu, ale w kontroli czasu pracy ma być jak WG, więc nie
-            # dokładamy go do godzin sprawdzanych limitami tygodnia/miesiąca/średniej.
-            if (active_work or self.is_full_day_manual_special_duty(row)) and not self.is_paid_rest_only_for_compliance(row):
+            if self.counts_as_workday(row):
+                workday_entries_by_driver[int(row["driver_id"])].append(entry)
+            # NAJEM/NAJEM2 oraz ZAGŁĘBIE są realną pracą i wchodzą do godzinowych
+            # przedziałów odpoczynku. UW liczy 8 rbh w bilansie planu, ale w kontroli
+            # czasu pracy ma być jak WG, więc nie dokładamy go do limitów.
+            if self.counts_as_workday(row) and not self.is_paid_rest_only_for_compliance(row):
                 rbh_entries_by_driver[int(row["driver_id"])].append(entry)
 
             if active_work and work_hours > max_daily + 1e-6:
@@ -14666,26 +15245,33 @@ class DutyPlannerApp(tk.Tk):
                     "details": f"{row['code']}: {self.format_hours(work_hours)}>{self.format_hours(max_daily)} h.",
                 })
 
-        for driver_id in sorted(set(entries_by_driver) | set(rbh_entries_by_driver)):
+        for driver_id in sorted(set(entries_by_driver) | set(workday_entries_by_driver) | set(rbh_entries_by_driver)):
             entries = entries_by_driver.get(driver_id, [])
             entries.sort(key=lambda item: item["start_dt"])
 
             for prev, current in zip(entries, entries[1:]):
                 rest_hours = max(0.0, (current["start_dt"] - prev["end_dt"]).total_seconds() / 3600)
-                if rest_hours < min_daily_rest - 1e-6:
+                required_rest, rest_kind = self.required_rest_between_services(
+                    prev["end_dt"],
+                    current["start_dt"],
+                    min_daily_rest,
+                    reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                )
+                if rest_hours < required_rest - 1e-6:
                     violations.append({
                         "severity": "BŁĄD",
                         "plan_date": current["plan_date"],
                         "driver_id": driver_id,
                         "duty_id": current["duty_id"],
-                        "rule_code": "ODPOCZYNEK_DOBOWY",
-                        "message": "Za krótki odpoczynek.",
+                        "rule_code": "ODPOCZYNEK_TYGODNIOWY_PRZEJSCIE" if rest_kind == "weekly" else "ODPOCZYNEK_DOBOWY",
+                        "message": "Za krótki odpoczynek tygodniowy." if rest_kind == "weekly" else "Za krótki odpoczynek.",
                         "details": (
-                            f"{prev['code']}→{current['code']}: {self.format_hours(rest_hours)}<{self.format_hours(min_daily_rest)} h."
+                            f"{prev['code']}→{current['code']}: {self.format_hours(rest_hours)}<{self.format_hours(required_rest)} h; "
+                            f"{prev['end_dt'].strftime('%Y-%m-%d %H:%M')}→{current['start_dt'].strftime('%Y-%m-%d %H:%M')}."
                         ),
                     })
 
-            work_dates = {entry["start_dt"].date() for entry in entries}
+            work_dates = {entry["start_dt"].date() for entry in workday_entries_by_driver.get(driver_id, entries)}
             if max_consecutive_work_days > 0 and work_dates:
                 sorted_work_dates = sorted(work_dates)
                 run_start = sorted_work_dates[0]
@@ -14703,18 +15289,17 @@ class DutyPlannerApp(tk.Tk):
                             "duty_id": None,
                             "rule_code": "CIAG_DNI_PRACY",
                             "message": "Za dużo dni pracy z rzędu.",
-                            "details": f"{run_start.isoformat()} - {prev_day.isoformat()}: {run_len}>{max_consecutive_work_days} dni. RN liczony jako praca.",
+                            "details": f"{run_start.isoformat()} - {prev_day.isoformat()}: {run_len}>{max_consecutive_work_days} dni. RN, NAJEM i ZAGŁĘBIE liczone jako praca.",
                         })
                     if day_obj is not None:
                         run_start = prev_day = day_obj
-            for entry in entries:
-                entry_day = entry["start_dt"].date()
+            for entry_day in sorted(work_dates):
                 if entry_day.weekday() == 6 and (entry_day - timedelta(days=1)) in work_dates:
                     violations.append({
                         "severity": "BŁĄD",
-                        "plan_date": entry["plan_date"],
+                        "plan_date": entry_day.isoformat(),
                         "driver_id": driver_id,
-                        "duty_id": entry["duty_id"],
+                        "duty_id": None,
                         "rule_code": "PRACA_SOBOTA_NIEDZIELA",
                         "message": "Sobota + niedziela.",
                         "details": "Niedziela po sobocie.",
@@ -14782,6 +15367,7 @@ class DutyPlannerApp(tk.Tk):
             if check_weekly_rest:
                 violations.extend(self.weekly_rest_violations(driver_id, entries, start, end, min_weekly_rest, regular_weekly_rest, reduced_weekly_rest, check_regulation_561))
 
+        violations.extend(self.pair_same_shift_violations(start, end))
         for violation in violations:
             violation["suggestion"] = self.contextual_compliance_suggestion(violation, start, end)
         return violations
@@ -14963,6 +15549,404 @@ class DutyPlannerApp(tk.Tk):
                 return True
         return False
 
+    @staticmethod
+    def merged_service_intervals(
+        intervals: list[tuple[datetime, datetime]],
+    ) -> list[tuple[datetime, datetime]]:
+        """Uporządkuj rzeczywiste przedziały służb i połącz ich kolizje."""
+        cleaned = sorted(
+            (start_dt, end_dt)
+            for start_dt, end_dt in intervals
+            if start_dt is not None and end_dt is not None and start_dt < end_dt
+        )
+        merged: list[tuple[datetime, datetime]] = []
+        for start_dt, end_dt in cleaned:
+            if not merged or start_dt > merged[-1][1]:
+                merged.append((start_dt, end_dt))
+            elif end_dt > merged[-1][1]:
+                merged[-1] = (merged[-1][0], end_dt)
+        return merged
+
+    def qualifying_weekly_rest_gaps(
+        self,
+        intervals: list[tuple[datetime, datetime]],
+        reduced_weekly_rest: float,
+    ) -> list[dict[str, object]]:
+        """Zwróć rzeczywiste odpoczynki >= minimum skróconego odpoczynku.
+
+        Uwzględniamy wyłącznie czas od zakończenia jednej służby do rozpoczęcia
+        następnej. W/WG/UW nie tworzą własnych godzin, tylko pozostawiają realny
+        odstęp między sąsiednimi służbami.
+        """
+        merged = self.merged_service_intervals(intervals)
+        gaps: list[dict[str, object]] = []
+        for previous, current in zip(merged, merged[1:]):
+            gap_start = previous[1]
+            gap_end = current[0]
+            gap_hours = (gap_end - gap_start).total_seconds() / 3600.0
+            if gap_hours + 1e-6 < float(reduced_weekly_rest):
+                continue
+            gaps.append({
+                "start": gap_start,
+                "end": gap_end,
+                "hours": gap_hours,
+            })
+        return gaps
+
+    def weekly_rest_work_date_count(
+        self,
+        merged_intervals: list[tuple[datetime, datetime]],
+        previous_rest_end: datetime,
+        next_rest_start: datetime,
+    ) -> int:
+        """Policz różne dni rozpoczęcia pracy między odpoczynkami tygodniowymi.
+
+        RN liczy się jako dzień pracy według daty rozpoczęcia. Przerwa >=24 h
+        wewnątrz tego okresu nie musi być automatycznie kwalifikowana jako
+        odpoczynek tygodniowy, jeżeli właściwy kolejny odpoczynek zaczyna się po
+        najwyżej sześciu dniach rzeczywistej pracy.
+        """
+        work_dates = {
+            start_dt.date()
+            for start_dt, end_dt in merged_intervals
+            if end_dt > previous_rest_end and start_dt < next_rest_start
+        }
+        return len(work_dates)
+
+    def work_date_run_containing_candidate_without_weekly_rest(
+        self,
+        existing_intervals: list[tuple[datetime, datetime]],
+        candidate_interval: tuple[datetime, datetime],
+        minimum_weekly_rest: float,
+    ) -> int:
+        """Policz dni pracy kandydata od ostatniej rzeczywistej przerwy >=24 h.
+
+        Kontrola nie potrzebuje wcześniejszego odpoczynku jako punktu odniesienia.
+        Jest to ważne na początku miesiąca: siedem kolejnych RN nadal ma zostać
+        odrzucone, nawet gdy wcześniejsza służba nie mieści się w buforze planu.
+        """
+        candidate_start, candidate_end = candidate_interval
+        tagged = [
+            (start_dt, end_dt, False)
+            for start_dt, end_dt in existing_intervals
+            if start_dt is not None and end_dt is not None and start_dt < end_dt
+        ]
+        tagged.append((candidate_start, candidate_end, True))
+        tagged.sort(key=lambda item: (item[0], item[1]))
+
+        current_end: datetime | None = None
+        current_dates: set[date] = set()
+        contains_candidate = False
+        minimum_gap = float(minimum_weekly_rest)
+
+        for start_dt, end_dt, is_candidate in tagged:
+            if current_end is not None:
+                gap_hours = (start_dt - current_end).total_seconds() / 3600.0
+                if gap_hours + 1e-6 >= minimum_gap:
+                    if contains_candidate:
+                        return len(current_dates)
+                    current_dates = set()
+                    contains_candidate = False
+            current_dates.add(start_dt.date())
+            contains_candidate = contains_candidate or is_candidate
+            current_end = end_dt if current_end is None else max(current_end, end_dt)
+
+        return len(current_dates) if contains_candidate else 0
+
+    def weekly_rest_deadline_violations(
+        self,
+        intervals: list[tuple[datetime, datetime]],
+        reduced_weekly_rest: float,
+        max_start_delay_hours: float = 6.0 * 24.0,
+    ) -> list[dict[str, object]]:
+        """Wykryj przekroczenie ruchomego terminu odpoczynku tygodniowego.
+
+        Kolejny odpoczynek tygodniowy może wypaść w dowolnym dniu. Musi jednak
+        rozpocząć się najpóźniej 6 dób po zakończeniu poprzedniego odpoczynku.
+        Ostatnią otwartą sekwencję uznajemy za naruszoną dopiero wtedy, gdy
+        odpoczynek zaczęty zaraz po ostatniej służbie też byłby już spóźniony.
+        """
+        merged = self.merged_service_intervals(intervals)
+        rests = self.qualifying_weekly_rest_gaps(intervals, reduced_weekly_rest)
+        if not merged or not rests:
+            return []
+
+        max_delay = float(max_start_delay_hours)
+        max_work_dates = max(1, int(round(max_delay / 24.0)))
+        result: list[dict[str, object]] = []
+        for previous, following in zip(rests, rests[1:]):
+            deadline = previous["end"] + timedelta(hours=max_delay)
+            if following["start"] <= deadline + timedelta(microseconds=1):
+                continue
+            if self.weekly_rest_work_date_count(
+                merged,
+                previous["end"],
+                following["start"],
+            ) <= max_work_dates:
+                continue
+            result.append({
+                "kind": "between",
+                "previous_rest": previous,
+                "next_rest": following,
+                "deadline": deadline,
+                "observed_start": following["start"],
+            })
+
+        last_rest = rests[-1]
+        deadline = last_rest["end"] + timedelta(hours=max_delay)
+        earliest_future_rest_start = merged[-1][1]
+        open_work_dates = self.weekly_rest_work_date_count(
+            merged,
+            last_rest["end"],
+            earliest_future_rest_start,
+        )
+        if (
+            earliest_future_rest_start > deadline + timedelta(microseconds=1)
+            and open_work_dates > max_work_dates
+        ):
+            result.append({
+                "kind": "open",
+                "previous_rest": last_rest,
+                "next_rest": None,
+                "deadline": deadline,
+                "observed_start": earliest_future_rest_start,
+            })
+        return result
+
+    def new_weekly_rest_deadline_violation(
+        self,
+        existing_intervals: list[tuple[datetime, datetime]],
+        candidate_interval: tuple[datetime, datetime],
+        reduced_weekly_rest: float,
+        max_start_delay_hours: float = 6.0 * 24.0,
+    ) -> dict[str, object] | None:
+        """Zwróć tylko naruszenie terminu utworzone przez bieżącego kandydata."""
+        def signature(item: dict[str, object]) -> tuple[object, ...]:
+            previous = dict(item["previous_rest"])
+            following = item.get("next_rest")
+            following_start = dict(following)["start"] if following is not None else None
+            return item["kind"], previous["end"], following_start, item["deadline"]
+
+        before = self.weekly_rest_deadline_violations(
+            existing_intervals,
+            reduced_weekly_rest,
+            max_start_delay_hours,
+        )
+        before_signatures = {signature(item) for item in before}
+        after = self.weekly_rest_deadline_violations(
+            list(existing_intervals) + [candidate_interval],
+            reduced_weekly_rest,
+            max_start_delay_hours,
+        )
+        candidate_start, candidate_end = candidate_interval
+        for item in after:
+            if signature(item) in before_signatures:
+                continue
+            previous = dict(item["previous_rest"])
+            if previous["end"] <= candidate_end and item["observed_start"] >= candidate_start:
+                return item
+        return None
+
+    def selected_weekly_rest_gaps(
+        self,
+        intervals: list[tuple[datetime, datetime]],
+        reduced_weekly_rest: float,
+        regular_weekly_rest: float,
+        max_start_delay_hours: float = 6.0 * 24.0,
+    ) -> list[dict[str, object]]:
+        """Wybierz rzeczywistą sekwencję odpoczynków tygodniowych.
+
+        Nie każdy odstęp >=24 h musi być osobnym odpoczynkiem tygodniowym. Z
+        kwalifikujących się przerw wybieramy podciąg, w którym kolejny odpoczynek
+        zaczyna się najpóźniej 6 dób po końcu poprzedniego. Najpierw minimalizujemy
+        układy krótki->krótki, następnie długi->długi, a na końcu liczbę wybranych
+        przerw. Pozwala to zachować układ krótki->długi bez sztucznego dokładania
+        dwóch regularnych odpoczynków po sobie.
+        """
+        gaps = self.qualifying_weekly_rest_gaps(intervals, reduced_weekly_rest)
+        if len(gaps) <= 1:
+            return gaps
+
+        regular_limit = float(regular_weekly_rest)
+        max_delay = float(max_start_delay_hours)
+        max_work_dates = max(1, int(round(max_delay / 24.0)))
+        merged = self.merged_service_intervals(intervals)
+
+        def rest_kind(item: dict[str, object]) -> str:
+            return "regular" if float(item["hours"]) + 1e-6 >= regular_limit else "reduced"
+
+        # Stan przechowuje koszt (krótki->krótki, długi->długi, liczba
+        # odpoczynków) oraz indeksy wybranej sekwencji kończącej się w danym gapie.
+        states: dict[int, tuple[tuple[int, int, int], list[int]]] = {
+            0: ((0, 0, 1), [0])
+        }
+        for current_index in range(1, len(gaps)):
+            best_state: tuple[tuple[int, int, int], list[int]] | None = None
+            current = gaps[current_index]
+            current_kind = rest_kind(current)
+            for previous_index, (previous_cost, previous_path) in states.items():
+                previous = gaps[previous_index]
+                delay_hours = (
+                    (current["start"] - previous["end"]).total_seconds() / 3600.0
+                )
+                work_date_count = self.weekly_rest_work_date_count(
+                    merged,
+                    previous["end"],
+                    current["start"],
+                )
+                if delay_hours > max_delay + 1e-6 and work_date_count > max_work_dates:
+                    continue
+                previous_kind = rest_kind(previous)
+                short_after_short = 1 if previous_kind == current_kind == "reduced" else 0
+                long_after_long = 1 if previous_kind == current_kind == "regular" else 0
+                candidate_cost = (
+                    previous_cost[0] + short_after_short,
+                    previous_cost[1] + long_after_long,
+                    previous_cost[2] + 1,
+                )
+                candidate_state = (candidate_cost, previous_path + [current_index])
+                if best_state is None or candidate_state[0] < best_state[0]:
+                    best_state = candidate_state
+            if best_state is not None:
+                states[current_index] = best_state
+
+        final_state = states.get(len(gaps) - 1)
+        if final_state is None:
+            # Brak legalnego przejścia oznacza rzeczywistą lukę w pokryciu. Nie
+            # ukrywamy jej przez usunięcie kandydatów z raportu.
+            return gaps
+        return [gaps[index] for index in final_state[1]]
+
+    def redundant_regular_weekly_rest_gaps(
+        self,
+        intervals: list[tuple[datetime, datetime]],
+        reduced_weekly_rest: float,
+        regular_weekly_rest: float,
+    ) -> list[dict[str, object]]:
+        """Zwróć regularne przerwy, których legalna sekwencja nie potrzebuje."""
+        all_gaps = self.qualifying_weekly_rest_gaps(intervals, reduced_weekly_rest)
+        selected = self.selected_weekly_rest_gaps(
+            intervals,
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        selected_keys = {(item["start"], item["end"]) for item in selected}
+        return [
+            item
+            for item in all_gaps
+            if float(item["hours"]) + 1e-6 >= float(regular_weekly_rest)
+            and (item["start"], item["end"]) not in selected_keys
+        ]
+
+    def weekly_rest_candidate_optimization_rank(
+        self,
+        existing_intervals: list[tuple[datetime, datetime]],
+        candidate_interval: tuple[datetime, datetime],
+        reduced_weekly_rest: float,
+        regular_weekly_rest: float,
+    ) -> tuple[int, float]:
+        """Punktuj pracę, która skraca zbędny drugi odpoczynek regularny."""
+        before = self.redundant_regular_weekly_rest_gaps(
+            existing_intervals,
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        after = self.redundant_regular_weekly_rest_gaps(
+            list(existing_intervals) + [candidate_interval],
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        count_reduction = len(before) - len(after)
+        hours_reduction = sum(float(item["hours"]) for item in before) - sum(
+            float(item["hours"]) for item in after
+        )
+        return (-count_reduction, -hours_reduction)
+
+    def consecutive_reduced_weekly_rest_violations(
+        self,
+        intervals: list[tuple[datetime, datetime]],
+        reduced_weekly_rest: float,
+        regular_weekly_rest: float,
+    ) -> list[dict[str, object]]:
+        """Wykryj dwa skrócone odpoczynki tygodniowe występujące kolejno."""
+        gaps = self.selected_weekly_rest_gaps(
+            intervals,
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        result: list[dict[str, object]] = []
+        for first, second in zip(gaps, gaps[1:]):
+            if float(first["hours"]) + 1e-6 >= float(regular_weekly_rest):
+                continue
+            if float(second["hours"]) + 1e-6 >= float(regular_weekly_rest):
+                continue
+            result.append({"first": first, "second": second})
+        return result
+
+    def new_consecutive_reduced_weekly_rest_violation(
+        self,
+        existing_intervals: list[tuple[datetime, datetime]],
+        candidate_interval: tuple[datetime, datetime],
+        reduced_weekly_rest: float,
+        regular_weekly_rest: float,
+    ) -> dict[str, object] | None:
+        """Zwróć naruszenie tylko wtedy, gdy kandydat zwiększa ich liczbę.
+
+        Wybrana optymalna sekwencja może po dodaniu późniejszej służby wskazać
+        inną, ale równoważną parę starych krótkich odpoczynków. Porównywanie ich
+        dokładnych dat blokowało wtedy całą pracę w kolejnym miesiącu, mimo że
+        kandydat nie pogarszał sytuacji i domykał ją regularnym odpoczynkiem.
+        """
+        def signature(item: dict[str, object]) -> tuple[datetime, datetime, datetime, datetime]:
+            first = dict(item["first"])
+            second = dict(item["second"])
+            return first["start"], first["end"], second["start"], second["end"]
+
+        before = self.consecutive_reduced_weekly_rest_violations(
+            existing_intervals,
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        before_signatures = {signature(item) for item in before}
+        after = self.consecutive_reduced_weekly_rest_violations(
+            list(existing_intervals) + [candidate_interval],
+            reduced_weekly_rest,
+            regular_weekly_rest,
+        )
+        candidate_start = candidate_interval[0]
+        for item in after:
+            if signature(item) in before_signatures:
+                continue
+            second = dict(item["second"])
+            # Nowa para kończąca się przy kandydacie lub później została przez
+            # niego utworzona. Stare, równoważne pary całkowicie sprzed kandydata
+            # pozostają raportowane, ale nie blokują całego kolejnego miesiąca.
+            if second["end"] >= candidate_start:
+                return item
+        if len(after) > len(before):
+            return after[-1]
+        return None
+
+
+    @staticmethod
+    def existing_day_off_hours_in_rest_gap(
+        gap_start: datetime,
+        gap_end: datetime,
+        day_off_dates: set[date],
+    ) -> float:
+        """Policz godziny ciągłego odpoczynku już opisane wpisami wolnego."""
+        if gap_end <= gap_start or not day_off_dates:
+            return 0.0
+        covered_hours = 0.0
+        for day_obj in day_off_dates:
+            day_start = datetime.combine(day_obj, datetime.min.time())
+            day_end = day_start + timedelta(days=1)
+            overlap_start = max(day_start, gap_start)
+            overlap_end = min(day_end, gap_end)
+            if overlap_end > overlap_start:
+                covered_hours += (overlap_end - overlap_start).total_seconds() / 3600.0
+        return covered_hours
+
     def has_vacation_rest_day_for_driver_between(self, driver_id: int, start_day: date, end_day: date) -> bool:
         """Czy kierowca ma urlop UW/UO w podanym zakresie dat.
 
@@ -15018,53 +16002,89 @@ class DutyPlannerApp(tk.Tk):
         end_date = datetime.strptime(end, "%Y-%m-%d").date()
         result: list[dict[str, object]] = []
         intervals = [(entry["start_dt"], entry["end_dt"]) for entry in entries]
+        # Termin 6 dób wymaga punktu odniesienia sprzed badanego miesiąca oraz
+        # pierwszego odpoczynku po nim. Sam wycinek miesiąca jest niewystarczający.
+        try:
+            context_start = (start_date - timedelta(days=14)).isoformat()
+            context_end = (end_date + timedelta(days=14)).isoformat()
+            context_rows = self.rows(
+                """
+                SELECT p.plan_date, d.code, d.name, d.duty_type, d.start_time,
+                       d.end_time, d.work_range, d.total_time, d.work_hours
+                FROM planned_schedule p
+                JOIN duties d ON d.id = p.duty_id
+                WHERE p.driver_id=? AND p.plan_date BETWEEN ? AND ?
+                ORDER BY p.plan_date, d.start_time, d.code
+                """,
+                (int(driver_id), context_start, context_end),
+            )
+            context_intervals = [
+                self.duty_datetimes_for_duty(str(row["plan_date"]), row)
+                for row in context_rows
+                if self.is_rest_relevant_duty(row)
+            ]
+            if context_intervals:
+                intervals = context_intervals
+        except Exception:
+            pass
         work_dates = sorted({
             datetime.strptime(str(entry.get("plan_date")), "%Y-%m-%d").date()
             for entry in entries
             if str(entry.get("plan_date", ""))
         })
         minimum_required = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
-        reported_until: date | None = None
-
-        def best_gap_for_anchor(anchor_day: date) -> tuple[float, datetime, datetime]:
-            anchor_start = datetime.combine(anchor_day, datetime.min.time())
-            best_hours = 0.0
-            best_start = anchor_start
-            best_end = anchor_start
-            for offset in range(-6, 1):
-                window_start = anchor_start + timedelta(days=offset)
-                window_end = window_start + timedelta(days=7)
-                for gap_start, gap_end, gap_hours in self.rest_gaps_in_window(intervals, window_start, window_end):
-                    if gap_hours > best_hours:
-                        best_hours = float(gap_hours)
-                        best_start = gap_start
-                        best_end = gap_end
-            return best_hours, best_start, best_end
-
-        for work_day in work_dates:
-            if work_day < start_date or work_day > end_date:
+        for item in self.weekly_rest_deadline_violations(intervals, minimum_required):
+            deadline = item["deadline"]
+            if deadline.date() < start_date or deadline.date() > end_date:
                 continue
-            if reported_until is not None and work_day <= reported_until:
-                continue
-            if self.has_vacation_rest_day_for_driver_between(driver_id, work_day - timedelta(days=6), work_day + timedelta(days=7)):
-                continue
-            best_gap, gap_start, gap_end = best_gap_for_anchor(work_day)
-            if best_gap + 1e-6 >= minimum_required:
-                continue
-            reported_until = work_day + timedelta(days=6)
+            previous = dict(item["previous_rest"])
+            following = item.get("next_rest")
+            observed_start = item["observed_start"]
+            following_text = (
+                f"kolejny odpoczynek rozpoczął się {dict(following)['start'].strftime('%Y-%m-%d %H:%M')}"
+                if following is not None
+                else f"po ostatniej służbie mógł rozpocząć się dopiero {observed_start.strftime('%Y-%m-%d %H:%M')}"
+            )
             result.append({
                 "severity": "BŁĄD",
-                "plan_date": work_day.isoformat(),
+                "plan_date": deadline.date().isoformat(),
                 "driver_id": driver_id,
                 "duty_id": None,
-                "rule_code": "ODPOCZYNEK_TYGODNIOWY_RUCHOMY",
-                "message": "Brak odp. tyg.",
+                "rule_code": "ODPOCZYNEK_TYGODNIOWY_TERMIN_6_DOB",
+                "message": "Przekroczony termin odpoczynku tygodniowego.",
                 "details": (
-                    f"Ruchome okna 7 dni dla {work_day.isoformat()}: najlepszy odpoczynek "
-                    f"{self.format_hours(best_gap)} h ({gap_start.strftime('%Y-%m-%d %H:%M')} - "
-                    f"{gap_end.strftime('%Y-%m-%d %H:%M')}) < {self.format_hours(minimum_required)} h."
+                    f"Poprzedni odpoczynek {self.format_hours(float(previous['hours']))} h zakończył się "
+                    f"{previous['end'].strftime('%Y-%m-%d %H:%M')}; następny musiał rozpocząć się "
+                    f"najpóźniej {deadline.strftime('%Y-%m-%d %H:%M')}, ale {following_text}."
                 ),
             })
+        if check_regulation_561:
+            for item in self.consecutive_reduced_weekly_rest_violations(
+                intervals,
+                reduced_weekly_rest,
+                regular_weekly_rest,
+            ):
+                first = dict(item["first"])
+                second = dict(item["second"])
+                second_end = second["end"]
+                if second_end.date() < start_date or second_end.date() > end_date:
+                    continue
+                result.append({
+                    "severity": "BŁĄD",
+                    "plan_date": second_end.date().isoformat(),
+                    "driver_id": driver_id,
+                    "duty_id": None,
+                    "rule_code": "ODPOCZYNEK_TYGODNIOWY_45_PO_SKROCONYM",
+                    "message": "Po skróconym odpoczynku brak 45 h.",
+                    "details": (
+                        f"Dwa skrócone odpoczynki pod rząd: "
+                        f"{self.format_hours(float(first['hours']))} h "
+                        f"({first['start'].strftime('%Y-%m-%d %H:%M')} - {first['end'].strftime('%Y-%m-%d %H:%M')}), "
+                        f"następnie {self.format_hours(float(second['hours']))} h "
+                        f"({second['start'].strftime('%Y-%m-%d %H:%M')} - {second['end'].strftime('%Y-%m-%d %H:%M')}); "
+                        f"drugi odpoczynek musi mieć co najmniej {self.format_hours(regular_weekly_rest)} h."
+                    ),
+                })
         return result
     def parse_clock(self, value: object) -> tuple[int, int] | None:
         text = "" if value is None else str(value).strip()
@@ -15189,6 +16209,34 @@ class DutyPlannerApp(tk.Tk):
         if self.is_rn_duty(duty):
             return self.rn_duty_datetimes(plan_date)
         return self.duty_datetimes(plan_date, duty["start_time"], duty["end_time"], duty["total_time"], duty["work_range"])
+
+    @staticmethod
+    def required_rest_between_services(
+        previous_end: datetime,
+        current_start: datetime,
+        min_daily_rest: float,
+        min_weekly_rest: float,
+    ) -> tuple[float, str]:
+        """Zwróć odpoczynek wymagany bezpośrednio między dwiema służbami.
+
+        Między sąsiednimi służbami zawsze kontrolujemy odpoczynek dobowy.
+        Odpoczynek tygodniowy jest niezależnie sprawdzany w ruchomej sekwencji
+        sześciu dób i nie jest przypisany do granicy konkretnych dni tygodnia.
+        """
+        return float(min_daily_rest), "daily"
+
+    def friday_rn_requires_weekly_rest_before_sunday(
+        self,
+        duty: sqlite3.Row | dict[str, object],
+        rn_end: datetime,
+        next_start: datetime,
+    ) -> bool:
+        """Czy RN kończące się w sobotę wymaga 24 h przed niedzielną pracą."""
+        if not self.is_rn_duty(duty):
+            return False
+        if rn_end.weekday() != 5 or next_start.weekday() != 6:
+            return False
+        return next_start.date() == rn_end.date() + timedelta(days=1)
 
     def duty_datetimes(
         self,
@@ -15702,7 +16750,15 @@ class DutyPlannerApp(tk.Tk):
             int(row["driver_id"]): int(row["cnt"])
             for row in self.rows("SELECT driver_id, COUNT(*) AS cnt FROM planned_schedule WHERE driver_id IS NOT NULL GROUP BY driver_id")
         }
-        for row in self.rows("SELECT id, lp, name, employee_no, COALESCE(no_plan_rn, 0) AS no_plan_rn FROM drivers ORDER BY name COLLATE NOCASE, CAST(lp AS INTEGER)"):
+        for row in self.rows(
+            """
+            SELECT d.id, d.lp, d.name, d.employee_no, COALESCE(d.no_plan_rn, 0) AS no_plan_rn,
+                   COALESCE(x.no_weekends, 0) AS no_plan_weekends
+            FROM drivers d
+            LEFT JOIN driver_day_plan_exclusions x ON x.driver_id=d.id
+            ORDER BY d.name COLLATE NOCASE, CAST(d.lp AS INTEGER)
+            """
+        ):
             if not self.driver_matches_search(query, row["lp"], row["name"]):
                 continue
             driver_id = int(row["id"])
@@ -15711,7 +16767,13 @@ class DutyPlannerApp(tk.Tk):
             self.insert_tree_row(
                 self.drivers_tree,
                 iid,
-                (row["lp"] or "", self.ui_driver_label_from_row(row), "☑" if int(row["no_plan_rn"] or 0) else "☐", planned_counts.get(driver_id, 0)),
+                (
+                    row["lp"] or "",
+                    self.ui_driver_label_from_row(row),
+                    "☑" if int(row["no_plan_rn"] or 0) else "☐",
+                    "☑" if int(row["no_plan_weekends"] or 0) else "☐",
+                    planned_counts.get(driver_id, 0),
+                ),
             )
         self.auto_fit_tree_columns(self.drivers_tree, max_width=280, min_width=46)
 
@@ -15730,6 +16792,8 @@ class DutyPlannerApp(tk.Tk):
         self.driver_db_employee_var.set("")
         if hasattr(self, "driver_db_no_rn_var"):
             self.driver_db_no_rn_var.set(0)
+        if hasattr(self, "driver_db_no_weekends_var"):
+            self.driver_db_no_weekends_var.set(0)
         if hasattr(self, "drivers_tree"):
             self.drivers_tree.selection_remove(self.drivers_tree.selection())
 
@@ -15747,7 +16811,16 @@ class DutyPlannerApp(tk.Tk):
         if driver_id is None:
             messagebox.showinfo("Baza kierowców", "Zaznacz kierowcę.")
             return
-        row = self.rows("SELECT id, lp, name, employee_no, COALESCE(no_plan_rn, 0) AS no_plan_rn FROM drivers WHERE id=?", (driver_id,))
+        row = self.rows(
+            """
+            SELECT d.id, d.lp, d.name, d.employee_no, COALESCE(d.no_plan_rn, 0) AS no_plan_rn,
+                   COALESCE(x.no_weekends, 0) AS no_plan_weekends
+            FROM drivers d
+            LEFT JOIN driver_day_plan_exclusions x ON x.driver_id=d.id
+            WHERE d.id=?
+            """,
+            (driver_id,),
+        )
         if not row:
             return
         driver = row[0]
@@ -15757,12 +16830,15 @@ class DutyPlannerApp(tk.Tk):
         self.driver_db_employee_var.set("")
         if hasattr(self, "driver_db_no_rn_var"):
             self.driver_db_no_rn_var.set(1 if int(driver["no_plan_rn"] or 0) else 0)
+        if hasattr(self, "driver_db_no_weekends_var"):
+            self.driver_db_no_weekends_var.set(1 if int(driver["no_plan_weekends"] or 0) else 0)
 
     def save_driver_record(self) -> None:
         lp = self.driver_db_lp_var.get().strip()
         name = self.driver_db_name_var.get().strip()
         employee_no = ""
         no_plan_rn = 1 if (hasattr(self, "driver_db_no_rn_var") and int(self.driver_db_no_rn_var.get())) else 0
+        no_plan_weekends = 1 if (hasattr(self, "driver_db_no_weekends_var") and int(self.driver_db_no_weekends_var.get())) else 0
         if not name:
             messagebox.showerror("Baza kierowców", "Podaj nazwisko i imię kierowcy.")
             return
@@ -15783,6 +16859,19 @@ class DutyPlannerApp(tk.Tk):
                 )
                 self.driver_db_selected_id = int(cur.lastrowid) if cur.lastrowid else None
                 action = "Dodano kierowcę."
+            if self.driver_db_selected_id is not None:
+                self.conn.execute(
+                    """
+                    INSERT INTO driver_day_plan_exclusions(
+                        driver_id, no_saturdays, no_days_off, no_holidays, no_weekends, updated_at
+                    )
+                    VALUES (?, 0, 0, 0, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(driver_id) DO UPDATE SET
+                        no_weekends=excluded.no_weekends,
+                        updated_at=CURRENT_TIMESTAMP
+                    """,
+                    (int(self.driver_db_selected_id), no_plan_weekends),
+                )
             self.conn.commit()
         except sqlite3.IntegrityError as exc:
             messagebox.showerror("Baza kierowców", f"Nie można zapisać kierowcy. Sprawdź, czy nie ma duplikatu.\n\n{exc}")
@@ -16766,7 +17855,14 @@ class DutyPlannerApp(tk.Tk):
             self.insert_tree_row(
                 self.pairs_tree,
                 iid,
-                (row["pair_no"] or "", row["registration_no"] or "", driver1, driver2, row["note"] or ""),
+                (
+                    row["pair_no"] or "",
+                    row["registration_no"] or "",
+                    driver1,
+                    driver2,
+                    "TAK" if int(row["avoid_same_shift"] or 0) else "",
+                    row["note"] or "",
+                ),
             )
         self.load_permanent_pairs_tree()
 
@@ -16787,7 +17883,14 @@ class DutyPlannerApp(tk.Tk):
             self.insert_tree_row(
                 self.permanent_pairs_tree,
                 iid,
-                (row["pair_no"] or "", row["registration_no"] or "", driver1, driver2, row["note"] or ""),
+                (
+                    row["pair_no"] or "",
+                    row["registration_no"] or "",
+                    driver1,
+                    driver2,
+                    "TAK" if int(row["avoid_same_shift"] or 0) else "",
+                    row["note"] or "",
+                ),
             )
 
     def auto_assign_driver_pairs_for_month(self) -> None:
@@ -16828,7 +17931,16 @@ class DutyPlannerApp(tk.Tk):
         self.refresh_all()
         self.auto_status_label.configure(text=f"Utworzono {pair_count} globalnych par kierowców. Będą stosowane we wszystkich miesiącach i na wydruku.")
 
-    def save_permanent_driver_pair(self, pair_no: str, car_id: int | None, driver1_id: int | None, driver2_id: int | None, note: str = "", pair_order: int | None = None) -> None:
+    def save_permanent_driver_pair(
+        self,
+        pair_no: str,
+        car_id: int | None,
+        driver1_id: int | None,
+        driver2_id: int | None,
+        note: str = "",
+        pair_order: int | None = None,
+        avoid_same_shift: bool = False,
+    ) -> None:
         """Zapamiętaj domyślną parę przypisaną do konkretnego auta.
 
         Stałe pary służą jako wzorzec dla nowych miesięcy. Nie blokują ręcznej
@@ -16854,18 +17966,27 @@ class DutyPlannerApp(tk.Tk):
         pair_order = max(0, int(computed_order or 0))
         self.conn.execute(
             """
-            INSERT INTO permanent_driver_pairs(pair_no, pair_order, car_id, driver1_id, driver2_id, note, active, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+            INSERT INTO permanent_driver_pairs(pair_no, pair_order, car_id, driver1_id, driver2_id, avoid_same_shift, note, active, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
             ON CONFLICT(car_id) DO UPDATE SET
                 pair_no=excluded.pair_no,
                 pair_order=excluded.pair_order,
                 driver1_id=excluded.driver1_id,
                 driver2_id=excluded.driver2_id,
+                avoid_same_shift=excluded.avoid_same_shift,
                 note=excluded.note,
                 active=1,
                 updated_at=CURRENT_TIMESTAMP
             """,
-            (pair_no or "", pair_order, int(car_id), int(driver1_id), int(driver2_id) if driver2_id else None, clean_note),
+            (
+                pair_no or "",
+                pair_order,
+                int(car_id),
+                int(driver1_id),
+                int(driver2_id) if driver2_id else None,
+                1 if avoid_same_shift else 0,
+                clean_note,
+            ),
         )
 
     def save_month_pairs_as_permanent(self, month_key: str) -> int:
@@ -16873,7 +17994,8 @@ class DutyPlannerApp(tk.Tk):
         saved = 0
         for row in self.rows(
             """
-            SELECT pair_no, COALESCE(pair_order, 0) AS pair_order, car_id, driver1_id, driver2_id, COALESCE(note, '') AS note
+            SELECT pair_no, COALESCE(pair_order, 0) AS pair_order, car_id, driver1_id, driver2_id,
+                   COALESCE(avoid_same_shift, 0) AS avoid_same_shift, COALESCE(note, '') AS note
             FROM driver_pairs
             WHERE month_key=? AND car_id IS NOT NULL AND driver1_id IS NOT NULL
             ORDER BY CASE WHEN COALESCE(pair_order, 0)>0 THEN 0 ELSE 1 END,
@@ -16884,7 +18006,15 @@ class DutyPlannerApp(tk.Tk):
         ):
             old_order = int(row["pair_order"] or 0)
             merged_pair_no = str(old_order) if old_order > 0 else (row["pair_no"] or "")
-            self.save_permanent_driver_pair(merged_pair_no, int(row["car_id"]), int(row["driver1_id"]), int(row["driver2_id"]) if row["driver2_id"] is not None else None, row["note"] or "", old_order)
+            self.save_permanent_driver_pair(
+                merged_pair_no,
+                int(row["car_id"]),
+                int(row["driver1_id"]),
+                int(row["driver2_id"]) if row["driver2_id"] is not None else None,
+                row["note"] or "",
+                old_order,
+                bool(int(row["avoid_same_shift"] or 0)),
+            )
             saved += 1
         if saved:
             self.conn.commit()
@@ -16943,8 +18073,8 @@ class DutyPlannerApp(tk.Tk):
                 note = f"{note}; stała para" if note else "stała para"
             cur.execute(
                 """
-                INSERT INTO driver_pairs(month_key, pair_no, pair_order, car_id, driver1_id, driver2_id, note, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO driver_pairs(month_key, pair_no, pair_order, car_id, driver1_id, driver2_id, avoid_same_shift, note, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     month_key,
@@ -16953,6 +18083,7 @@ class DutyPlannerApp(tk.Tk):
                     int(row["car_id"]),
                     int(row["driver1_id"]),
                     int(row["driver2_id"]) if row["driver2_id"] is not None else None,
+                    1 if int(row["avoid_same_shift"] or 0) else 0,
                     note,
                 ),
             )
@@ -17019,6 +18150,8 @@ class DutyPlannerApp(tk.Tk):
         self.pair_driver1_var.set(NO_DRIVER)
         self.pair_driver2_var.set(NO_DRIVER)
         self.pair_note_var.set("")
+        if hasattr(self, "pair_avoid_same_shift_var"):
+            self.pair_avoid_same_shift_var.set(0)
 
     def pair_no_to_print_order_v293(self, pair_no: object) -> int | None:
         """Numer pary jest jednocześnie kolejnością druku.
@@ -17061,6 +18194,7 @@ class DutyPlannerApp(tk.Tk):
         driver1_id = self.resolve_driver_id_from_text(self.pair_driver1_var.get(), allow_none=False) if hasattr(self, "pair_driver1_var") else None
         driver2_id = self.resolve_driver_id_from_text(self.pair_driver2_var.get(), allow_none=True) if hasattr(self, "pair_driver2_var") else None
         note = self.pair_note_var.get().strip() if hasattr(self, "pair_note_var") else ""
+        avoid_same_shift = bool(self.pair_avoid_same_shift_var.get()) if hasattr(self, "pair_avoid_same_shift_var") else False
         if car_id is None:
             messagebox.showinfo("Pary", "Wybierz auto. Pary na autobusach są globalne i muszą być przypisane do auta.")
             return
@@ -17163,7 +18297,15 @@ class DutyPlannerApp(tk.Tk):
 
         if selected_old_car_id is not None and selected_old_car_id != int(car_id):
             self.conn.execute("DELETE FROM permanent_driver_pairs WHERE car_id=?", (selected_old_car_id,))
-        self.save_permanent_driver_pair(pair_no, int(car_id), int(driver1_id), int(driver2_id) if driver2_id else None, note, pair_order)
+        self.save_permanent_driver_pair(
+            pair_no,
+            int(car_id),
+            int(driver1_id),
+            int(driver2_id) if driver2_id else None,
+            note,
+            pair_order,
+            avoid_same_shift,
+        )
         self.conn.commit()
         self.sync_global_pairs_to_all_months(include_month_key=month_key)
         self.refresh_all()
@@ -17388,6 +18530,8 @@ class DutyPlannerApp(tk.Tk):
         if hasattr(self, "pair_print_order_var"):
             self.pair_print_order_var.set(row["pair_no"] or "")
         self.pair_note_var.set(row["note"] or "")
+        if hasattr(self, "pair_avoid_same_shift_var"):
+            self.pair_avoid_same_shift_var.set(1 if int(row["avoid_same_shift"] or 0) else 0)
         self.pair_car_var.set("(bez auta)")
         if row["car_id"] is not None:
             for label, value in self.car_label_to_id.items():
@@ -17417,6 +18561,8 @@ class DutyPlannerApp(tk.Tk):
         if hasattr(self, "pair_print_order_var"):
             self.pair_print_order_var.set(row["pair_no"] or "")
         self.pair_note_var.set(row["note"] or "")
+        if hasattr(self, "pair_avoid_same_shift_var"):
+            self.pair_avoid_same_shift_var.set(1 if int(row["avoid_same_shift"] or 0) else 0)
         self.pair_car_var.set("(bez auta)")
         if row["car_id"] is not None:
             for label, value in self.car_label_to_id.items():
@@ -17619,7 +18765,13 @@ class DutyPlannerApp(tk.Tk):
         # v290: planowanie i kontrola par używa tych samych globalnych par
         # co podgląd/wydruk; stare miesięczne kopie nie mogą zmieniać wyniku.
         for row in self.permanent_pair_rows():
-            info = {"pair_no": row["pair_no"], "car_id": row["car_id"], "driver1_id": row["driver1_id"], "driver2_id": row["driver2_id"]}
+            info = {
+                "pair_no": row["pair_no"],
+                "car_id": row["car_id"],
+                "driver1_id": row["driver1_id"],
+                "driver2_id": row["driver2_id"],
+                "avoid_same_shift": bool(int(row["avoid_same_shift"] or 0)),
+            }
             for driver_col in ("driver1_id", "driver2_id"):
                 if row[driver_col] is not None:
                     driver_id = int(row[driver_col])
@@ -17627,6 +18779,110 @@ class DutyPlannerApp(tk.Tk):
                     if row["car_id"] is not None:
                         car_map[driver_id] = int(row["car_id"])
         return pair_map, car_map
+
+    def pair_same_shift_conflict_for_context(
+        self,
+        driver_id: int,
+        duty_id: int,
+        target_date: str,
+        pair_map: dict[int, dict[str, object]],
+        planned_context_entries: list[tuple[str, int, int, str, int | None, str | None]],
+        duty_rows_by_id: dict[int, sqlite3.Row | dict[str, object]],
+    ) -> dict[str, object] | None:
+        """Sprawdź twardą blokadę tej samej zmiany dla stałej pary."""
+        pair = pair_map.get(int(driver_id))
+        if not pair or not bool(pair.get("avoid_same_shift")):
+            return None
+        driver1_id = int(pair.get("driver1_id") or 0)
+        driver2_id = int(pair.get("driver2_id") or 0)
+        partner_id = driver2_id if int(driver_id) == driver1_id else driver1_id
+        if partner_id <= 0 or partner_id == int(driver_id):
+            return None
+        duty = duty_rows_by_id.get(int(duty_id))
+        if duty is None or self.is_day_off_duty(duty):
+            return None
+        duty_shift = self.duty_shift_part(duty)
+        if duty_shift not in {"morning", "afternoon"}:
+            return None
+        for entry in planned_context_entries:
+            if str(entry[0]) != str(target_date) or int(entry[1]) != partner_id:
+                continue
+            partner_duty_id = int(entry[2])
+            partner_duty = duty_rows_by_id.get(partner_duty_id)
+            if partner_duty is None or self.is_day_off_duty(partner_duty):
+                continue
+            partner_shift = self.duty_shift_part(partner_duty)
+            if partner_shift == duty_shift:
+                return {
+                    "partner_id": partner_id,
+                    "partner_duty_id": partner_duty_id,
+                    "shift": duty_shift,
+                    "pair_no": str(pair.get("pair_no") or ""),
+                }
+        return None
+
+    def pair_same_shift_violations(self, start: str, end: str) -> list[dict[str, object]]:
+        """Raportuj ręczne lub istniejące konflikty par na tej samej zmianie."""
+        conn = self.__dict__.get("conn")
+        if conn is None:
+            return []
+        try:
+            rows = conn.execute(
+                """
+                SELECT p1.plan_date,
+                       pp.pair_no, pp.driver1_id, pp.driver2_id,
+                       COALESCE(dr1.name, '') AS driver1_name,
+                       COALESCE(dr2.name, '') AS driver2_name,
+                       p1.duty_id AS duty1_id, d1.code AS code1, d1.shift AS shift1, d1.start_time AS start1,
+                       d1.name AS name1, d1.duty_type AS type1, d1.line AS line1,
+                       p2.duty_id AS duty2_id, d2.code AS code2, d2.shift AS shift2, d2.start_time AS start2,
+                       d2.name AS name2, d2.duty_type AS type2, d2.line AS line2
+                FROM permanent_driver_pairs pp
+                JOIN planned_schedule p1 ON p1.driver_id=pp.driver1_id
+                JOIN planned_schedule p2 ON p2.driver_id=pp.driver2_id AND p2.plan_date=p1.plan_date
+                JOIN duties d1 ON d1.id=p1.duty_id
+                JOIN duties d2 ON d2.id=p2.duty_id
+                LEFT JOIN drivers dr1 ON dr1.id=pp.driver1_id
+                LEFT JOIN drivers dr2 ON dr2.id=pp.driver2_id
+                WHERE COALESCE(pp.active, 1)=1
+                  AND COALESCE(pp.avoid_same_shift, 0)=1
+                  AND p1.plan_date BETWEEN ? AND ?
+                ORDER BY p1.plan_date, pp.id
+                """,
+                (start, end),
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+        result: list[dict[str, object]] = []
+        for row in rows:
+            duty1 = {
+                "code": row["code1"], "shift": row["shift1"], "start_time": row["start1"],
+                "name": row["name1"], "duty_type": row["type1"], "line": row["line1"],
+            }
+            duty2 = {
+                "code": row["code2"], "shift": row["shift2"], "start_time": row["start2"],
+                "name": row["name2"], "duty_type": row["type2"], "line": row["line2"],
+            }
+            if self.is_day_off_duty(duty1) or self.is_day_off_duty(duty2):
+                continue
+            shift1 = self.duty_shift_part(duty1)
+            shift2 = self.duty_shift_part(duty2)
+            if shift1 not in {"morning", "afternoon"} or shift1 != shift2:
+                continue
+            shift_label = "I" if shift1 == "morning" else "II"
+            result.append({
+                "severity": "BŁĄD",
+                "plan_date": row["plan_date"],
+                "driver_id": int(row["driver2_id"]),
+                "duty_id": int(row["duty2_id"]),
+                "rule_code": "PARA_TA_SAMA_ZMIANA",
+                "message": "Para zaplanowana na jednej zmianie.",
+                "details": (
+                    f"Para {row['pair_no'] or '-'}: {row['driver1_name']} ({row['code1']}) i "
+                    f"{row['driver2_name']} ({row['code2']}) mają tego samego dnia zmianę {shift_label}."
+                ),
+            })
+        return result
 
 
     def active_rn_driver_pair_rows(self) -> list[sqlite3.Row]:
@@ -17679,6 +18935,69 @@ class DutyPlannerApp(tk.Tk):
             seen.add(key)
             groups.append((d1, d2))
         return groups
+
+    @staticmethod
+    def select_atomic_rn_candidates(
+        required_count: int,
+        pair_groups: list[tuple[int, int]],
+        eligible_driver_ids: set[int],
+        score_by_driver: dict[int, object],
+        preferred_driver_ids: set[int] | None = None,
+    ) -> list[int]:
+        """Wybierz RN bez rozdzielania aktywnych par.
+
+        Kierowca należący do aktywnej pary nigdy nie trafia do puli pojedynczej.
+        Para jest wybierana wyłącznie wtedy, gdy obaj kierowcy są dostępni i są
+        jeszcze co najmniej dwa miejsca RN. Jeśli jeden partner jest niedostępny,
+        automat szuka pełnej innej pary albo kierowców bez pary.
+        """
+        required = max(0, int(required_count or 0))
+        if required <= 0:
+            return []
+        eligible = {int(driver_id) for driver_id in eligible_driver_ids}
+        preferred = {int(driver_id) for driver_id in (preferred_driver_ids or set())}
+        normalized_pairs: list[tuple[int, int]] = []
+        paired_driver_ids: set[int] = set()
+        seen_pairs: set[frozenset[int]] = set()
+        for driver1_id, driver2_id in pair_groups:
+            d1 = int(driver1_id)
+            d2 = int(driver2_id)
+            key = frozenset((d1, d2))
+            if d1 == d2 or key in seen_pairs:
+                continue
+            seen_pairs.add(key)
+            normalized_pairs.append((d1, d2))
+            paired_driver_ids.update((d1, d2))
+
+        def score(driver_id: int) -> object:
+            return score_by_driver.get(int(driver_id), (10**9, int(driver_id)))
+
+        pair_units = [
+            (d1, d2)
+            for d1, d2 in normalized_pairs
+            if d1 in eligible and d2 in eligible
+        ]
+        pair_units.sort(key=lambda pair: (score(pair[0]), score(pair[1]), pair))
+        single_units = [driver_id for driver_id in eligible if driver_id not in paired_driver_ids]
+        single_units.sort(key=lambda driver_id: (score(driver_id), driver_id))
+
+        selected: list[int] = []
+        preferred_pairs = [pair for pair in pair_units if pair[0] in preferred and pair[1] in preferred]
+        remaining_pairs = [pair for pair in pair_units if pair not in preferred_pairs]
+        preferred_singles = [driver_id for driver_id in single_units if driver_id in preferred]
+        remaining_singles = [driver_id for driver_id in single_units if driver_id not in preferred]
+        for unit in (
+            [(d1, d2) for d1, d2 in preferred_pairs]
+            + [(driver_id,) for driver_id in preferred_singles]
+            + [(d1, d2) for d1, d2 in remaining_pairs]
+            + [(driver_id,) for driver_id in remaining_singles]
+        ):
+            if len(unit) > required - len(selected):
+                continue
+            selected.extend(int(driver_id) for driver_id in unit)
+            if len(selected) >= required:
+                break
+        return selected[:required]
 
     def save_active_rn_driver_pair(self, driver1_id: int, driver2_id: int, note: str = "", *, commit: bool = True) -> None:
         """Zapisz stałą parę RN i usuń wcześniejsze parowania tych kierowców.
@@ -17948,12 +19267,15 @@ class DutyPlannerApp(tk.Tk):
         shift = str(duty["shift"] or "").upper() if "shift" in duty.keys() else ""
         code = str(duty["code"] or "").upper() if "code" in duty.keys() else ""
         start_time = str(duty["start_time"] or "") if "start_time" in duty.keys() else ""
-        if "II" in shift:
-            return "afternoon"
-        if " I" in shift or shift.endswith(" I") or "I ZM" in shift:
-            return "morning"
         if code == "RN" or "NOC" in shift:
             return "afternoon"
+        # Nie szukaj samego fragmentu "II": opis "III zm I" zawiera takie
+        # znaki, ale oznacza pierwszą zmianę. W danych właściwy symbol zmiany
+        # znajduje się na końcu opisu (np. WSP I, WSP II, III zm I/II).
+        if re.search(r"(?:^|\s)II\s*$", shift):
+            return "afternoon"
+        if re.search(r"(?:^|\s)I\s*$", shift):
+            return "morning"
         try:
             hour = int(start_time.split(":", 1)[0])
             return "morning" if hour < 12 else "afternoon"
@@ -17983,7 +19305,62 @@ class DutyPlannerApp(tk.Tk):
             return False
         return self.duty_day_flag_allowed_on_weekday(duty, weekday)
 
+    @staticmethod
+    def parse_weekend_duty_codes(value: object) -> list[str]:
+        """Rozdziel listę numerów służb, zachowując kolejność bez duplikatów."""
+        result: list[str] = []
+        seen: set[str] = set()
+        for token in re.split(r"[\s,;]+", str(value or "").strip()):
+            code = token.strip().upper()
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            result.append(code)
+        return result
+
+    def weekend_duty_override_counts(self, start: str, end: str) -> dict[str, dict[int, int]]:
+        """Zwróć wymaganą liczbę obsad służby dla każdej wskazanej daty weekendowej."""
+        result: dict[str, dict[int, int]] = defaultdict(dict)
+        try:
+            rows = self.rows(
+                """
+                SELECT plan_date, duty_id, COALESCE(required_count, 1) AS required_count
+                FROM weekend_duty_overrides
+                WHERE plan_date BETWEEN ? AND ?
+                """,
+                (str(start), str(end)),
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return {}
+            raise
+        for row in rows:
+            result[str(row["plan_date"])][int(row["duty_id"])] = max(1, int(row["required_count"] or 1))
+        return {plan_date: dict(counts) for plan_date, counts in result.items()}
+
+    def weekend_duty_override_map(self, start: str, end: str) -> dict[str, set[int]]:
+        """Zgodnościowy widok ID; liczby obsad udostępnia weekend_duty_override_counts()."""
+        return {
+            plan_date: set(counts)
+            for plan_date, counts in self.weekend_duty_override_counts(start, end).items()
+        }
+
+    def is_weekend_duty_override(self, duty_id: int, target_date: date) -> bool:
+        try:
+            count = self.one_value(
+                "SELECT COUNT(*) FROM weekend_duty_overrides WHERE plan_date=? AND duty_id=?",
+                (target_date.isoformat(), int(duty_id)),
+                default="0",
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                return False
+            raise
+        return bool(int(count))
+
     def duty_id_allowed_on_date(self, duty_id: int, target_date: date) -> bool:
+        if self.is_weekend_duty_override(int(duty_id), target_date):
+            return True
         rows = self.rows(
             """
             SELECT COALESCE(auto_plan_enabled, 1) AS auto_plan_enabled,
@@ -18015,18 +19392,68 @@ class DutyPlannerApp(tk.Tk):
         normalized = self.normalize_code(" ".join(text_parts))
         return "REZERWA NOC" in normalized or "REZERWA NOCNA" in normalized
 
-    def rn_required_count_for_date(self, day: date) -> int:
-        """Ile obsad RN wymaga dany dzień.
+    def is_rn_single_coverage_day(self, day: date) -> bool:
+        """Tylko kalendarzowa sobota wymaga pojedynczej obsady RN."""
+        return day.weekday() == 5
 
-        Reguła: od niedzieli do piątku RN obsadza dwóch kierowców,
-        w sobotę tylko jeden kierowca. Święto wypadające w tygodniu
-        traktujemy dla RN jak sobotę, czyli też wymaga tylko jednej RN.
+    def rn_continuity_block_start(self, day: date) -> date:
+        """Początek bloku RN: niedziela dla nd.-pt., osobna data dla soboty."""
+        if self.is_rn_single_coverage_day(day):
+            return day
+        days_since_sunday = (day.weekday() + 1) % 7
+        return day - timedelta(days=days_since_sunday)
+
+    def rn_planning_blocks_for_month(self, year: int, month: int) -> list[list[date]]:
+        """Bloki RN w miesiącu: ciągłe nd.-pt. oraz osobne soboty."""
+        month_days = calendar.monthrange(int(year), int(month))[1]
+        blocks: list[list[date]] = []
+        seen: set[date] = set()
+        for day_no in range(1, month_days + 1):
+            day_obj = date(int(year), int(month), day_no)
+            if day_obj in seen:
+                continue
+            if self.is_rn_single_coverage_day(day_obj):
+                block = [day_obj]
+            else:
+                block_start = self.rn_continuity_block_start(day_obj)
+                block = [
+                    block_start + timedelta(days=offset)
+                    for offset in range(6)
+                    if (block_start + timedelta(days=offset)).year == int(year)
+                    and (block_start + timedelta(days=offset)).month == int(month)
+                ]
+            seen.update(block)
+            blocks.append(block or [day_obj])
+        blocks.sort(key=lambda block: block[0])
+        return blocks
+
+    def rn_required_count_for_date(self, day: date) -> int:
+        """Od niedzieli do piątku wymagaj 2 RN, a w sobotę 1 RN.
+
+        Święto nie zmienia obsady RN i nie przerywa bloku niedziela-piątek.
         """
-        # v319: święto pon.-pt. ma obsadę RN jak sobota.
-        # Tylko zwykły dzień nd.-pt. bez święta wymaga 2 RN.
-        if day.weekday() == 5:
-            return 1
-        return 2
+        return 1 if self.is_rn_single_coverage_day(day) else 2
+
+    def rn_full_block_hours_within_limits(
+        self,
+        current_month_hours: float,
+        current_week_hours: dict[tuple[int, int], float],
+        block: list[date],
+        rn_work_hours: float,
+        monthly_norm_hours: float,
+        max_weekly_work: float,
+    ) -> bool:
+        """Sprawdz limit godzin dla calego bloku RN, lacznie z piatkiem."""
+        if float(current_month_hours) + (len(block) * float(rn_work_hours)) > float(monthly_norm_hours) + 1e-6:
+            return False
+        projected_week_hours = dict(current_week_hours)
+        for day_obj in block:
+            iso_week = day_obj.isocalendar()
+            key = (int(iso_week.year), int(iso_week.week))
+            projected_week_hours[key] = float(projected_week_hours.get(key, 0.0)) + float(rn_work_hours)
+            if projected_week_hours[key] > float(max_weekly_work) + 1e-6:
+                return False
+        return True
 
     def weekend_start_for_calendar_date(self, day: date) -> date:
         """Zwróć początek weekendu/święta do kontroli odpoczynku.
@@ -18079,11 +19506,11 @@ class DutyPlannerApp(tk.Tk):
         """Kierowcy, którzy mieli RN w poprzednim miesiącu; używane do rotacji RN."""
         return self.recent_rn_driver_ids_for_automatic(year, month, months_back=1)
 
-    def recent_rn_driver_ids_for_automatic(self, year: int, month: int, months_back: int = 2) -> set[int]:
+    def recent_rn_driver_ids_for_automatic(self, year: int, month: int, months_back: int = 1) -> set[int]:
         """Kierowcy z RN w poprzednich miesiącach.
 
-        v194: automat nie planuje RN kierowcy, który miał RN w poprzednich
-        dwóch miesiącach. Ręczny wpis RN nadal ma pierwszeństwo i nie jest
+        Automat nie planuje RN kierowcy, który miał RN w bezpośrednio
+        poprzednim miesiącu. Ręczny wpis RN nadal ma pierwszeństwo i nie jest
         blokowany tą zasadą.
         """
         result: set[int] = set()
@@ -18326,9 +19753,21 @@ class DutyPlannerApp(tk.Tk):
                 pass
         return "NAJEM" in self.normalize_code(" ".join(text_parts))
 
+    def is_zaglebie_duty(self, duty: sqlite3.Row | dict[str, object] | None) -> bool:
+        """Służba Zagłębie może być planowana dla wskazanej pary kierowców."""
+        if duty is None:
+            return False
+        text_parts: list[str] = []
+        for key in ("code", "name", "duty_type", "shift", "line"):
+            try:
+                text_parts.append(str(duty[key] or ""))
+            except Exception:
+                pass
+        return "ZAGLEBIE" in self.normalize_code(" ".join(text_parts))
+
     def is_multi_driver_manual_duty(self, duty: sqlite3.Row | dict[str, object] | None) -> bool:
         """Służby ręczne, dla których pytamy o jeden/dwóch kierowców i auto."""
-        return bool(self.is_reservation_duty(duty) or self.is_rental_duty(duty))
+        return bool(self.is_reservation_duty(duty) or self.is_rental_duty(duty) or self.is_zaglebie_duty(duty))
 
     def is_manual_selected_duty_rental(self) -> bool:
         duty_id = self.selected_duty_id_from_combo()
@@ -18349,6 +19788,8 @@ class DutyPlannerApp(tk.Tk):
             return "Rezerwacja"
         if self.is_rental_duty(duty):
             return "Najem"
+        if self.is_zaglebie_duty(duty):
+            return "Zagłębie"
         return "Wpis ręczny"
 
     def current_manual_active_edit_ids(self) -> set[int]:
@@ -18470,7 +19911,7 @@ class DutyPlannerApp(tk.Tk):
         return None
 
     def ask_manual_trip_driver_count(self, title: str) -> int | None:
-        """Zapytaj, czy wybrany najem/rezerwacja jedzie jednym czy dwoma kierowcami."""
+        """Zapytaj, czy wybrany wyjazd jedzie jednym czy dwoma kierowcami."""
         cached = getattr(self, "_manual_multi_driver_count_choice", None)
         if cached in {1, 2}:
             return int(cached)
@@ -18489,7 +19930,7 @@ class DutyPlannerApp(tk.Tk):
         return choice
 
     def resolve_manual_multi_driver_ids(self, duty_row: sqlite3.Row | dict[str, object] | None, base_driver_id: int | None, car_id: int | None, initial_driver_ids: set[int] | None = None, plan_date: str | None = None, active_edit_ids: set[int] | None = None) -> set[int] | None:
-        """Ustal kierowców dla REZERWACJI/NAJMU: 1 lub 2, z propozycją stałej pary."""
+        """Ustal kierowców dla REZERWACJI/NAJMU/ZAGŁĘBIA: 1 lub 2, z propozycją stałej pary."""
         title = self.manual_multi_driver_duty_title(duty_row)
         driver_ids = {int(x) for x in (initial_driver_ids or set()) if x is not None}
         if base_driver_id is not None:
@@ -18510,7 +19951,7 @@ class DutyPlannerApp(tk.Tk):
                         f"{title} - kierowca ma już plan",
                         f"Kierowca {self.ui_driver_label_by_id(int(checked_driver_id))} ma już w dniu {plan_date}:\n\n"
                         f"{self.manual_trip_existing_plan_label(conflict)}\n\n"
-                        "Czy mimo to zastąpić ten wpis rezerwacją/najmem?",
+                        f"Czy mimo to zastąpić ten wpis służbą {title}?",
                     ):
                         return None
             return driver_ids
@@ -18676,13 +20117,9 @@ class DutyPlannerApp(tk.Tk):
         start, end = self.month_range(year, month)
         month_key = f"{year:04d}-{month:02d}"
         proposal_simulation = bool(getattr(self, "_proposal_simulation_running", False))
-        # v372: zanim automat policzy istniejące wpisy i zacznie reset miesiąca,
-        # kasujemy wyłącznie pamięciowy bufor ręcznych wpisów. Same wpisy ręczne
-        # zostają w bazie i niżej będą odczytane od nowa po fizycznym resecie.
-        self.clear_manual_entry_buffers_before_auto_plan(start, end, month_key, commit=True)
-        # v297: pełny zimny start od razu przy każdym kliknięciu planowania.
-        # Dzięki temu liczniki RN i kontekst miesiąca nie biorą niczego z poprzedniego przebiegu.
-        self.force_cold_start_month_context(start, end, month_key, commit=True)
+        # Clear only in-memory runtime buffers before reading database state.
+        # Database cleanup is done later inside the auto-plan transaction.
+        self.clear_auto_plan_runtime_buffers(month_key)
         month_days = calendar.monthrange(year, month)[1]
         pattern_days = self.pattern_day_count()
         next_year = year + (1 if month == 12 else 0)
@@ -18756,9 +20193,9 @@ class DutyPlannerApp(tk.Tk):
             "last_detail": "",
         }
         auto_plan_timeout_seconds = int(getattr(self, "auto_plan_timeout_seconds", 900) or 900)
-        # v436: końcowe przepisywanie ciągłości tygodnia wraca jako lekka, ograniczona
-        # korekta wykonywana dopiero po obsadzie służb/RBH i przed audytem.
-        # Nie jest częścią głównego planowania, żeby nie blokować służb wysokiego priorytetu.
+        # Ciągłość tygodniowa jest nadawana w głównym przebiegu. Kosztowna
+        # korekta po zapisie pozostaje dostępna dla ręcznej analizy, ale automat
+        # jej nie uruchamia.
         weekly_continuity_rewrites = 0
 
         def auto_plan_pulse(detail: str = "", *, force: bool = False) -> None:
@@ -18792,60 +20229,31 @@ class DutyPlannerApp(tk.Tk):
             except Exception:
                 pass
 
-            # v283/v372: twardy start od zera. Najpierw czyścimy bufory,
-            # w tym pamięciowy bufor wpisów ręcznych, i zapisujemy osobny,
-            # zatwierdzony reset bazy. Ręczne wpisy zostają w bazie.
-            self.clear_manual_entry_buffers_before_auto_plan(start, end, month_key, commit=True)
-            self.force_cold_start_month_context(start, end, month_key, commit=True)
             plan_rng, plan_seed = self.auto_plan_rng_for_month(month_key)
-
             preplan_backup_id = ""
             preplan_backup_count = 0
             reset_stats = {"total_before": 0, "manual_kept": 0, "plan_removed": 0, "violations_removed": 0}
             next_month_reset_stats = {"plan_removed": 0, "manual_kept": 0}
-            self.conn.execute("BEGIN IMMEDIATE")
-            try:
-                self.set_meta("last_auto_plan_seed", str(plan_seed))
-                # v162/v283: resetuj poprzedni plan automatyczny PRZED budowaniem
-                # nowego planu i zatwierdź reset osobno. Wpisy ręczne zostają.
-                preplan_backup_id, preplan_backup_count = self.create_plan_backup(start, end, month_key)
-                reset_stats = self.reset_month_before_replan(start, end, month_key)
-                self.enforce_manual_rn_pairs_for_period(start, end)
-                if replan_next_month_after_current:
-                    # v273/v283: jeśli użytkownik zgodził się przeplanować kolejny miesiąc,
-                    # również jego automatyczne wpisy czyścimy przed budowaniem kontekstu.
-                    self.create_plan_backup(next_start, next_end, next_month_key)
-                    next_month_reset_stats = self.reset_month_before_replan(next_start, next_end, next_month_key)
-                    self.enforce_manual_rn_pairs_for_period(next_start, next_end)
-                self.conn.commit()
-            except Exception:
-                try:
-                    self.conn.rollback()
-                except Exception:
-                    pass
-                raise
 
-            self.force_cold_start_month_context(start, end, month_key, commit=True)
-            # v298: drugi, krótki reset po zatwierdzeniu transakcji. Ma wymusić,
-            # że kontekst budowany niżej nie zobaczy żadnej pozostałości starego planu.
             self.conn.execute("BEGIN IMMEDIATE")
-            try:
-                self.reset_month_before_replan(start, end, month_key)
-                self.conn.commit()
-            except Exception:
-                try:
-                    self.conn.rollback()
-                except Exception:
-                    pass
-                raise
-            self.force_cold_start_month_context(start, end, month_key, commit=True)
-            self.clear_manual_entry_buffers_before_auto_plan(start, end, month_key, commit=True)
-            self.conn.execute("BEGIN IMMEDIATE")
+            self.clear_manual_entry_buffers_before_auto_plan(start, end, month_key, commit=False)
+            self.force_cold_start_month_context(start, end, month_key, commit=False)
+            self.set_meta("last_auto_plan_seed", str(plan_seed))
+            preplan_backup_id, preplan_backup_count = self.create_plan_backup(start, end, month_key)
+            reset_stats = self.reset_month_before_replan(start, end, month_key)
+            self.enforce_manual_trip_companions_for_period(start, end)
+            self.enforce_manual_rn_pairs_for_period(start, end)
+            if replan_next_month_after_current:
+                self.create_plan_backup(next_start, next_end, next_month_key)
+                next_month_reset_stats = self.reset_month_before_replan(next_start, next_end, next_month_key)
+                self.enforce_manual_rn_pairs_for_period(next_start, next_end)
+            self.force_cold_start_month_context(start, end, month_key, commit=False)
             excluded_duty_ids = self.excluded_duty_ids_for_month(month_key)
             excluded_driver_ids = self.excluded_driver_ids_for_month(month_key)
             fixed_duties = self.fixed_duties_for_month(month_key)
             pair_map, car_map = self.driver_pair_maps_for_month(month_key)
             self._active_month_start_shifts = self.driver_month_start_shift_effective_map(month_key)
+            direct_month_start_shifts = self.driver_month_start_shift_map(month_key)
             duty_blocks = self.active_duty_blocks()
             duty_driver_exclusions = self.duty_driver_exclusion_map()
             driver_day_plan_exclusions = self.driver_day_plan_exclusion_map()
@@ -18868,6 +20276,38 @@ class DutyPlannerApp(tk.Tk):
                 """
             )
             duty_rows_by_id = {int(row["id"]): row for row in all_duty_rows}
+            weekend_override_counts_by_date = self.weekend_duty_override_counts(start, end)
+            weekend_override_ids_by_date = {
+                plan_date: set(counts)
+                for plan_date, counts in weekend_override_counts_by_date.items()
+            }
+
+            def exact_weekend_override_count(target_day_obj: date | str, duty_id: int) -> int:
+                plan_date = target_day_obj.isoformat() if isinstance(target_day_obj, date) else str(target_day_obj)
+                return max(0, int(weekend_override_counts_by_date.get(plan_date, {}).get(int(duty_id), 0) or 0))
+
+            def is_hard_weekend_override_entry(
+                entry: tuple[str, int, int, str, int | None, str | None],
+            ) -> bool:
+                """True dla automatycznej obsady realizujacej reczny wymog daty i kodu.
+
+                Taki wpis moze miec ``entry_source='auto'``, bo kierowce wybiera
+                generator, ale sama data, kod i liczba obsad pochodza od uzytkownika.
+                Dlatego korekty brakow i RBH nie moga traktowac go jak zwykle R/R2.
+                """
+                try:
+                    return exact_weekend_override_count(str(entry[0]), int(entry[2])) > 0
+                except (IndexError, TypeError, ValueError):
+                    return False
+
+            def duty_required_on_exact_date(
+                duty: sqlite3.Row | dict[str, object],
+                target_day_obj: date,
+            ) -> bool:
+                duty_id = int(duty["id"])
+                if duty_id in weekend_override_ids_by_date.get(target_day_obj.isoformat(), set()):
+                    return True
+                return self.duty_allowed_on_weekday(duty, self.planning_weekday(target_day_obj))
 
             car_vehicle_type_by_id: dict[int, str] = {}
             try:
@@ -18920,12 +20360,30 @@ class DutyPlannerApp(tk.Tk):
             weekend_day_off_duty_id = self.duty_id_by_code("W")
             rn_duty_ids = {int(row["id"]) for row in all_duty_rows if self.is_rn_duty(row)}
             rn_duty_id = min(rn_duty_ids) if rn_duty_ids else None
+
+            def required_rn_count_for_planning(target_day_obj: date) -> int:
+                standard_count = self.rn_required_count_for_date(target_day_obj)
+                if rn_duty_id is None:
+                    return standard_count
+                return max(
+                    standard_count,
+                    exact_weekend_override_count(target_day_obj, int(rn_duty_id)),
+                )
             reserve_duty_ids = [duty_id for duty_id in (self.duty_id_by_code("R"), self.duty_id_by_code("R2")) if duty_id is not None]
             reserve_duty_id_set = {int(duty_id) for duty_id in reserve_duty_ids}
+            auto_plan_allowed_reserve_duty_ids = {
+                int(duty_id)
+                for duty_id in reserve_duty_id_set
+                if int(duty_id) not in excluded_duty_ids
+                and int(duty_rows_by_id[int(duty_id)]["auto_plan_enabled"] or 0) == 1
+            }
+            auto_plan_disabled_reserve_duty_ids = reserve_duty_id_set - auto_plan_allowed_reserve_duty_ids
             reserve_duty_id = reserve_duty_ids[0] if reserve_duty_ids else None
             no_rn_driver_ids = self.no_rn_driver_ids()
             previous_rn_driver_ids = self.previous_month_rn_driver_ids(year, month)
-            recent_rn_driver_ids = self.recent_rn_driver_ids_for_automatic(year, month, months_back=2)
+            # Automatyczna rotacja RN blokuje kierowców wyłącznie z
+            # bezpośrednio poprzedniego miesiąca. Wpis ręczny pozostaje dozwolony.
+            recent_rn_driver_ids = set(previous_rn_driver_ids)
             # v373: niski priorytet wynika wyłącznie z kodów wpisanych w zakładce Planowanie.
             # Nie ma już sztywnego wyjątku dla 12/15: jeśli pola są puste, 12 i 15
             # są zwykłymi służbami i mają być obsadzane przed R/R2.
@@ -18933,7 +20391,7 @@ class DutyPlannerApp(tk.Tk):
             shortage_skip_duty_ids: set[int] = set(auto_plan_soft_skip_duty_ids)
             auto_plan_low_priority_12_15_enabled = bool(shortage_skip_duty_ids)
             auto_plan_reserves_enabled = False
-            auto_plan_nominal_rbh_topup_enabled = True
+            auto_plan_nominal_rbh_topup_enabled = bool(auto_plan_allowed_reserve_duty_ids)
             # v303: nie planuj technicznego WG w etapach pośrednich.
             # Puste komórki domyka dopiero osobny bezpiecznik ostatniej szansy przed zapisem.
             auto_plan_wg_enabled = False
@@ -18970,7 +20428,9 @@ class DutyPlannerApp(tk.Tk):
             for row in duty_rows:
                 driver_duty_counts[(int(row["driver_id"]), int(row["duty_id"]))] = int(row["cnt"])
 
-            drivers = [int(row["id"]) for row in self.rows("SELECT id FROM drivers ORDER BY name COLLATE NOCASE, CAST(lp AS INTEGER)")]
+            driver_rows_for_auto = self.rows("SELECT id, name FROM drivers ORDER BY name COLLATE NOCASE, CAST(lp AS INTEGER)")
+            drivers = [int(row["id"]) for row in driver_rows_for_auto]
+            driver_names = {int(row["id"]): str(row["name"] or f"kierowca {int(row['id'])}") for row in driver_rows_for_auto}
             available_drivers_all = [driver_id for driver_id in drivers if driver_id not in excluded_driver_ids]
 
             entries: list[tuple[str, int, int, str, int | None, str | None]] = []
@@ -18990,6 +20450,11 @@ class DutyPlannerApp(tk.Tk):
             driver_worked_weekends: dict[int, set[date]] = defaultdict(set)
             weekly_duty_driver: dict[tuple[int, int], int] = {}
             weekly_driver_duty: dict[tuple[int, int], int] = {}
+            # Stabilny właściciel służby w roboczej części tygodnia. Oddzielamy
+            # go od pomocniczych map używanych przez późniejsze etapy ratunkowe,
+            # aby weekend planowany jako pierwszy nie narzucał obsady pn-pt.
+            weekday_weekly_duty_owner: dict[tuple[int, int], int] = {}
+            weekday_weekly_driver_duty: dict[tuple[int, int], int] = {}
             max_daily_work = self.compliance_float("max_daily_work_hours", 12.0)
             min_daily_rest = self.compliance_float("min_daily_rest_hours", 9.0)
             max_weekly_work = self.compliance_float("max_weekly_work_hours", 60.0)
@@ -19007,10 +20472,14 @@ class DutyPlannerApp(tk.Tk):
             skipped_excluded_drivers = 0
             skipped_shortage_12_15: list[tuple[str, str]] = []
             skipped_weekend_shortage_optional_duties: list[tuple[str, str]] = []
-            skipped_late_saturday_duties: list[tuple[str, str]] = []
             unfilled_duties: list[tuple[str, int, str, str]] = []
+            weekly_rest_duty_buffer: list[tuple[str, int, str, int, str]] = []
+            weekly_rest_buffered = 0
+            weekly_rest_buffer_reassigned = 0
             duplicate_daily_duty_prevented = 0
             duplicate_daily_duty_prevented_details: list[tuple[str, str, int, int]] = []
+            duplicate_driver_day_prevented = 0
+            duplicate_driver_day_details: list[tuple[str, int, str, str, str]] = []
             unique_daily_duties_by_date: dict[str, dict[int, int]] = defaultdict(dict)
             deferred_low_priority_duties: list[tuple[str, int, int, int]] = []  # pozostawione dla zgodności raportów; v373 realne służby nie są odkładane poza główny przebieg
             deferred_low_priority_keys: set[tuple[str, int]] = set()
@@ -19031,6 +20500,7 @@ class DutyPlannerApp(tk.Tk):
             reserve_skipped_rest = 0
             reserve_skipped_unfilled = 0
             reserve_skipped_daily_limit = 0
+            weekend_rbh_rebalanced = 0
             empty_day_off_entries = 0
             technical_wg_removed_before_save = 0
             drivers_below_nominal_rbh: list[tuple[int, float]] = []
@@ -19039,6 +20509,7 @@ class DutyPlannerApp(tk.Tk):
             rn_unfilled: list[tuple[str, str]] = []
             rn_skipped_no_driver: list[tuple[str, str]] = []
             rn_week_drivers: dict[tuple[str, str], list[int]] = {}
+            rn_full_block_reserved_driver_ids: set[int] = set()
             duty_driver_exclusion_skips = 0
             driver_rn_month_count: dict[int, int] = defaultdict(int)
             split_duty_blocks: list[tuple[str, str, str]] = []
@@ -19277,6 +20748,7 @@ class DutyPlannerApp(tk.Tk):
                 rows = self.rows(
                     """
                     SELECT pp.id, pp.pair_no, pp.pair_order, pp.car_id, pp.driver1_id, pp.driver2_id,
+                           COALESCE(pp.avoid_same_shift, 0) AS avoid_same_shift,
                            c.registration_no, c.description, COALESCE(c.vehicle_type, '') AS vehicle_type, COALESCE(c.sort_order, 0) AS car_order
                     FROM permanent_driver_pairs pp
                     JOIN cars c ON c.id = pp.car_id
@@ -19309,6 +20781,10 @@ class DutyPlannerApp(tk.Tk):
                 required_vehicle_type = self.normalize_vehicle_type_label(block.get("required_vehicle_type") or "")
 
                 def driver_duty_ok(driver_id: int, duty_id: int, *, allow_fixed_conflict: bool, allow_shift_mismatch: bool) -> bool:
+                    # Kierowca wyłączony z miesiąca nie może wrócić do planu
+                    # boczną ścieżką przez zapisaną stałą parę/autobus.
+                    if int(driver_id) not in available_drivers_all:
+                        return False
                     if int(driver_id) in assigned_today:
                         return False
                     if is_driver_blocked_by_day_exclusion(int(driver_id), target_date_obj):
@@ -19317,7 +20793,12 @@ class DutyPlannerApp(tk.Tk):
                         return False
                     if self.is_planning_weekend_or_holiday(target_date_obj) and would_make_consecutive_weekend(int(driver_id), target_date_obj):
                         return False
-                    if not driver_has_required_rest(int(driver_id), int(duty_id), target_date_obj.isoformat(), allow_monthly_overtime=False):
+                    if not driver_has_required_rest(
+                        int(driver_id),
+                        int(duty_id),
+                        target_date_obj.isoformat(),
+                        allow_monthly_overtime=self.is_planning_weekend_or_holiday(target_date_obj),
+                    ):
                         return False
                     if not allow_shift_mismatch and not duty_matches_week_shift(int(driver_id), int(duty_id), target_date_obj):
                         return False
@@ -19348,6 +20829,12 @@ class DutyPlannerApp(tk.Tk):
                         else:
                             score += 45
                     for driver_id, duty_id in assignments:
+                        if self.is_planning_weekend_or_holiday(target_date_obj):
+                            if driver_reserved_for_rn_weekend(int(driver_id), target_date_obj):
+                                score += 100000
+                            # Weekendowe służby są obowiązkowe, ale rozkładamy je
+                            # możliwie równo pomiędzy dostępnych kierowców/pary.
+                            score += len(driver_month_weekend_limit_keys(int(driver_id))) * 5000
                         duty = duty_rows_by_id.get(int(duty_id))
                         if duty is None:
                             score += 1000
@@ -19386,6 +20873,13 @@ class DutyPlannerApp(tk.Tk):
                             for assignments in orientations:
                                 if len({driver_id for driver_id, _duty_id in assignments}) != 2:
                                     continue
+                                if int(pair_row["avoid_same_shift"] or 0):
+                                    assignment_shifts = {
+                                        self.duty_shift_part(duty_rows_by_id[int(assigned_duty_id)])
+                                        for _assigned_driver_id, assigned_duty_id in assignments
+                                    }
+                                    if len(assignment_shifts) == 1 and next(iter(assignment_shifts)) in {"morning", "afternoon"}:
+                                        continue
                                 if all(driver_duty_ok(driver_id, duty_id, allow_fixed_conflict=allow_fixed_conflict, allow_shift_mismatch=allow_shift_mismatch) for driver_id, duty_id in assignments):
                                     vehicle_type = self.normalize_vehicle_type_label(pair_row["vehicle_type"] or "")
                                     reg = str(pair_row["registration_no"] or "").strip()
@@ -19446,21 +20940,25 @@ class DutyPlannerApp(tk.Tk):
                         duty = duty_rows_by_id[duty_id]
                     except Exception:
                         continue
-                    if not self.is_rest_relevant_duty(duty):
+                    active_work = self.is_rest_relevant_duty(duty)
+                    counts_as_workday = self.counts_as_workday(duty)
+                    if not counts_as_workday:
                         continue
                     plan_date = str(row["plan_date"] or "")
                     try:
-                        start_existing, end_existing = duty_interval_for_date(duty_id, plan_date)
                         day_obj = datetime.strptime(plan_date, "%Y-%m-%d").date()
                     except Exception:
                         continue
-                    driver_work_intervals[driver_id].append((start_existing, end_existing))
                     driver_work_dates[driver_id].add(day_obj)
                     if self.is_planning_weekend_or_holiday(day_obj):
                         driver_worked_weekends[driver_id].add(weekend_start_for_day(day_obj))
                     work_hours = self.standard_service_rbh_hours(duty)
-                    iso_week = start_existing.date().isocalendar()
+                    iso_week = day_obj.isocalendar()
                     driver_week_work_hours[(driver_id, iso_week.year, iso_week.week)] += work_hours
+                    if not active_work:
+                        continue
+                    start_existing, end_existing = duty_interval_for_date(duty_id, plan_date)
+                    driver_work_intervals[driver_id].append((start_existing, end_existing))
                     previous_end = driver_last_work_end.get(driver_id)
                     if previous_end is None or end_existing > previous_end:
                         driver_last_work_end[driver_id] = end_existing
@@ -19527,10 +21025,10 @@ class DutyPlannerApp(tk.Tk):
             def weekend_auto_block_reason(driver_id: int, day_obj: date) -> str | None:
                 """v369: powod blokady weekendowej dla automatu.
 
-                Automat pilnuje trzech zasad naraz:
-                - nie planuje jednemu kierowcy soboty i niedzieli pod rzad,
-                - maksymalnie 2 rozne weekendy pracy w miesiacu,
-                - brak pracy w dwoch weekendach z rzedu.
+                Automat pilnuje jednej twardej zasady: nie planuje jednemu
+                kierowcy soboty i niedzieli tego samego weekendu. Liczba
+                weekendów i weekendy następujące po sobie są kryterium
+                równoważenia, ale nie mogą pozostawić służby bez obsady.
 
                 Wpisy reczne nie sa tu blokowane, bo ta funkcja dziala wylacznie
                 wewnatrz automatycznego planowania. Istniejacy wpis reczny jest
@@ -19542,15 +21040,6 @@ class DutyPlannerApp(tk.Tk):
                     return None
                 if driver_has_adjacent_calendar_weekend_day(int(driver_id), day_obj):
                     return "sobota i niedziela pod rzad dla jednego kierowcy"
-                target_key = weekend_limit_key_for_day(day_obj)
-                all_keys = driver_weekend_limit_keys(int(driver_id))
-                if target_key in all_keys:
-                    return None
-                if (target_key - timedelta(days=7)) in all_keys or (target_key + timedelta(days=7)) in all_keys:
-                    return "dwa weekendy pracy z rzedu dla automatu"
-                current_month_keys = driver_month_weekend_limit_keys(int(driver_id))
-                if len(current_month_keys) >= 2:
-                    return "limit 2 weekendow pracy w miesiacu dla automatu"
                 return None
 
             def would_make_consecutive_weekend(driver_id: int, day_obj: date) -> bool:
@@ -19686,22 +21175,124 @@ class DutyPlannerApp(tk.Tk):
                             best_start = gap_start
                             best_end = gap_end
                 return best_hours, best_start, best_end
-            def driver_has_required_rest(driver_id: int, duty_id: int, target_date: str, *, allow_monthly_overtime: bool = False) -> bool:
+
+            def pair_same_shift_block_reason(driver_id: int, duty_id: int, target_date: str) -> str | None:
+                conflict = self.pair_same_shift_conflict_for_context(
+                    int(driver_id),
+                    int(duty_id),
+                    str(target_date),
+                    pair_map,
+                    planned_context_entries,
+                    duty_rows_by_id,
+                )
+                if conflict is None:
+                    return None
+                shift_label = "I" if conflict["shift"] == "morning" else "II"
+                partner_name = driver_names.get(int(conflict["partner_id"]), str(conflict["partner_id"]))
+                return (
+                    f"para {conflict['pair_no'] or '-'} ma zaznaczone «nie planuj na jednej zmianie»; "
+                    f"kierowca {partner_name} ma już zmianę {shift_label}"
+                )
+
+            def driver_reserved_for_rn_weekend(driver_id: int, day_obj: date) -> bool:
+                """Chron zarezerwowana pare RN przed sluzbami weekendowymi wokol bloku."""
+                driver_id = int(driver_id)
+                for (block_kind, block_start_text), reserved_ids in rn_week_drivers.items():
+                    if driver_id not in reserved_ids:
+                        continue
+                    try:
+                        block_start = date.fromisoformat(str(block_start_text))
+                    except ValueError:
+                        continue
+                    if block_kind == "sobota":
+                        # Sobotnia RN konczy sie w niedziele rano. Kierowca
+                        # zarezerwowany do RN nie moze dostac zwyklej sluzby ani
+                        # w sobote, ani w nastepna niedziele przed wpisaniem RN.
+                        if day_obj in {block_start, block_start + timedelta(days=1)}:
+                            return True
+                        continue
+                    if block_kind != "niedziela-piatek":
+                        continue
+                    protected_dates = {
+                        block_start - timedelta(days=1),
+                        block_start,
+                        block_start + timedelta(days=6),
+                        block_start + timedelta(days=7),
+                    }
+                    if day_obj in protected_dates:
+                        return True
+                return False
+
+            def driver_reserved_for_exact_saturday_rn(driver_id: int, day_obj: date) -> bool:
+                if not self.is_rn_single_coverage_day(day_obj):
+                    return False
+                return int(driver_id) in rn_week_drivers.get(("sobota", day_obj.isoformat()), [])
+
+            def driver_reserved_for_adjacent_saturday_rn(driver_id: int, block: list[date]) -> bool:
+                """Nie pozwalaj blokowi niedziela-piatek zabrac kierowcy sobotniej RN."""
+                if len(block) <= 1:
+                    return False
+                adjacent_saturdays = (
+                    block[0] - timedelta(days=1),
+                    block[-1] + timedelta(days=1),
+                )
+                return any(
+                    driver_reserved_for_exact_saturday_rn(int(driver_id), day_obj)
+                    for day_obj in adjacent_saturdays
+                )
+
+            def planned_rn_duty_ending_at(driver_id: int, interval_end: datetime) -> sqlite3.Row | dict[str, object] | None:
+                """Znajdź RN odpowiadające ostatniemu przedziałowi pracy kierowcy."""
+                if interval_end.weekday() != 5:
+                    return None
+                for entry_date, entry_driver_id, entry_duty_id, _note, _car_id, _pair_no in planned_context_entries:
+                    if int(entry_driver_id) != int(driver_id):
+                        continue
+                    duty = duty_rows_by_id.get(int(entry_duty_id))
+                    if duty is None or not self.is_rn_duty(duty):
+                        continue
+                    _entry_start, entry_end = duty_interval_for_date(int(entry_duty_id), str(entry_date))
+                    if entry_end == interval_end:
+                        return duty
+                return None
+
+            def driver_has_required_rest(
+                driver_id: int,
+                duty_id: int,
+                target_date: str,
+                *,
+                allow_monthly_overtime: bool = False,
+                allow_required_rn_weekend_overlap: bool = False,
+                allow_inherited_month_start_shift_mismatch: bool = False,
+            ) -> bool:
                 duty = duty_rows_by_id[duty_id]
                 if self.is_day_off_duty(duty):
                     return True
-                start_dt, end_dt = duty_interval_for_date(duty_id, target_date)
                 target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
-                if would_make_consecutive_weekend(driver_id, target_day_obj):
+                start_shift_reason = direct_month_start_shift_block_reason(int(driver_id), int(duty_id), target_day_obj)
+                if start_shift_reason:
+                    has_explicit_start_shift = int(driver_id) in direct_month_start_shifts
+                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch:
+                        return False
+                if pair_same_shift_block_reason(int(driver_id), int(duty_id), str(target_date)):
+                    return False
+                if int(duty_id) != int(rn_duty_id or -1) and driver_reserved_for_exact_saturday_rn(driver_id, target_day_obj):
+                    return False
+                start_dt, end_dt = duty_interval_for_date(duty_id, target_date)
+                if not allow_required_rn_weekend_overlap and would_make_consecutive_weekend(driver_id, target_day_obj):
                     return False
                 if is_vacation_protected_weekend(driver_id, target_day_obj):
                     return False
-                if max_consecutive_work_days > 0:
+                # Przy aktywnej kontroli tygodniowej termin szesciu dni wynika
+                # z rzeczywistych przerw miedzy koncem i poczatkiem sluzb.
+                if max_consecutive_work_days > 0 and not check_weekly_rest:
                     run_len, _run_start, _run_end = consecutive_work_run_after_candidate(driver_id, target_day_obj)
                     if run_len > max_consecutive_work_days:
                         return False
                 # v178/v359: odpoczynki liczone jak wcześniej, a przed nimi działa limit
-                # weekendowy: maksymalnie 2 weekendy w miesiącu i bez weekendów z rzędu.
+                # Weekendowy twardy filtr dotyczy tylko soboty i niedzieli
+                # tego samego weekendu. Pozostałe ograniczenia są miękkim
+                # równoważeniem, aby nie pozostawiać służb bez obsady.
                 work_hours = self.standard_service_rbh_hours(duty)
                 if work_hours > max_daily_work + 1e-6:
                     return False
@@ -19721,38 +21312,75 @@ class DutyPlannerApp(tk.Tk):
                         next_start = existing_start
                 if previous_end is not None:
                     rest_hours = (start_dt - previous_end).total_seconds() / 3600
-                    if rest_hours < min_daily_rest - 1e-6:
+                    required_before, _rest_kind = self.required_rest_between_services(
+                        previous_end,
+                        start_dt,
+                        min_daily_rest,
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    previous_rn_duty = planned_rn_duty_ending_at(driver_id, previous_end)
+                    if previous_rn_duty is not None and self.friday_rn_requires_weekly_rest_before_sunday(
+                        previous_rn_duty,
+                        previous_end,
+                        start_dt,
+                    ):
+                        required_before = max(
+                            required_before,
+                            reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                        )
+                    if rest_hours < required_before - 1e-6:
                         return False
                 if next_start is not None:
                     rest_hours_after = (next_start - end_dt).total_seconds() / 3600
-                    if rest_hours_after < min_daily_rest - 1e-6:
+                    required_after, _rest_kind = self.required_rest_between_services(
+                        end_dt,
+                        next_start,
+                        min_daily_rest,
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    if self.friday_rn_requires_weekly_rest_before_sunday(duty, end_dt, next_start):
+                        required_after = max(
+                            required_after,
+                            reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                        )
+                    if rest_hours_after < required_after - 1e-6:
                         return False
 
                 # v189: twarda kontrola tygodniowego odpoczynku już podczas automatycznego
                 # planowania. Wcześniej tydzień był tylko raportowany po ułożeniu planu,
                 # przez co automat mógł obsadzić służbę mimo braku wymaganego odpoczynku.
+                if check_weekly_rest and max_consecutive_work_days > 0:
+                    work_date_run = self.work_date_run_containing_candidate_without_weekly_rest(
+                        list(driver_work_intervals.get(driver_id, [])),
+                        (start_dt, end_dt),
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    if work_date_run > max_consecutive_work_days:
+                        return False
                 if not check_weekly_rest:
                     return True
 
                 # Odpoczynek tygodniowy licz ruchomo, a nie jako poniedziałek-niedziela.
                 # Każdy ciąg odpoczynku >= 24 h jest dopuszczalnym skróconym odpoczynkiem
                 # tygodniowym; wolny weekend naturalnie wpada do takiego okna.
-                candidate_intervals = list(driver_work_intervals.get(driver_id, [])) + [(start_dt, end_dt)]
-                current_gap, gap_start, gap_end = rolling_weekly_rest_gap_for_day(candidate_intervals, start_dt.date())
-                minimum_weekly_gap = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
-                if current_gap < minimum_weekly_gap - 1e-6:
-                    return False
-
-                if check_regulation_561 and current_gap < regular_weekly_rest - 1e-6:
-                    deficit = regular_weekly_rest - current_gap
-                    maybe_confirm_short_compensation_override(
-                        driver_id,
-                        duty_id,
-                        target_date,
-                        deficit,
-                        "skrócony ruchomy odpoczynek tygodniowy",
-                        f"odpoczynek {self.format_hours(current_gap)} h ({gap_start.strftime('%Y-%m-%d %H:%M')} - {gap_end.strftime('%Y-%m-%d %H:%M')}); wymagany zapis rekompensaty {self.format_hours(deficit)} h",
+                existing_intervals = list(driver_work_intervals.get(driver_id, []))
+                if check_regulation_561:
+                    consecutive_reduced = self.new_consecutive_reduced_weekly_rest_violation(
+                        existing_intervals,
+                        (start_dt, end_dt),
+                        reduced_weekly_rest,
+                        regular_weekly_rest,
                     )
+                    if consecutive_reduced is not None:
+                        return False
+                minimum_weekly_gap = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
+                deadline_violation = self.new_weekly_rest_deadline_violation(
+                    existing_intervals,
+                    (start_dt, end_dt),
+                    minimum_weekly_gap,
+                )
+                if deadline_violation is not None:
+                    return False
                 return True
 
             def driver_rest_block_reason(driver_id: int, duty_id: int, target_date: str, *, allow_monthly_overtime: bool = False) -> str | None:
@@ -19766,14 +21394,24 @@ class DutyPlannerApp(tk.Tk):
                 duty_code = self.normalize_code(duty["code"])
                 if self.is_day_off_duty(duty):
                     return None
-                start_dt, end_dt = duty_interval_for_date(int(duty_id), target_date)
                 target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                start_shift_reason = direct_month_start_shift_block_reason(
+                    int(driver_id), int(duty_id), target_day_obj
+                )
+                if start_shift_reason:
+                    return start_shift_reason
+                pair_shift_reason = pair_same_shift_block_reason(int(driver_id), int(duty_id), str(target_date))
+                if pair_shift_reason:
+                    return pair_shift_reason
+                if int(duty_id) != int(rn_duty_id or -1) and driver_reserved_for_exact_saturday_rn(int(driver_id), target_day_obj):
+                    return "kierowca zarezerwowany na obowiązkowe sobotnie RN"
+                start_dt, end_dt = duty_interval_for_date(int(duty_id), target_date)
                 weekend_reason = weekend_auto_block_reason(int(driver_id), target_day_obj)
                 if weekend_reason:
                     return weekend_reason
                 if is_vacation_protected_weekend(int(driver_id), target_day_obj):
                     return "dzień chroniony urlopem/weekendem urlopowym"
-                if max_consecutive_work_days > 0:
+                if max_consecutive_work_days > 0 and not check_weekly_rest:
                     run_len, run_start, run_end = consecutive_work_run_after_candidate(int(driver_id), target_day_obj)
                     if run_len > max_consecutive_work_days:
                         return f"ciąg pracy {run_len} dni ({run_start.isoformat()} - {run_end.isoformat()}) przekracza limit {max_consecutive_work_days}"
@@ -19798,22 +21436,88 @@ class DutyPlannerApp(tk.Tk):
                         next_start = existing_start
                 if previous_end is not None:
                     rest_hours = (start_dt - previous_end).total_seconds() / 3600
-                    if rest_hours < min_daily_rest - 1e-6:
-                        return f"za krótki odpoczynek przed {duty_code}: {self.format_hours(rest_hours)} h < {self.format_hours(min_daily_rest)} h"
+                    required_before, rest_kind = self.required_rest_between_services(
+                        previous_end,
+                        start_dt,
+                        min_daily_rest,
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    previous_rn_duty = planned_rn_duty_ending_at(int(driver_id), previous_end)
+                    if previous_rn_duty is not None and self.friday_rn_requires_weekly_rest_before_sunday(
+                        previous_rn_duty,
+                        previous_end,
+                        start_dt,
+                    ):
+                        required_before = max(
+                            required_before,
+                            reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                        )
+                        rest_kind = "weekly"
+                    if rest_hours < required_before - 1e-6:
+                        rest_label = "tygodniowy" if rest_kind == "weekly" else "dobowy"
+                        return f"za krótki odpoczynek {rest_label} przed {duty_code}: {self.format_hours(rest_hours)} h < {self.format_hours(required_before)} h"
                 if next_start is not None:
                     rest_hours_after = (next_start - end_dt).total_seconds() / 3600
-                    if rest_hours_after < min_daily_rest - 1e-6:
-                        return f"za krótki odpoczynek po {duty_code}: {self.format_hours(rest_hours_after)} h < {self.format_hours(min_daily_rest)} h; {duty_code} kończy {end_dt.strftime('%Y-%m-%d %H:%M')}, następna służba {next_start.strftime('%Y-%m-%d %H:%M')}"
+                    required_after, rest_kind = self.required_rest_between_services(
+                        end_dt,
+                        next_start,
+                        min_daily_rest,
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    if self.friday_rn_requires_weekly_rest_before_sunday(duty, end_dt, next_start):
+                        required_after = max(
+                            required_after,
+                            reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                        )
+                        rest_kind = "weekly"
+                    if rest_hours_after < required_after - 1e-6:
+                        rest_label = "tygodniowy" if rest_kind == "weekly" else "dobowy"
+                        return f"za krótki odpoczynek {rest_label} po {duty_code}: {self.format_hours(rest_hours_after)} h < {self.format_hours(required_after)} h; {duty_code} kończy {end_dt.strftime('%Y-%m-%d %H:%M')}, następna służba {next_start.strftime('%Y-%m-%d %H:%M')}"
+                if check_weekly_rest and max_consecutive_work_days > 0:
+                    work_date_run = self.work_date_run_containing_candidate_without_weekly_rest(
+                        list(driver_work_intervals.get(int(driver_id), [])),
+                        (start_dt, end_dt),
+                        reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                    )
+                    if work_date_run > max_consecutive_work_days:
+                        minimum_rest = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
+                        return (
+                            f"ciąg pracy {work_date_run} dni bez odpoczynku tygodniowego "
+                            f"co najmniej {self.format_hours(minimum_rest)} h przekracza limit "
+                            f"{max_consecutive_work_days}"
+                        )
                 if not check_weekly_rest:
                     return None
-                candidate_intervals = list(driver_work_intervals.get(int(driver_id), [])) + [(start_dt, end_dt)]
-                current_gap, gap_start, gap_end = rolling_weekly_rest_gap_for_day(candidate_intervals, start_dt.date())
+                existing_intervals = list(driver_work_intervals.get(int(driver_id), []))
+                if check_regulation_561:
+                    consecutive_reduced = self.new_consecutive_reduced_weekly_rest_violation(
+                        existing_intervals,
+                        (start_dt, end_dt),
+                        reduced_weekly_rest,
+                        regular_weekly_rest,
+                    )
+                    if consecutive_reduced is not None:
+                        first = dict(consecutive_reduced["first"])
+                        second = dict(consecutive_reduced["second"])
+                        return (
+                            "dwa skrócone odpoczynki tygodniowe pod rząd: "
+                            f"{self.format_hours(float(first['hours']))} h, następnie "
+                            f"{self.format_hours(float(second['hours']))} h; po skróconym "
+                            f"wymagane co najmniej {self.format_hours(regular_weekly_rest)} h"
+                        )
                 minimum_weekly_gap = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
-                if current_gap < minimum_weekly_gap - 1e-6:
+                deadline_violation = self.new_weekly_rest_deadline_violation(
+                    existing_intervals,
+                    (start_dt, end_dt),
+                    minimum_weekly_gap,
+                )
+                if deadline_violation is not None:
+                    deadline = deadline_violation["deadline"]
+                    observed_start = deadline_violation["observed_start"]
                     return (
-                        f"odpoczynek tygodniowy ruchomy: {self.format_hours(current_gap)} h < "
-                        f"{self.format_hours(minimum_weekly_gap)} h; najlepszy gap "
-                        f"{gap_start.strftime('%Y-%m-%d %H:%M')} - {gap_end.strftime('%Y-%m-%d %H:%M')}"
+                        "przekroczony ruchomy termin odpoczynku tygodniowego: "
+                        f"najpóźniej {deadline.strftime('%Y-%m-%d %H:%M')}, "
+                        f"możliwy początek {observed_start.strftime('%Y-%m-%d %H:%M')}"
                     )
                 return None
 
@@ -19836,11 +21540,7 @@ class DutyPlannerApp(tk.Tk):
                 Liczymy indeks ciągle względem planowanego miesiąca, żeby koniec/początek
                 miesiąca nie resetował naprzemienności zmian.
                 """
-                reference_day = day_obj
-                if day_obj.weekday() == 5:  # sobota
-                    reference_day = day_obj - timedelta(days=1)
-                elif day_obj.weekday() == 6:  # niedziela
-                    reference_day = day_obj + timedelta(days=1)
+                reference_day = self.planning_shift_reference_date(day_obj)
                 month_start_obj = date(year, month, 1)
                 days_since_sunday = (month_start_obj.weekday() + 1) % 7
                 first_week_start = month_start_obj - timedelta(days=days_since_sunday)
@@ -19858,6 +21558,63 @@ class DutyPlannerApp(tk.Tk):
                 if duty_shift not in {"morning", "afternoon"}:
                     return True
                 return duty_shift == effective_preferred_shift_for_date(int(driver_id), day_obj)
+
+            def direct_month_start_shift_block_reason(driver_id: int, duty_id: int, day_obj: date) -> str | None:
+                """Twardo zachowaj ręczny wybór w pierwszym tygodniu lub przy pierwszej pracy."""
+                # Bezposredni wpis oraz zmiana odziedziczona z poprzedniego
+                # miesiaca sa rownie wiazace w pierwszym tygodniu planu.
+                preferred = getattr(self, "_active_month_start_shifts", {}).get(int(driver_id))
+                if preferred not in {"morning", "afternoon"}:
+                    return None
+                has_real_month_work = any(
+                    start <= str(entry[0]) <= end
+                    and int(entry[1]) == int(driver_id)
+                    and int(entry[2]) in duty_rows_by_id
+                    and not self.is_day_off_duty(duty_rows_by_id[int(entry[2])])
+                    for entry in planned_context_entries
+                )
+                if shift_week_index_for_date(day_obj) != 0 and has_real_month_work:
+                    return None
+                duty = duty_rows_by_id.get(int(duty_id))
+                if duty is None or self.is_day_off_duty(duty) or int(duty_id) in rn_duty_ids:
+                    return None
+                duty_shift = self.duty_shift_part(duty)
+                if duty_shift not in {"morning", "afternoon"} or duty_shift == preferred:
+                    return None
+                return (
+                    f"ręczna zmiana startowa dla {month_key}: "
+                    f"{self.preferred_shift_label(preferred)}"
+                )
+
+            def rn_driver_has_second_shift_for_date(driver_id: int, day_obj: date) -> bool:
+                """RN planuj tylko kierowcom, kt?rzy grafikowo maj? II zmian?."""
+                return effective_preferred_shift_for_date(int(driver_id), day_obj) == "afternoon"
+
+            def rn_driver_has_second_shift_for_block(driver_id: int, block: list[date]) -> bool:
+                if len(block) == 1 and block[0].weekday() == 5:
+                    # II zmiana od poniedziałku jest pierwszym wyborem, ale nie
+                    # twardym warunkiem. Dozwolone jest też WG albo legalna I
+                    # zmiana, gdy rzeczywiste odstępy potwierdzą wcześniejszy
+                    # odpoczynek tygodniowy, odpoczynek dobowy po RN oraz kolejny
+                    # odpoczynek przed upływem sześciu dób.
+                    return True
+                return all(rn_driver_has_second_shift_for_date(int(driver_id), day_obj) for day_obj in block)
+
+            def saturday_rn_next_monday_rank(driver_id: int, block: list[date]) -> int:
+                """Preferuj II zmianę, potem istniejące WG/W, na końcu legalną I zmianę."""
+                if len(block) != 1 or block[0].weekday() != 5:
+                    return 0
+                next_monday = block[0] + timedelta(days=2)
+                if effective_preferred_shift_for_date(int(driver_id), next_monday) == "afternoon":
+                    return 0
+                monday_text = next_monday.isoformat()
+                for entry in planned_context_entries:
+                    if str(entry[0]) != monday_text or int(entry[1]) != int(driver_id):
+                        continue
+                    duty = duty_rows_by_id.get(int(entry[2]))
+                    if duty is not None and self.is_day_off_duty(duty):
+                        return 1
+                return 2
 
             def weekly_duty_continuity_score(driver_id: int, duty_id: int, week_index_value: int) -> int:
                 """Nie wpływaj na główną obsadę przez ciągłość numeru służby.
@@ -19964,6 +21721,14 @@ class DutyPlannerApp(tk.Tk):
                 day_map[int(duty_id)] = int(driver_id)
                 return True
 
+            def unregister_unique_daily_duty(target_date: str, driver_id: int, duty_id: int) -> None:
+                """Undo one daily service registration after a controlled auto replacement."""
+                if not auto_unique_daily_duty(int(duty_id)):
+                    return
+                day_map = unique_daily_duties_by_date.get(str(target_date))
+                if day_map is not None and int(day_map.get(int(duty_id), 0) or 0) == int(driver_id):
+                    day_map.pop(int(duty_id), None)
+
             def driver_has_rn_lock_for_service(driver_id: int, target_date: str, duty_id: int) -> bool:
                 duty_id = int(duty_id)
                 if duty_id in rn_duty_ids:
@@ -20005,9 +21770,123 @@ class DutyPlannerApp(tk.Tk):
                         return True
                 return False
 
-            def add_entry(target_date: str, driver_id: int, duty_id: int, note_parts: list[str], is_required: bool) -> None:
-                nonlocal filled_required, fixed_used, paired_used, saturday_duty_used, wg_entries, shift_change_used, duplicate_daily_duty_prevented, duty_driver_exclusion_skips
+            def auto_entry_label(entry: tuple[str, int, int, str, int | None, str | None] | None) -> str:
+                if entry is None:
+                    return "brak"
+                try:
+                    duty = duty_rows_by_id.get(int(entry[2]))
+                    code = str(duty["code"] or entry[2]) if duty is not None else str(entry[2])
+                except Exception:
+                    code = str(entry[2])
+                note = str(entry[3] or "")
+                return f"duty={code}, note={note}" if note else f"duty={code}"
+
+            def log_driver_day_conflict(
+                target_date: str,
+                driver_id: int,
+                existing_entry: tuple[str, int, int, str, int | None, str | None] | None,
+                new_duty_id: int,
+                new_note: str,
+                stage: str,
+            ) -> None:
+                driver_name = driver_names.get(int(driver_id), f"kierowca {int(driver_id)}")
+                new_duty = duty_rows_by_id.get(int(new_duty_id))
+                new_code = str(new_duty["code"] or new_duty_id) if new_duty is not None else str(new_duty_id)
+                duplicate_driver_day_details.append((str(target_date), int(driver_id), driver_name, auto_entry_label(existing_entry), f"duty={new_code}, note={new_note}"))
+                try:
+                    with self.log_file_path().open("a", encoding="utf-8") as handle:
+                        handle.write(f"\n[{datetime.now().isoformat(timespec='seconds')}] {APP_VERSION} | auto_plan_driver_day_unique_conflict\n")
+                        handle.write(f"stage={stage}\n")
+                        handle.write(f"date={target_date}\n")
+                        handle.write(f"driver_id={int(driver_id)}\n")
+                        handle.write(f"driver_name={driver_name}\n")
+                        handle.write(f"existing={auto_entry_label(existing_entry)}\n")
+                        handle.write(f"new=duty={new_code}, note={new_note}\n")
+                except Exception:
+                    pass
+
+            def existing_driver_day_context_entry(target_date: str, driver_id: int) -> tuple[str, int, int, str, int | None, str | None] | None:
+                for entry in reversed(planned_context_entries):
+                    if str(entry[0]) == str(target_date) and int(entry[1]) == int(driver_id):
+                        return entry
+                return None
+
+            def auto_entry_priority(entry: tuple[str, int, int, str, int | None, str | None]) -> int:
+                duty_id_value = int(entry[2])
+                duty = duty_rows_by_id.get(duty_id_value)
+                if duty is None:
+                    return 0
+                if self.is_day_off_duty(duty):
+                    return 1
+                if duty_id_value in reserve_duty_id_set:
+                    return 2
+                if duty_id_value in rn_duty_ids:
+                    return 3
+                return 4
+
+            def add_entry(
+                target_date: str,
+                driver_id: int,
+                duty_id: int,
+                note_parts: list[str],
+                is_required: bool,
+                *,
+                allow_inherited_month_start_shift_mismatch: bool = False,
+            ) -> None:
+                nonlocal filled_required, fixed_used, paired_used, saturday_duty_used, wg_entries, shift_change_used, duplicate_daily_duty_prevented, duplicate_driver_day_prevented, duty_driver_exclusion_skips
+                target_date = str(target_date)
+                driver_id = int(driver_id)
+                duty_id = int(duty_id)
                 duty_for_duplicate_check = duty_rows_by_id.get(int(duty_id))
+                new_note_preview = "; ".join(str(part) for part in note_parts)
+                exact_weekend_override = duty_id in weekend_override_ids_by_date.get(target_date, set())
+                if duty_id in auto_plan_disabled_reserve_duty_ids and not exact_weekend_override:
+                    return
+                if duty_id in rn_duty_ids and driver_id in no_rn_driver_ids:
+                    if is_required:
+                        unfilled_duties.append((target_date, duty_id, "RN", "kierowca ma twardy zakaz 'Nie planuj RN'"))
+                    return
+                try:
+                    target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                except ValueError:
+                    target_day_obj = date(year, month, 1)
+                if (
+                    duty_for_duplicate_check is not None
+                    and not self.is_day_off_duty(duty_for_duplicate_check)
+                    and is_driver_blocked_by_day_exclusion(driver_id, target_day_obj)
+                ):
+                    if is_required:
+                        duty_code = str(duty_for_duplicate_check["code"] or duty_id)
+                        unfilled_duties.append((
+                            target_date,
+                            duty_id,
+                            duty_code,
+                            "kierowca ma twardy zakaz automatycznej pracy w tym dniu",
+                        ))
+                    return
+                start_shift_reason = direct_month_start_shift_block_reason(driver_id, duty_id, target_day_obj)
+                if start_shift_reason:
+                    has_explicit_start_shift = int(driver_id) in direct_month_start_shifts
+                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch:
+                        if is_required:
+                            duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
+                            unfilled_duties.append((target_date, duty_id, duty_code, start_shift_reason))
+                        return
+                if (target_date, driver_id) in manual_locked_driver_dates:
+                    duplicate_driver_day_prevented += 1
+                    log_driver_day_conflict(target_date, driver_id, existing_driver_day_context_entry(target_date, driver_id), duty_id, new_note_preview, "add_entry:manual_locked")
+                    if is_required:
+                        duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
+                        unfilled_duties.append((target_date, duty_id, duty_code, "kierowca ma ręczny wpis tego dnia"))
+                    return
+                existing_day_entry = existing_driver_day_context_entry(target_date, driver_id)
+                if existing_day_entry is not None:
+                    duplicate_driver_day_prevented += 1
+                    log_driver_day_conflict(target_date, driver_id, existing_day_entry, duty_id, new_note_preview, "add_entry:existing_driver_day")
+                    if is_required:
+                        duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
+                        unfilled_duties.append((target_date, duty_id, duty_code, "kierowca ma już wpis w tym dniu"))
+                    return
                 if driver_has_rn_lock_for_service(int(driver_id), str(target_date), int(duty_id)):
                     if is_required:
                         duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
@@ -20030,6 +21909,12 @@ class DutyPlannerApp(tk.Tk):
                         duty_code = str(duty_id)
                     if is_required:
                         unfilled_duties.append((str(target_date), int(duty_id), str(duty_code or duty_id), "zakaz służby dla kierowcy"))
+                    return
+                pair_shift_reason = pair_same_shift_block_reason(int(driver_id), int(duty_id), str(target_date))
+                if pair_shift_reason:
+                    if is_required:
+                        duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
+                        unfilled_duties.append((str(target_date), int(duty_id), duty_code, pair_shift_reason))
                     return
                 if not register_unique_daily_duty(str(target_date), int(driver_id), int(duty_id)):
                     duplicate_daily_duty_prevented += 1
@@ -20101,9 +21986,89 @@ class DutyPlannerApp(tk.Tk):
                         entry_week_index = shift_week_index_for_date(entry_day_obj)
                         weekly_driver_duty.setdefault((int(driver_id), int(entry_week_index)), int(duty_id))
                         weekly_duty_driver.setdefault((int(duty_id), int(entry_week_index)), int(driver_id))
+                        if self.is_calendar_workday_for_norm(entry_day_obj):
+                            continuity_week_index = self.week_index_in_month(entry_day_obj)
+                            weekday_weekly_duty_owner.setdefault(
+                                (int(duty_id), int(continuity_week_index)),
+                                int(driver_id),
+                            )
+                            weekday_weekly_driver_duty.setdefault(
+                                (int(driver_id), int(continuity_week_index)),
+                                int(duty_id),
+                            )
                     previous_end = driver_last_work_end.get(driver_id)
                     if previous_end is None or end_dt > previous_end:
                         driver_last_work_end[driver_id] = end_dt
+
+            def buffer_weekday_duty_for_required_rest(
+                target_date_obj: date,
+                duty_id: int,
+                owner_driver_id: int,
+                reason: str,
+            ) -> None:
+                """Odłóż służbę właściciela tygodnia bez tworzenia technicznego WG."""
+                nonlocal weekly_rest_buffered
+                target_date = target_date_obj.isoformat()
+                duty = duty_rows_by_id.get(int(duty_id))
+                code = str(duty["code"] or duty_id) if duty is not None else str(duty_id)
+                key = (target_date, int(duty_id))
+                if not any((str(item[0]), int(item[1])) == key for item in weekly_rest_duty_buffer):
+                    weekly_rest_duty_buffer.append(
+                        (target_date, int(duty_id), code, int(owner_driver_id), str(reason))
+                    )
+                    weekly_rest_buffered += 1
+                if not any((str(item[0]), int(item[1])) == key for item in unfilled_duties):
+                    unfilled_duties.append(
+                        (
+                            target_date,
+                            int(duty_id),
+                            code,
+                            f"bufor ciągłości tygodniowej: kierowca {driver_names.get(int(owner_driver_id), owner_driver_id)} wymaga przerwy; {reason}",
+                        )
+                    )
+
+            def weekday_continuity_owner_choice(
+                duty_id: int,
+                target_date_obj: date,
+                week_index: int,
+                assigned_today: set[int],
+            ) -> tuple[int | None, tuple[int, str] | None]:
+                """Wybierz właściciela służby albo wskaż konieczność buforowania.
+
+                Przekroczenie samej normy miesięcznej nie jest obowiązkową
+                przerwą. Bufor powstaje wyłącznie po twardej blokadzie przepisów.
+                """
+                if not self.is_calendar_workday_for_norm(target_date_obj):
+                    return None, None
+                owner_driver_id = weekday_weekly_duty_owner.get((int(duty_id), int(week_index)))
+                if owner_driver_id is None:
+                    return None, None
+                owner_driver_id = int(owner_driver_id)
+                if owner_driver_id in assigned_today or owner_driver_id not in available_drivers_all:
+                    return None, None
+                if is_driver_blocked_by_day_exclusion(owner_driver_id, target_date_obj):
+                    return None, None
+                if is_driver_blocked_by_vacation_for_auto_work(owner_driver_id, target_date_obj):
+                    return None, None
+                if owner_driver_id in duty_driver_exclusions.get(int(duty_id), set()):
+                    return None, None
+                target_date = target_date_obj.isoformat()
+                if driver_has_required_rest(
+                    owner_driver_id,
+                    int(duty_id),
+                    target_date,
+                    allow_monthly_overtime=False,
+                ):
+                    return owner_driver_id, None
+                regulation_reason = driver_rest_block_reason(
+                    owner_driver_id,
+                    int(duty_id),
+                    target_date,
+                    allow_monthly_overtime=True,
+                )
+                if regulation_reason:
+                    return None, (owner_driver_id, regulation_reason)
+                return None, None
 
             def choose_driver_for_duty(
                 duty_id: int,
@@ -20120,7 +22085,6 @@ class DutyPlannerApp(tk.Tk):
                 duty_shift = self.duty_shift_part(duty)
                 assigned_car_id = duty_assigned_car_id(int(duty_id))
                 required_vehicle_type = duty_required_vehicle_type(int(duty_id))
-                # v424: pamięć tygodniowej służby nie wpływa na główny wybór kierowcy.
                 candidates: list[tuple[int, int]] = []
                 for driver_id in available_drivers_all:
                     if driver_id in assigned_today:
@@ -20150,22 +22114,29 @@ class DutyPlannerApp(tk.Tk):
                     pattern_duty_id = pattern_driver_day_duty.get((driver_id, pattern_day))
                     had_wg_in_pattern = pattern_duty_id in wg_duty_ids
                     historical_count = driver_duty_counts.get((driver_id, duty_id), 0)
-                    driver_week_key = (driver_id, week_index)
-                    same_week_driver_duty = weekly_driver_duty.get(driver_week_key)
-                    same_week_duty_driver = weekly_duty_driver.get((int(duty_id), int(week_index)))
+                    stable_week_owner = weekday_weekly_duty_owner.get((int(duty_id), int(week_index)))
+                    stable_driver_duty = weekday_weekly_driver_duty.get((int(driver_id), int(week_index)))
 
-                    # v424: główna punktacja nie premiuje tej samej służby w tygodniu.
-                    # Najpierw obsadź wysokie priorytety, RBH, odpoczynki i puste pola;
-                    # ujednolicanie numeru służby może być tylko późniejszą korektą.
                     score = 0
-                    if same_week_driver_duty == int(duty_id):
-                        score -= 90
-                    elif same_week_driver_duty is not None:
-                        score += 35
-                    if same_week_duty_driver == int(driver_id):
-                        score -= 45
-                    elif same_week_duty_driver is not None:
-                        score += 12
+                    if (
+                        self.is_planning_weekend_or_holiday(target_date_obj)
+                        and driver_reserved_for_rn_weekend(int(driver_id), target_date_obj)
+                    ):
+                        # Weekend ma pierwszenstwo i kandydat pozostaje legalny,
+                        # ale najpierw wykorzystaj osoby spoza pelnego bloku RN.
+                        score += 100000
+                    # W pn-pt utrzymuj jednego właściciela numeru służby. Jest to
+                    # silna preferencja po sprawdzeniu legalności, nie obejście
+                    # odpoczynków ani zakazów. Weekend ma własną punktację obsady.
+                    if self.is_calendar_workday_for_norm(target_date_obj):
+                        if stable_week_owner == int(driver_id):
+                            score -= 5000
+                        elif stable_week_owner is not None:
+                            score += 2500
+                        if stable_driver_duty == int(duty_id):
+                            score -= 1800
+                        elif stable_driver_duty is not None:
+                            score += 700
                     if assigned_car_id:
                         driver_car_id = car_map.get(int(driver_id))
                         if driver_car_id is not None and int(driver_car_id) == int(assigned_car_id):
@@ -20209,6 +22180,11 @@ class DutyPlannerApp(tk.Tk):
                     monthly_deficit = max(0.0, float(monthly_norm_hours) - float(driver_month_work_hours.get(driver_id, 0.0)))
                     score -= int(min(monthly_deficit, 80.0) * 1.2)
                     score += driver_month_work_count[driver_id] * 2
+                    if self.is_planning_weekend_or_holiday(target_date_obj):
+                        # Jeden dodatkowy przepracowany weekend waży więcej niż
+                        # wszystkie zwykłe preferencje. Przy braku alternatywy
+                        # kierowca nadal może zostać wybrany.
+                        score += len(driver_month_weekend_limit_keys(driver_id)) * 5000
                     if would_make_consecutive_weekend(driver_id, target_date_obj):
                         score += 180
                     if driver_id in pair_map:
@@ -20291,14 +22267,13 @@ class DutyPlannerApp(tk.Tk):
                 return []
 
             def rn_block_key_for_date(target_date_obj: date) -> tuple[str, str]:
-                if self.is_planning_saturday(target_date_obj):
+                if self.is_rn_single_coverage_day(target_date_obj):
                     return ("sobota", target_date_obj.isoformat())
-                days_since_sunday = (target_date_obj.weekday() + 1) % 7
-                block_start = target_date_obj - timedelta(days=days_since_sunday)
+                block_start = self.rn_continuity_block_start(target_date_obj)
                 return ("niedziela-piatek", block_start.isoformat())
 
             def locked_rn_block_drivers_for_date(target_date_obj: date, required_count: int) -> list[int]:
-                if required_count <= 0 or self.is_planning_saturday(target_date_obj):
+                if required_count <= 0 or self.is_rn_single_coverage_day(target_date_obj):
                     return []
                 remembered = rn_week_drivers.get(rn_block_key_for_date(target_date_obj), [])
                 if len(remembered) >= required_count:
@@ -20325,7 +22300,7 @@ class DutyPlannerApp(tk.Tk):
                 selected: list[int] = []
                 rn_block_key = rn_block_key_for_date(target_date_obj)
                 remembered = rn_week_drivers.setdefault(rn_block_key, [])
-                rn_block_already_locked = bool(remembered) and not self.is_planning_saturday(target_date_obj)
+                rn_block_already_locked = bool(remembered) and not self.is_rn_single_coverage_day(target_date_obj)
                 rn_partner_map = self.active_rn_pair_partner_map()
                 rn_pair_groups = self.active_rn_pair_groups()
                 paired_driver_ids = set(rn_partner_map.keys())
@@ -20337,6 +22312,8 @@ class DutyPlannerApp(tk.Tk):
                     if driver_id not in available_drivers_all or driver_id in no_rn_driver_ids or driver_id in recent_rn_driver_ids:
                         return False
                     if is_driver_blocked_by_day_exclusion(driver_id, target_date_obj):
+                        return False
+                    if not rn_driver_has_second_shift_for_date(driver_id, target_date_obj):
                         return False
                     if rn_duty_id is not None and driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
                         return False
@@ -20373,6 +22350,8 @@ class DutyPlannerApp(tk.Tk):
                         score += week_work_count * 2
                     score += driver_month_work_count[driver_id] * 3
                     score += driver_rn_month_count[driver_id] * 30
+                    if self.is_planning_weekend_or_holiday(target_date_obj):
+                        score += len(driver_month_weekend_limit_keys(driver_id)) * 5000
                     if would_make_consecutive_weekend(driver_id, target_date_obj):
                         score += 180
                     score += driver_id % 1000
@@ -20402,7 +22381,7 @@ class DutyPlannerApp(tk.Tk):
 
                 # Kontynuacja tygodniowej obsady RN. Dla par kontynuuj całą parę;
                 # nigdy nie przenoś tylko jednego kierowcy ze stałej pary RN.
-                remembered_for_day = [] if self.is_planning_saturday(target_date_obj) else list(remembered)
+                remembered_for_day = [] if self.is_rn_single_coverage_day(target_date_obj) else list(remembered)
                 used_pair_keys: set[frozenset[int]] = set()
                 for driver_id in remembered_for_day:
                     if len(selected) >= required_count:
@@ -20437,7 +22416,7 @@ class DutyPlannerApp(tk.Tk):
                         continue
                     pair_score = driver_rn_score(d1) + driver_rn_score(d2)
                     pair_candidates.append((pair_score, d1, d2))
-                if self.is_planning_saturday(target_date_obj):
+                if self.is_rn_single_coverage_day(target_date_obj):
                     plan_rng.shuffle(pair_candidates)
                 else:
                     pair_candidates.sort()
@@ -20458,7 +22437,7 @@ class DutyPlannerApp(tk.Tk):
                     if not driver_can_take_rn(driver_id):
                         continue
                     candidates.append((driver_rn_score(driver_id), driver_id))
-                if self.is_planning_saturday(target_date_obj):
+                if self.is_rn_single_coverage_day(target_date_obj):
                     plan_rng.shuffle(candidates)
                 else:
                     candidates.sort()
@@ -20504,20 +22483,27 @@ class DutyPlannerApp(tk.Tk):
                     # do ochrony weekendu przed/po oraz weekendu między dniami urlopu.
                     driver_vacation_dates[driver_id].add(day_obj)
                 manual_hours = self.planned_entry_rbh_hours(duty, day_obj, note)
-                if self.is_full_day_manual_special_duty(duty) and manual_hours > 0:
-                    # v306: NAJEM/NAJEM2 blokuje cały dzień i liczy RBH, ale nie
-                    # tworzy godzinowego przedziału pracy. Nie wpływa więc na
-                    # odpoczynek przed/po i nie wymusza sztucznego WG przed najmem.
+                active_work = self.is_rest_relevant_duty(duty)
+                counts_as_workday = self.counts_as_workday(duty)
+                if counts_as_workday and not active_work and manual_hours > 0:
+                    # Awaryjna ścieżka tylko dla wpisów pracy bez przedziału
+                    # godzinowego. NAJEM/NAJEM2 i ZAGŁĘBIE z zapisanymi godzinami
+                    # przechodzą niżej jako zwykłe przedziały pracy.
                     driver_month_work_hours[driver_id] += manual_hours
                     driver_month_work_count[driver_id] += 1
                     week_index = self.week_index_in_month(day_obj)
                     driver_week_work_count[(driver_id, week_index)] += 1
+                    driver_work_dates[driver_id].add(day_obj)
+                    if self.is_planning_weekend_or_holiday(day_obj):
+                        driver_worked_weekends[driver_id].add(weekend_start_for_day(day_obj))
+                    iso_week = day_obj.isocalendar()
+                    driver_week_work_hours[(driver_id, iso_week.year, iso_week.week)] += manual_hours
                 elif self.is_day_off_duty(duty) and manual_hours > 0:
                     # Urlopy/nieobecności płatne zmniejszają pozostałą normę rbh,
                     # ale nie są traktowane jako czas jazdy do odpoczynków.
                     # UW/UO/CH w dni wolne i święta nie są liczone.
                     driver_month_work_hours[driver_id] += manual_hours
-                if self.is_rest_relevant_duty(duty):
+                if active_work:
                     start_dt, end_dt = duty_interval_for_date(duty_id, target_date)
                     driver_work_intervals[driver_id].append((start_dt, end_dt))
                     driver_work_dates[driver_id].add(day_obj)
@@ -20609,10 +22595,16 @@ class DutyPlannerApp(tk.Tk):
                         if gap_len <= 1:
                             continue
                         gap_days = [previous_day + timedelta(days=offset) for offset in range(1, gap_len)]
-                        # Nie wolno planować służby między sąsiednimi dniami urlopu.
-                        # Ograniczenie do 7 dni chroni przed blokowaniem odległych, osobnych urlopów.
+                        # Pomiędzy dwoma okresami urlopu chronimy tylko weekendy
+                        # i święta. Dawna ochrona całej przerwy do 7 dni blokowała
+                        # roboczy tydzień (np. 14-17.09), przez co kierowca dostawał
+                        # techniczne WG i pozostawał poniżej normy RBH.
                         if gap_days and gap_len <= 7:
-                            protected.update(gap_days)
+                            protected.update(
+                                gap_day
+                                for gap_day in gap_days
+                                if self.is_planning_weekend_or_holiday(gap_day)
+                            )
 
             rebuild_vacation_weekend_protection()
 
@@ -20661,21 +22653,30 @@ class DutyPlannerApp(tk.Tk):
                     allowed_today = {
                         int(row["id"])
                         for row in all_duty_rows
-                        if self.duty_allowed_on_weekday(row, weekday_value)
+                        if duty_required_on_exact_date(row, day_obj)
                     }
                     high_today = [
                         int(row["id"])
                         for row in all_duty_rows
                         if int(row["id"]) in allowed_today
-                        and int(row["id"]) not in excluded_duty_ids
-                        and int(row["id"]) not in auto_plan_skipped_duty_ids
+                        and (
+                            int(row["id"]) in weekend_override_ids_by_date.get(day_text, set())
+                            or int(row["id"]) not in excluded_duty_ids
+                        )
+                        and (
+                            int(row["id"]) in weekend_override_ids_by_date.get(day_text, set())
+                            or int(row["id"]) not in auto_plan_skipped_duty_ids
+                        )
                         and int(row["id"]) not in rn_duty_ids
-                        and int(row["id"]) not in reserve_duty_id_set
+                        and (
+                            int(row["id"]) in weekend_override_ids_by_date.get(day_text, set())
+                            or int(row["id"]) not in reserve_duty_id_set
+                        )
                         and not self.is_day_off_duty(row)
                         and int(row["id"]) not in shortage_skip_duty_ids
                         and int(row["id"]) not in manual_duties
                     ]
-                    rn_need = self.rn_required_count_for_date(day_obj) if rn_duty_id is not None else 0
+                    rn_need = required_rn_count_for_planning(day_obj) if rn_duty_id is not None else 0
                     manual_rn = sum(1 for _driver_id, duty_id in manual_today if rn_duty_id is not None and int(duty_id) == int(rn_duty_id))
                     rn_need = max(0, rn_need - manual_rn)
                     required_count = len(set(high_today)) + rn_need
@@ -20708,41 +22709,20 @@ class DutyPlannerApp(tk.Tk):
                 scored_days.sort(key=lambda item: item[0])
                 return [day_no for _key, day_no in scored_days]
 
-            # v394: powrót do stabilnego przebiegu z v357: dni idą naturalnie 1..koniec miesiąca.
-            # Sortowanie dni według "trudności" zaburzało rotację, odpoczynki i rozkład RBH.
-            planning_day_numbers = list(range(1, month_days + 1))
+            # v459: twarde pierwszeństwo weekendów i świąt dla wszystkich służb
+            # wysokiego priorytetu. Kolejność I/II zmiany nadal wynika z kalendarzowego
+            # tygodnia kierowcy, a nie z kolejności przetwarzania dni.
+            planning_day_numbers = self.weekend_first_planning_day_numbers(year, month)
+            rn_preplanned = False
 
-            def preplan_month_rn_before_services() -> None:
+            def preplan_month_rn_before_services(*, reserve_only: bool = False) -> None:
                 """Najpierw narzuc RN blokami, potem planuj zwykle sluzby."""
                 nonlocal rn_used
                 if rn_duty_id is None:
                     return
 
                 def rn_block_days() -> list[list[date]]:
-                    blocks: list[list[date]] = []
-                    seen: set[date] = set()
-                    for day_no in planning_day_numbers:
-                        day_obj = date(year, month, day_no)
-                        if day_obj in seen:
-                            continue
-                        if self.is_planning_saturday(day_obj):
-                            blocks.append([day_obj])
-                            seen.add(day_obj)
-                            continue
-                        days_since_sunday = (day_obj.weekday() + 1) % 7
-                        block_start = day_obj - timedelta(days=days_since_sunday)
-                        block = []
-                        for offset in range(0, 6):
-                            candidate_day = block_start + timedelta(days=offset)
-                            if candidate_day.year == year and candidate_day.month == month:
-                                block.append(candidate_day)
-                        if not block:
-                            block = [day_obj]
-                        for candidate_day in block:
-                            seen.add(candidate_day)
-                        blocks.append(block)
-                    blocks.sort(key=lambda block: block[0])
-                    return blocks
+                    return self.rn_planning_blocks_for_month(year, month)
 
                 def rn_count_on_day(day_text: str) -> int:
                     return sum(
@@ -20753,44 +22733,250 @@ class DutyPlannerApp(tk.Tk):
                 def driver_has_manual_entry_on_day(driver_id: int, day_text: str) -> bool:
                     return (str(day_text), int(driver_id)) in manual_locked_driver_dates
 
-                def driver_available_for_full_rn_block(driver_id: int, block: list[date]) -> bool:
+                def driver_available_for_rn_day(driver_id: int, day_obj: date) -> bool:
+                    """Legalny kandydat do obowiązkowego uzupełnienia jednego dnia RN."""
+                    driver_id = int(driver_id)
+                    day_text = day_obj.isoformat()
+                    if driver_id not in available_drivers_all:
+                        return False
+                    if driver_id in no_rn_driver_ids or driver_id in previous_rn_driver_ids:
+                        return False
+                    if not rn_driver_has_second_shift_for_block(driver_id, [day_obj]):
+                        return False
+                    if driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
+                        return False
+                    if driver_has_manual_entry_on_day(driver_id, day_text):
+                        return False
+                    if is_driver_blocked_by_day_exclusion(driver_id, day_obj):
+                        return False
+                    if is_driver_blocked_by_vacation_for_auto_work(driver_id, day_obj):
+                        return False
+                    if rn_has_same_day_work_conflict(driver_id, day_text, int(rn_duty_id)):
+                        return False
+                    return driver_has_required_rest(
+                        driver_id,
+                        int(rn_duty_id),
+                        day_text,
+                        allow_monthly_overtime=False,
+                        allow_required_rn_weekend_overlap=True,
+                    )
+
+                def driver_available_for_full_rn_block(
+                    driver_id: int,
+                    block: list[date],
+                    *,
+                    allow_shift_mismatch: bool = False,
+                ) -> bool:
                     driver_id = int(driver_id)
                     if driver_id not in available_drivers_all:
                         return False
-                    # Kierowca oznaczony jako "Nie planuj RN" dostaje duza kare w punktacji,
-                    # ale RN jest obsadzane na poczatku miesiaca i nie moze zostac puste.
+                    if driver_id in no_rn_driver_ids:
+                        return False
+                    if driver_id in previous_rn_driver_ids:
+                        return False
+                    if driver_reserved_for_adjacent_saturday_rn(driver_id, block):
+                        return False
+                    if not allow_shift_mismatch and not rn_driver_has_second_shift_for_block(driver_id, block):
+                        return False
                     if driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
                         return False
                     if any(driver_has_manual_entry_on_day(driver_id, day_obj.isoformat()) for day_obj in block):
+                        return False
+                    if any(is_driver_blocked_by_day_exclusion(driver_id, day_obj) for day_obj in block):
                         return False
                     if any(is_driver_blocked_by_vacation_for_auto_work(driver_id, day_obj) for day_obj in block):
                         return False
                     if any(rn_has_same_day_work_conflict(driver_id, day_obj.isoformat(), int(rn_duty_id)) for day_obj in block):
                         return False
-                    return True
+                    rn_work_hours = self.standard_service_rbh_hours(duty_rows_by_id[int(rn_duty_id)])
+                    block_week_hours = {
+                        (int(day_obj.isocalendar().year), int(day_obj.isocalendar().week)): float(
+                            driver_week_work_hours[
+                                (driver_id, day_obj.isocalendar().year, day_obj.isocalendar().week)
+                            ] or 0.0
+                        )
+                        for day_obj in block
+                    }
+                    if not self.rn_full_block_hours_within_limits(
+                        float(driver_month_work_hours[driver_id] or 0.0),
+                        block_week_hours,
+                        block,
+                        rn_work_hours,
+                        monthly_norm_hours,
+                        max_weekly_work,
+                    ):
+                        return False
+                    # v488: sprawdz caly blok narastajaco. Dawne sprawdzenie kazdego
+                    # dnia osobno widzialo ten sam poczatkowy bilans RBH i te same
+                    # odpoczynki. Kierowca przechodzil wiec kwalifikacje bloku, lecz
+                    # podczas zapisu mogl odpasc dopiero w piatek. Tymczasowa projekcja
+                    # korzysta z dokladnie tych samych twardych regul co zapis, a stan
+                    # planowania jest zawsze przywracany przed ocena kolejnej osoby.
+                    original_intervals = list(driver_work_intervals.get(driver_id, []))
+                    original_work_dates = set(driver_work_dates.get(driver_id, set()))
+                    original_month_hours = float(driver_month_work_hours[driver_id] or 0.0)
+                    week_keys = {
+                        (driver_id, day_obj.isocalendar().year, day_obj.isocalendar().week)
+                        for day_obj in block
+                    }
+                    original_week_hours = {
+                        key: float(driver_week_work_hours[key] or 0.0)
+                        for key in week_keys
+                    }
+                    try:
+                        for day_obj in block:
+                            day_text = day_obj.isoformat()
+                            if not driver_has_required_rest(
+                                driver_id,
+                                int(rn_duty_id),
+                                day_text,
+                                allow_monthly_overtime=False,
+                                allow_required_rn_weekend_overlap=True,
+                            ):
+                                return False
+                            start_dt, end_dt = duty_interval_for_date(int(rn_duty_id), day_text)
+                            driver_work_intervals[driver_id].append((start_dt, end_dt))
+                            driver_work_dates[driver_id].add(day_obj)
+                            driver_month_work_hours[driver_id] += rn_work_hours
+                            iso_week = start_dt.date().isocalendar()
+                            driver_week_work_hours[(driver_id, iso_week.year, iso_week.week)] += rn_work_hours
+                        return True
+                    finally:
+                        driver_work_intervals[driver_id] = original_intervals
+                        driver_work_dates[driver_id] = original_work_dates
+                        driver_month_work_hours[driver_id] = original_month_hours
+                        for key, value in original_week_hours.items():
+                            driver_week_work_hours[key] = value
 
-                def block_driver_score(driver_id: int, block: list[date]) -> tuple[int, int, int, int]:
+                def block_driver_score(driver_id: int, block: list[date]) -> tuple[int, int, int, int, int]:
                     driver_id = int(driver_id)
+                    saturday_followup_rank = saturday_rn_next_monday_rank(driver_id, block)
                     score = int(driver_rn_month_count[driver_id] or 0) * 100
                     if int(driver_rn_month_count[driver_id] or 0) + len(block) > 6:
                         score += 20000
-                    if driver_id in no_rn_driver_ids:
-                        score += 50000
                     if driver_id in previous_rn_driver_ids or driver_id in recent_rn_driver_ids:
                         score += 5000
                     blocked_days = sum(1 for day_obj in block if is_driver_blocked_by_day_exclusion(driver_id, day_obj))
                     score += blocked_days * 10000
                     rest_failures = sum(
                         1 for day_obj in block
-                        if not driver_has_required_rest(driver_id, int(rn_duty_id), day_obj.isoformat(), allow_monthly_overtime=False)
+                        if not driver_has_required_rest(
+                            driver_id,
+                            int(rn_duty_id),
+                            day_obj.isoformat(),
+                            allow_monthly_overtime=False,
+                            allow_required_rn_weekend_overlap=True,
+                        )
                     )
                     score += rest_failures * 3000
                     score += driver_month_work_count[driver_id] * 4
                     score += driver_id % 1000
-                    return (score, rest_failures, driver_month_work_count[driver_id], driver_id)
+                    return (
+                        saturday_followup_rank,
+                        score,
+                        rest_failures,
+                        driver_month_work_count[driver_id],
+                        driver_id,
+                    )
+
+                preplan_rn_pair_groups = self.active_rn_pair_groups()
+
+                def select_atomic_rn_block_drivers(
+                    block: list[date],
+                    required_count: int,
+                    remembered: list[int],
+                    excluded_driver_ids: set[int],
+                    *,
+                    saturday_block: bool,
+                ) -> list[int]:
+                    """Wybierz pełne pary RN albo osoby bez pary; nigdy połowę pary."""
+
+                    def eligible_ids(*, allow_shift_mismatch: bool, allow_reused_driver: bool = False) -> set[int]:
+                        result: set[int] = set()
+                        remembered_ids = {int(driver_id) for driver_id in remembered}
+                        for driver_id_raw in available_drivers_all:
+                            driver_id = int(driver_id_raw)
+                            if (
+                                not allow_reused_driver
+                                and driver_id in excluded_driver_ids
+                                and driver_id not in remembered_ids
+                            ):
+                                continue
+                            if saturday_block and driver_reserved_for_rn_weekend(driver_id, block[0]) and driver_id not in remembered_ids:
+                                continue
+                            if not driver_available_for_full_rn_block(
+                                driver_id,
+                                block,
+                                allow_shift_mismatch=allow_shift_mismatch,
+                            ):
+                                continue
+                            result.add(driver_id)
+                        return result
+
+                    strict_eligible = eligible_ids(allow_shift_mismatch=False)
+                    scores = {
+                        driver_id: block_driver_score(driver_id, block)
+                        for driver_id in strict_eligible
+                    }
+                    selected = self.select_atomic_rn_candidates(
+                        required_count,
+                        preplan_rn_pair_groups,
+                        strict_eligible,
+                        scores,
+                        {int(driver_id) for driver_id in remembered},
+                    )
+                    if len(selected) >= required_count:
+                        return selected
+                    relaxed_eligible = strict_eligible | eligible_ids(allow_shift_mismatch=True)
+                    relaxed_scores = {
+                        driver_id: block_driver_score(driver_id, block)
+                        for driver_id in relaxed_eligible
+                    }
+                    selected = self.select_atomic_rn_candidates(
+                        required_count,
+                        preplan_rn_pair_groups,
+                        relaxed_eligible,
+                        relaxed_scores,
+                        {int(driver_id) for driver_id in remembered},
+                    )
+                    if len(selected) >= required_count or not excluded_driver_ids:
+                        return selected
+
+                    # v504: wykorzystanie tylko jednego bloku RN w miesiacu jest
+                    # preferencja rotacyjna, nie powodem pozostawienia RN bez obsady.
+                    # Gdy zabraknie nowych osob, dopusc ponownie kierowce z
+                    # wczesniejszego bloku tego samego miesiaca. Wysoka kara w
+                    # punktacji zachowuje pierwszenstwo osob jeszcze nieuzytych.
+                    reused_eligible = eligible_ids(
+                        allow_shift_mismatch=True,
+                        allow_reused_driver=True,
+                    )
+                    remembered_ids = {int(driver_id) for driver_id in remembered}
+                    reused_scores = {
+                        driver_id: (
+                            block_driver_score(driver_id, block)[0],
+                            block_driver_score(driver_id, block)[1]
+                            + (100000 if driver_id in excluded_driver_ids and driver_id not in remembered_ids else 0),
+                            *block_driver_score(driver_id, block)[2:],
+                        )
+                        for driver_id in reused_eligible
+                    }
+                    return self.select_atomic_rn_candidates(
+                        required_count,
+                        preplan_rn_pair_groups,
+                        reused_eligible,
+                        reused_scores,
+                        remembered_ids,
+                    )
 
                 def add_rn_entry_if_missing(day_obj: date, driver_id: int, index: int, required_count: int, block_note: str) -> bool:
                     day_text = day_obj.isoformat()
+                    # Ta funkcja tworzy wyłącznie wpis automatyczny. Ręczne RN
+                    # są już w kontekście i nie podlegają tej blokadzie.
+                    if int(driver_id) in no_rn_driver_ids:
+                        return False
+                    if int(driver_id) in previous_rn_driver_ids:
+                        return False
                     if any(str(entry[0]) == day_text and int(entry[1]) == int(driver_id) and int(entry[2]) == int(rn_duty_id) for entry in planned_context_entries):
                         return False
                     before_count = rn_count_on_day(day_text)
@@ -20798,7 +22984,15 @@ class DutyPlannerApp(tk.Tk):
                         return False
                     week_index = self.week_index_in_month(day_obj)
                     pattern_day = ((day_obj.day - 1) % pattern_days) + 1
-                    rest_ok = driver_has_required_rest(int(driver_id), int(rn_duty_id), day_text, allow_monthly_overtime=False)
+                    rest_ok = driver_has_required_rest(
+                        int(driver_id),
+                        int(rn_duty_id),
+                        day_text,
+                        allow_monthly_overtime=False,
+                        allow_required_rn_weekend_overlap=True,
+                    )
+                    if not rest_ok:
+                        return False
                     note_parts = [
                         AUTO_NOTE,
                         block_note,
@@ -20806,8 +23000,6 @@ class DutyPlannerApp(tk.Tk):
                         f"dzien wzoru {pattern_day}",
                         f"RN {index}/{required_count}",
                     ]
-                    if not rest_ok:
-                        note_parts.append("RN wpisane obowiazkowo mimo blokady odpoczynku - do kontroli")
                     add_entry(day_text, int(driver_id), int(rn_duty_id), note_parts, True)
                     after_exists = any(str(entry[0]) == day_text and int(entry[1]) == int(driver_id) and int(entry[2]) == int(rn_duty_id) for entry in planned_context_entries)
                     if not after_exists:
@@ -20818,59 +23010,95 @@ class DutyPlannerApp(tk.Tk):
                     driver_rn_month_count[int(driver_id)] += 1
                     return True
 
-                for block in rn_block_days():
+                rn_blocks = rn_block_days()
+                if reserve_only:
+                    # Sobotnia RN ma tylko jednego kierowce i nie moze zostac
+                    # pominieta. Rezerwuj ja przed parami niedziela-piatek, a potem
+                    # wyklucz jej kierowce z obu sasiadujacych pelnych blokow RN.
+                    rn_blocks.sort(
+                        key=lambda item: (
+                            0 if len(item) == 1 and self.is_rn_single_coverage_day(item[0]) else 1,
+                            item[0],
+                        )
+                    )
+                for block in rn_blocks:
                     if not block:
                         continue
-                    is_saturday_block = len(block) == 1 and self.is_planning_saturday(block[0])
-                    block_required = 1 if is_saturday_block else 2
+                    is_saturday_block = len(block) == 1 and self.is_rn_single_coverage_day(block[0])
+                    block_required = max(required_rn_count_for_planning(day_obj) for day_obj in block)
                     for day_obj in block:
-                        month_rn_required_counts[day_obj.isoformat()] = self.rn_required_count_for_date(day_obj)
+                        month_rn_required_counts[day_obj.isoformat()] = required_rn_count_for_planning(day_obj)
                     if is_saturday_block:
                         day_obj = block[0]
-                        required_count = self.rn_required_count_for_date(day_obj)
+                        block_key = rn_block_key_for_date(day_obj)
+                        remembered = rn_week_drivers.setdefault(block_key, [])
+                        required_count = required_rn_count_for_planning(day_obj)
+                        selected = select_atomic_rn_block_drivers(
+                            block,
+                            required_count,
+                            [] if reserve_only else remembered,
+                            set(),
+                            saturday_block=True,
+                        )
+                        if reserve_only:
+                            for driver_id in selected:
+                                if driver_id not in remembered:
+                                    remembered.append(driver_id)
+                            continue
                         current_count = rn_count_on_day(day_obj.isoformat())
                         if current_count >= required_count:
                             continue
-                        candidates = [
-                            int(driver_id) for driver_id in available_drivers_all
-                            if driver_available_for_full_rn_block(int(driver_id), block)
-                        ]
-                        candidates.sort(key=lambda driver_id: block_driver_score(driver_id, block))
-                        if not candidates:
+                        if not selected:
                             if not any(str(item[0]) == day_obj.isoformat() for item in rn_unfilled):
                                 rn_unfilled.append((day_obj.isoformat(), "brak kierowcy RN w sobote w pierwszym przebiegu miesiaca"))
                             continue
-                        if add_rn_entry_if_missing(day_obj, candidates[0], current_count + 1, required_count, "RN sobota - pojedyncza obsada narzucona na poczatku"):
-                            rn_used += 1
+                        for index, driver_id in enumerate(selected, start=current_count + 1):
+                            if add_rn_entry_if_missing(day_obj, driver_id, index, required_count, "RN sobota - wymagana obsada narzucona na poczatku"):
+                                rn_used += 1
+                        planned_after = rn_count_on_day(day_obj.isoformat())
+                        if planned_after < required_count:
+                            if not any(str(item[0]) == day_obj.isoformat() for item in rn_unfilled):
+                                rn_unfilled.append((day_obj.isoformat(), f"brakuje {required_count - planned_after} RN spelniajacego odpoczynki w sobote"))
                         continue
 
-                    candidates = [
-                        int(driver_id) for driver_id in available_drivers_all
-                        if driver_available_for_full_rn_block(int(driver_id), block)
-                    ]
-                    candidates.sort(key=lambda driver_id: block_driver_score(driver_id, block))
-                    selected = candidates[:block_required]
                     block_key = rn_block_key_for_date(block[0])
                     remembered = rn_week_drivers.setdefault(block_key, [])
+                    selected = select_atomic_rn_block_drivers(
+                        block,
+                        block_required,
+                        [] if reserve_only else remembered,
+                        {int(driver_id) for driver_id in rn_full_block_reserved_driver_ids},
+                        saturday_block=False,
+                    )
                     for driver_id in selected:
                         if driver_id not in remembered:
                             remembered.append(driver_id)
+                        rn_full_block_reserved_driver_ids.add(int(driver_id))
                     if len(selected) < block_required:
                         for day_obj in block:
                             if not any(str(item[0]) == day_obj.isoformat() for item in rn_unfilled):
-                                rn_unfilled.append((day_obj.isoformat(), "brak pelnej pary RN dla bloku niedziela-piatek w pierwszym przebiegu miesiaca"))
+                                rn_unfilled.append((day_obj.isoformat(), "brak pelnej pary RN; zaplanowano wszystkich znalezionych legalnych kandydatow"))
+                    if reserve_only:
                         continue
                     for day_obj in block:
-                        required_count = self.rn_required_count_for_date(day_obj)
+                        required_count = required_rn_count_for_planning(day_obj)
                         current_count = rn_count_on_day(day_obj.isoformat())
                         for idx, driver_id in enumerate(selected[:required_count], start=1):
                             if add_rn_entry_if_missing(day_obj, driver_id, idx, required_count, "RN ciagiem niedziela-piatek narzucone na poczatku"):
                                 rn_used += 1
                         planned_after = rn_count_on_day(day_obj.isoformat())
+                        if planned_after >= required_count:
+                            rn_unfilled[:] = [
+                                item for item in rn_unfilled
+                                if str(item[0]) != day_obj.isoformat()
+                            ]
                         if planned_after < required_count and not any(str(item[0]) == day_obj.isoformat() for item in rn_unfilled):
                             rn_unfilled.append((day_obj.isoformat(), f"brakuje {required_count - planned_after} RN po narzuceniu bloku niedziela-piatek"))
 
-            preplan_month_rn_before_services()
+            # Wybierz pary RN bez wpisywania ich do grafiku. Weekend nadal jest
+            # planowany pierwszy, ale jego punktacja nie zabierze obu osob,
+            # ktore musza pozniej przejsc caly blok RN niedziela-piatek.
+            preplan_month_rn_before_services(reserve_only=True)
 
             for order_index, target_day in enumerate(planning_day_numbers, start=1):
                 auto_plan_pulse(f"dzień {target_day}/{month_days}")
@@ -20880,27 +23108,36 @@ class DutyPlannerApp(tk.Tk):
                 weekday = self.planning_weekday(target_date_obj)
                 week_index = self.week_index_in_month(target_date_obj)
 
+                # v489: dni weekendowe sa pierwsze w planning_day_numbers.
+                # Po ich pelnej obsadzie narzuc bloki RN, a dopiero pozniej
+                # rozpocznij planowanie zwyklych dni tygodnia.
+                if not rn_preplanned and not self.is_planning_weekend_or_holiday(target_date_obj):
+                    preplan_month_rn_before_services()
+                    rn_preplanned = True
+
                 allowed_duty_ids = {
                     int(row["id"])
                     for row in all_duty_rows
-                    if self.duty_allowed_on_weekday(row, weekday)
+                    if duty_required_on_exact_date(row, target_date_obj)
                 }
+                exact_weekend_override_ids = weekend_override_ids_by_date.get(target_date, set())
+                exact_weekend_override_counts = weekend_override_counts_by_date.get(target_date, {})
                 rn_required_count = 0
                 if rn_duty_id is not None:
                     # v295: RN jest obowiązkowe codziennie. Nie pozwalaj, aby
                     # ustawienia dni, wykluczenie RN w Planowaniu albo filtr pomijania
                     # zostawiły dzień bez rezerwy nocnej. Wykluczenia kierowców
                     # i odpoczynki nadal są kontrolowane przy doborze osoby.
-                    rn_required_count = self.rn_required_count_for_date(target_date_obj)
+                    rn_required_count = required_rn_count_for_planning(target_date_obj)
 
                 required_duty_ids = [
                     int(row["id"])
                     for row in all_duty_rows
                     if int(row["id"]) in allowed_duty_ids
-                    and int(row["id"]) not in excluded_duty_ids
-                    and int(row["id"]) not in auto_plan_skipped_duty_ids
+                    and (int(row["id"]) in exact_weekend_override_ids or int(row["id"]) not in excluded_duty_ids)
+                    and (int(row["id"]) in exact_weekend_override_ids or int(row["id"]) not in auto_plan_skipped_duty_ids)
                     and int(row["id"]) not in rn_duty_ids
-                    and int(row["id"]) not in reserve_duty_id_set
+                    and (int(row["id"]) in exact_weekend_override_ids or int(row["id"]) not in reserve_duty_id_set)
                     and not self.is_day_off_duty(row)
                 ]
                 required_duty_ids = sorted(set(required_duty_ids), key=duty_sort_key)
@@ -20952,7 +23189,7 @@ class DutyPlannerApp(tk.Tk):
                     # Dotyczy także świąt i dni wolnych traktowanych jak sobota, gdzie limit RN wynosi 1.
                     # Jeżeli RN nie wynika z układu automatu, ale została wpisana ręcznie, uznajemy ją
                     # za wymaganą i obsadzoną ręcznie zamiast planować kolejną RN lub zgłaszać brak.
-                    manual_rn_limit = self.rn_required_count_for_date(target_date_obj)
+                    manual_rn_limit = required_rn_count_for_planning(target_date_obj)
                     rn_required_count = max(rn_required_count, min(manual_rn_count, manual_rn_limit))
                 if manual_required_count:
                     filled_required += manual_required_count
@@ -20970,14 +23207,16 @@ class DutyPlannerApp(tk.Tk):
                 # ratunkiem R/R2.
                 high_priority_required_duty_ids_v382 = [
                     int(duty_id) for duty_id in required_duty_ids
-                    if int(duty_id) not in shortage_skip_duty_ids
+                    if self.is_planning_weekend_or_holiday(target_date_obj)
+                    or int(duty_id) not in shortage_skip_duty_ids
                 ]
                 # v421: nie przesuwaj służb z przypisanym autem/rodzajem na początek.
                 # W v420 taka kolejność potrafiła zająć kierowców zbyt wcześnie i zostawić
                 # dużo braków. Rodzaj auta działa niżej wyłącznie w punktacji kandydata.
                 low_priority_required_duty_ids_v382 = [
                     int(duty_id) for duty_id in required_duty_ids
-                    if int(duty_id) in shortage_skip_duty_ids
+                    if not self.is_planning_weekend_or_holiday(target_date_obj)
+                    and int(duty_id) in shortage_skip_duty_ids
                 ]
                 for _low_duty_id in low_priority_required_duty_ids_v382:
                     _low_key = (target_date, int(_low_duty_id))
@@ -21001,33 +23240,13 @@ class DutyPlannerApp(tk.Tk):
                     # Dalszy etap spróbuje obsadzić je normalnie, a gdy jedynym problemem jest norma miesięczna,
                     # wskaże kierowcę na nadgodziny i oznaczy taki wpis na czerwono.
 
-                if (
-                    not weekend_shortage_optional_enabled
-                    and target_date_obj.weekday() in {5, 6}
-                    and len(high_priority_required_duty_ids_v382) + rn_to_plan_count > max(0, len(available_drivers_all) - len(assigned_today))
-                ):
-                    for duty_id in list(high_priority_required_duty_ids_v382):
-                        if int(duty_id) in weekend_shortage_optional_duty_ids:
-                            duty = duty_rows_by_id[duty_id]
-                            skipped_code = str(duty["code"] or "")
-                            skipped_weekend_shortage_optional_duties.append((target_date, skipped_code))
-                            high_priority_required_duty_ids_v382.remove(duty_id)
+                # Wszystkie realne służby weekendowe pozostają wymagane. Ustawienie
+                # dawnych wyjątków 80/86/139 nie może już usuwać ich z kolejki;
+                # ewentualny rzeczywisty brak trafia jawnie do raportu.
 
-                # v73: w sobotę, gdy brakuje kierowcy, nie zostawiaj obsadzonej późnej służby
-                # kosztem wcześniejszej. Późne służby po 20:00 zdejmujemy najpierw.
-                if weekday == 5:
-                    available_slots = max(0, len(available_drivers_all) - len(assigned_today))
-                    shortage_count = len(high_priority_required_duty_ids_v382) + rn_to_plan_count - available_slots
-                    if shortage_count > 0:
-                        late_saturday_ids = sorted(
-                            [duty_id for duty_id in high_priority_required_duty_ids_v382 if is_late_saturday_duty(duty_id)],
-                            key=saturday_late_duty_score,
-                            reverse=True,
-                        )
-                        for duty_id in late_saturday_ids[:shortage_count]:
-                            duty = duty_rows_by_id[duty_id]
-                            skipped_late_saturday_duties.append((target_date, str(duty["code"] or "")))
-                            high_priority_required_duty_ids_v382.remove(duty_id)
+                # v459: wysokopriorytetowej służby sobotniej nie wolno zdejmować tylko
+                # dlatego, że zaczyna się późno. Pozostaje wymagana i ma pierwszeństwo
+                # przed służbami z dni roboczych planowanymi w następnym etapie.
 
                 month_required_duties.extend((target_date, duty_id) for duty_id in required_duty_ids)
                 if rn_required_count:
@@ -21056,6 +23275,11 @@ class DutyPlannerApp(tk.Tk):
                 # inną zmianę w zwykłej puli, jeżeli przejdzie kontrole przepisów.
                 for driver_id, fixed_per_shift in sorted(fixed_duties.items()):
                     if driver_id not in available_drivers_all or driver_id in assigned_today:
+                        continue
+                    if (
+                        self.is_planning_weekend_or_holiday(target_date_obj)
+                        and driver_reserved_for_rn_weekend(int(driver_id), target_date_obj)
+                    ):
                         continue
                     if is_driver_blocked_by_day_exclusion(driver_id, target_date_obj):
                         continue
@@ -21089,7 +23313,24 @@ class DutyPlannerApp(tk.Tk):
                         unfilled_duties.append((target_date, fixed_duty_id, str(duty["code"] or ""), "stała służba nie została użyta, bo kierowca ma już 2 weekendy pracy w miesiącu"))
                         continue
                     if not driver_has_required_rest(driver_id, fixed_duty_id, target_date):
-                        unfilled_duties.append((target_date, fixed_duty_id, str(duty["code"] or ""), "stała służba narusza przerwę"))
+                        regulation_reason = driver_rest_block_reason(
+                            driver_id,
+                            fixed_duty_id,
+                            target_date,
+                            allow_monthly_overtime=True,
+                        )
+                        if regulation_reason and self.is_calendar_workday_for_norm(target_date_obj):
+                            buffer_weekday_duty_for_required_rest(
+                                target_date_obj,
+                                fixed_duty_id,
+                                driver_id,
+                                regulation_reason,
+                            )
+                        if not any(
+                            str(item[0]) == target_date and int(item[1]) == fixed_duty_id
+                            for item in unfilled_duties
+                        ):
+                            unfilled_duties.append((target_date, fixed_duty_id, str(duty["code"] or ""), "stała służba narusza przerwę"))
                         continue
                     note_parts = [
                         AUTO_NOTE,
@@ -21169,7 +23410,29 @@ class DutyPlannerApp(tk.Tk):
                         if duty_id in day_used_duty_ids and duty_id not in wg_duty_ids:
                             continue
                         duty = duty_rows_by_id[duty_id]
-                        driver_id = choose_driver_for_duty(duty_id, target_date_obj, pattern_day, week_index, assigned_today)
+                        driver_id, rest_buffer_decision = weekday_continuity_owner_choice(
+                            duty_id,
+                            target_date_obj,
+                            week_index,
+                            assigned_today,
+                        )
+                        if rest_buffer_decision is not None:
+                            owner_driver_id, regulation_reason = rest_buffer_decision
+                            buffer_weekday_duty_for_required_rest(
+                                target_date_obj,
+                                duty_id,
+                                owner_driver_id,
+                                regulation_reason,
+                            )
+                            continue
+                        if driver_id is None:
+                            driver_id = choose_driver_for_duty(
+                                duty_id,
+                                target_date_obj,
+                                pattern_day,
+                                week_index,
+                                assigned_today,
+                            )
                         overtime_assignment = False
                         if driver_id is None:
                             # v386: gdy ta sama służba/zmiana tygodniowa prowadziłaby do braku
@@ -21186,6 +23449,24 @@ class DutyPlannerApp(tk.Tk):
                                 allow_shift_mismatch=True,
                             )
                             overtime_assignment = False
+                        if driver_id is None and self.is_planning_weekend_or_holiday(target_date_obj):
+                            # Pełna obsada weekendu jest twardym celem. Gdy jedyną
+                            # przeszkodą jest miesięczny nominal RBH, dopuść legalne
+                            # nadgodziny; odpoczynki, 60 h tygodniowo, 6 dni oraz
+                            # zakazy kierowca-służba nadal pozostają obowiązkowe.
+                            driver_id = choose_driver_for_duty(
+                                duty_id,
+                                target_date_obj,
+                                pattern_day,
+                                week_index,
+                                assigned_today,
+                                allow_fixed_conflict=True,
+                                allow_monthly_overtime=True,
+                                allow_shift_mismatch=True,
+                            )
+                            if driver_id is not None:
+                                duty_hours = self.standard_service_rbh_hours(duty)
+                                overtime_assignment = driver_month_work_hours[int(driver_id)] + duty_hours > monthly_norm_hours + 1e-6
                         if driver_id is None:
                             unfilled_duties.append((target_date, duty_id, str(duty["code"] or ""), "brak dostępnego kierowcy dla służby wysokiego priorytetu bez naruszenia odpoczynków/przepisów"))
                             continue
@@ -21199,6 +23480,9 @@ class DutyPlannerApp(tk.Tk):
                         duty_shift = self.duty_shift_part(duty)
                         if duty_shift in {"morning", "afternoon"} and duty_shift != preferred_shift:
                             note_parts.append("awaryjne odejście od tygodniowej zmiany - brak kierowcy zgodnego z rotacją I/II")
+                        if overtime_assignment:
+                            note_parts.append("NADGODZINY - obowiązkowa służba weekendowa ponad nominalne RBH")
+                            overtime_used += 1
                         if driver_had_wg_day_before(driver_id, target_date_obj):
                             note_parts.append("po WG dopuszczona zmiana zmiany - zgodna z przepisami")
                         block_note = duty_block_note(duty_id)
@@ -21215,6 +23499,64 @@ class DutyPlannerApp(tk.Tk):
                         weekly_driver_duty[(driver_id, week_index)] = duty_id
                         driver_month_work_count[driver_id] += 1
                         driver_week_work_count[(driver_id, week_index)] += 1
+
+                # v501: datowane R/R2 mogą wymagać kilku niezależnych obsad.
+                # Pierwsza sztuka przechodzi zwykłą kolejkę służb weekendowych,
+                # a tutaj dokładamy pozostałe sztuki, każdą innemu legalnemu kierowcy.
+                for repeated_duty_id, requested_count_raw in sorted(
+                    exact_weekend_override_counts.items(),
+                    key=lambda item: duty_sort_key(int(item[0])),
+                ):
+                    repeated_duty_id = int(repeated_duty_id)
+                    requested_count = max(1, int(requested_count_raw or 1))
+                    if repeated_duty_id not in reserve_duty_id_set or requested_count <= 1:
+                        continue
+                    repeated_duty = duty_rows_by_id.get(repeated_duty_id)
+                    if repeated_duty is None:
+                        continue
+                    current_count = sum(
+                        1
+                        for entry in planned_context_entries
+                        if str(entry[0]) == target_date and int(entry[2]) == repeated_duty_id
+                    )
+                    while current_count < requested_count:
+                        driver_id = choose_driver_for_duty(
+                            repeated_duty_id,
+                            target_date_obj,
+                            pattern_day,
+                            week_index,
+                            assigned_today,
+                            allow_fixed_conflict=True,
+                            allow_monthly_overtime=True,
+                            allow_shift_mismatch=True,
+                        )
+                        if driver_id is None:
+                            missing_count = requested_count - current_count
+                            unfilled_duties.append((
+                                target_date,
+                                repeated_duty_id,
+                                str(repeated_duty["code"] or repeated_duty_id),
+                                f"brakuje {missing_count} z {requested_count} ręcznie wymaganych obsad weekendowych",
+                            ))
+                            break
+                        before_count = len(planned_context_entries)
+                        add_entry(
+                            target_date,
+                            int(driver_id),
+                            repeated_duty_id,
+                            [
+                                AUTO_NOTE,
+                                f"ręcznie wymagana obsada weekendowa {current_count + 1}/{requested_count}",
+                                f"dzień wzoru {pattern_day}",
+                            ],
+                            True,
+                        )
+                        if len(planned_context_entries) <= before_count:
+                            break
+                        assigned_today.add(int(driver_id))
+                        driver_month_work_count[int(driver_id)] += 1
+                        driver_week_work_count[(int(driver_id), week_index)] += 1
+                        current_count += 1
 
                 def driver_can_take_unfilled_duty_instead_of_wg(driver_id: int, missing_duty_id: int) -> bool:
                     if driver_id in duty_driver_exclusions.get(int(missing_duty_id), set()):
@@ -21566,15 +23908,31 @@ class DutyPlannerApp(tk.Tk):
 
                     assigned_today = {int(entry[1]) for entry in planned_context_entries if entry[0] == target_date}
                     # Ręczne wpisy są już w planned_context_entries i zostają nietknięte.
-                    driver_id = choose_driver_for_duty(
+                    driver_id, rest_buffer_decision = weekday_continuity_owner_choice(
                         int(duty_id),
                         target_date_obj,
-                        int(pattern_day),
                         int(week_index),
                         assigned_today,
-                        allow_fixed_conflict=True,
-                        allow_monthly_overtime=False,
                     )
+                    if rest_buffer_decision is not None:
+                        owner_driver_id, regulation_reason = rest_buffer_decision
+                        buffer_weekday_duty_for_required_rest(
+                            target_date_obj,
+                            int(duty_id),
+                            owner_driver_id,
+                            regulation_reason,
+                        )
+                        continue
+                    if driver_id is None:
+                        driver_id = choose_driver_for_duty(
+                            int(duty_id),
+                            target_date_obj,
+                            int(pattern_day),
+                            int(week_index),
+                            assigned_today,
+                            allow_fixed_conflict=True,
+                            allow_monthly_overtime=False,
+                        )
                     code = str(duty["code"] or duty_id)
                     if driver_id is None:
                         skipped_shortage_12_15.append((target_date, code))
@@ -21661,6 +24019,10 @@ class DutyPlannerApp(tk.Tk):
                 duty = duty_rows_by_id.get(duty_id)
                 if duty is None:
                     return
+                if sign < 0:
+                    unregister_unique_daily_duty(str(target_date), driver_id, duty_id)
+                elif sign > 0:
+                    register_unique_daily_duty(str(target_date), driver_id, duty_id)
                 if duty_id in wg_duty_ids:
                     wg_entries = max(0, wg_entries + sign)
                 register_reserve_daily_count(target_date, duty_id, sign)
@@ -21746,7 +24108,126 @@ class DutyPlannerApp(tk.Tk):
                 planned_context_entries.append(entry)
                 update_driver_context_for_entry(entry, sign=1, required_counted=required_counted, work_counted=work_counted)
 
-            def reclaim_lower_priority_entries_for_high_priority_shortages(stage_label: str, max_passes: int = 6) -> int:
+            def ensure_exact_weekend_reserve_counts_before_save() -> int:
+                """Odtwórz twardo wymaganą liczbę R/R2 po wszystkich zamianach końcowych."""
+                nonlocal reserve_used
+                added = 0
+                for target_date, duty_counts in sorted(weekend_override_counts_by_date.items()):
+                    try:
+                        target_date_obj = datetime.strptime(str(target_date), "%Y-%m-%d").date()
+                    except ValueError:
+                        continue
+                    if target_date_obj.weekday() not in {5, 6}:
+                        continue
+                    pattern_day = ((target_date_obj.day - 1) % pattern_days) + 1
+                    week_index = self.week_index_in_month(target_date_obj)
+                    for duty_id_raw, requested_count_raw in sorted(
+                        duty_counts.items(),
+                        key=lambda item: duty_sort_key(int(item[0])),
+                    ):
+                        duty_id = int(duty_id_raw)
+                        requested_count = max(1, int(requested_count_raw or 1))
+                        if duty_id not in reserve_duty_id_set:
+                            continue
+                        duty = duty_rows_by_id.get(duty_id)
+                        if duty is None:
+                            continue
+                        current_count = sum(
+                            1
+                            for entry in planned_context_entries
+                            if str(entry[0]) == str(target_date) and int(entry[2]) == duty_id
+                        )
+                        while current_count < requested_count:
+                            assigned_today = {
+                                int(entry[1])
+                                for entry in planned_context_entries
+                                if str(entry[0]) == str(target_date)
+                            }
+                            driver_id = choose_driver_for_duty(
+                                duty_id,
+                                target_date_obj,
+                                pattern_day,
+                                week_index,
+                                assigned_today,
+                                allow_fixed_conflict=True,
+                                allow_monthly_overtime=True,
+                                allow_shift_mismatch=True,
+                            )
+                            removed_day_off_entry = None
+                            if driver_id is None:
+                                day_off_candidates = [
+                                    entry
+                                    for entry in list(entries)
+                                    if str(entry[0]) == str(target_date)
+                                    and self.is_day_off_duty(duty_rows_by_id.get(int(entry[2]), {}))
+                                ]
+                                day_off_candidates.sort(key=lambda entry: int(entry[1]))
+                                for candidate_entry in day_off_candidates:
+                                    temporarily_remove_auto_entry(
+                                        candidate_entry,
+                                        required_counted=False,
+                                        work_counted=False,
+                                    )
+                                    assigned_after_removal = {
+                                        int(entry[1])
+                                        for entry in planned_context_entries
+                                        if str(entry[0]) == str(target_date)
+                                    }
+                                    candidate_driver = choose_driver_for_duty(
+                                        duty_id,
+                                        target_date_obj,
+                                        pattern_day,
+                                        week_index,
+                                        assigned_after_removal,
+                                        allow_fixed_conflict=True,
+                                        allow_monthly_overtime=True,
+                                        allow_shift_mismatch=True,
+                                    )
+                                    if candidate_driver is not None:
+                                        driver_id = int(candidate_driver)
+                                        removed_day_off_entry = candidate_entry
+                                        break
+                                    restore_auto_entry(
+                                        candidate_entry,
+                                        required_counted=False,
+                                        work_counted=False,
+                                    )
+                            if driver_id is None:
+                                break
+                            before_count = len(planned_context_entries)
+                            add_entry(
+                                str(target_date),
+                                int(driver_id),
+                                duty_id,
+                                [
+                                    AUTO_NOTE,
+                                    f"twarda ręczna obsada weekendowa {current_count + 1}/{requested_count}",
+                                    "odtworzona po końcowych korektach planu",
+                                ],
+                                True,
+                            )
+                            if len(planned_context_entries) <= before_count:
+                                if removed_day_off_entry is not None:
+                                    restore_auto_entry(
+                                        removed_day_off_entry,
+                                        required_counted=False,
+                                        work_counted=False,
+                                    )
+                                break
+                            driver_month_work_count[int(driver_id)] += 1
+                            driver_week_work_count[(int(driver_id), week_index)] += 1
+                            reserve_used += 1
+                            current_count += 1
+                            added += 1
+                return added
+
+            def reclaim_lower_priority_entries_for_high_priority_shortages(
+                stage_label: str,
+                max_passes: int = 6,
+                *,
+                include_low_priority_missing: bool = False,
+                allow_inherited_month_start_shift_mismatch: bool = False,
+            ) -> int:
                 """v390: wysoki priorytet ma pierwszeństwo przed niskim/R/R2/WG.
 
                 Błąd po v389 był widoczny np. 05.06: brakowało wysokich służb
@@ -21766,7 +24247,7 @@ class DutyPlannerApp(tk.Tk):
                         missing_duty_id = int(item[1])
                     except Exception:
                         return False
-                    if missing_duty_id in shortage_skip_duty_ids:
+                    if missing_duty_id in shortage_skip_duty_ids and not include_low_priority_missing:
                         return False
                     if any(str(entry[0]) == missing_date and int(entry[2]) == missing_duty_id for entry in planned_context_entries):
                         return False
@@ -21774,6 +24255,8 @@ class DutyPlannerApp(tk.Tk):
                     return bool(duty is not None and not self.is_day_off_duty(duty) and missing_duty_id not in rn_duty_ids and missing_duty_id not in reserve_duty_id_set)
 
                 def source_entry_kind(entry: tuple[str, int, int, str, int | None, str | None]) -> tuple[int, str] | None:
+                    if is_hard_weekend_override_entry(entry):
+                        return None
                     try:
                         source_duty_id = int(entry[2])
                     except Exception:
@@ -21867,6 +24350,11 @@ class DutyPlannerApp(tk.Tk):
                         for _prio, _driver_sort, source_label, source_entry in source_entries:
                             driver_id = int(source_entry[1])
                             source_duty_id = int(source_entry[2])
+                            if missing_duty_id in shortage_skip_duty_ids and source_duty_id in shortage_skip_duty_ids:
+                                # Zamiana jednej niskiej realnej służby na inną nie
+                                # zwiększa obsady. Dla niskiego braku odzyskuj tylko
+                                # kierowcę z R/R2 albo technicznego WG/W.
+                                continue
                             if (target_date, driver_id) in manual_locked_driver_dates:
                                 continue
                             if driver_id in duty_driver_exclusions.get(missing_duty_id, set()):
@@ -21883,7 +24371,13 @@ class DutyPlannerApp(tk.Tk):
                             try:
                                 if driver_month_work_hours[driver_id] + missing_hours > monthly_norm_hours + 1e-6:
                                     continue
-                                if not driver_has_required_rest(driver_id, missing_duty_id, target_date, allow_monthly_overtime=False):
+                                if not driver_has_required_rest(
+                                    driver_id,
+                                    missing_duty_id,
+                                    target_date,
+                                    allow_monthly_overtime=False,
+                                    allow_inherited_month_start_shift_mismatch=allow_inherited_month_start_shift_mismatch,
+                                ):
                                     continue
                                 note_parts = [
                                     AUTO_NOTE,
@@ -21892,7 +24386,14 @@ class DutyPlannerApp(tk.Tk):
                                     "bez przekroczenia nominalnych RBH",
                                     f"dzień wzoru {pattern_day}",
                                 ]
-                                add_entry(target_date, driver_id, missing_duty_id, note_parts, True)
+                                add_entry(
+                                    target_date,
+                                    driver_id,
+                                    missing_duty_id,
+                                    note_parts,
+                                    True,
+                                    allow_inherited_month_start_shift_mismatch=allow_inherited_month_start_shift_mismatch,
+                                )
                                 weekly_duty_driver[(missing_duty_id, target_week_index)] = driver_id
                                 weekly_driver_duty[(driver_id, target_week_index)] = missing_duty_id
                                 driver_month_work_count[driver_id] += 1
@@ -22208,22 +24709,20 @@ class DutyPlannerApp(tk.Tk):
             reserve_candidates = []
             nominal_topup_reserve_candidates = []
             for reserve_id in reserve_duty_ids:
-                # v308: R/R2 do dobijania nominalnych RBH muszą być dostępne zawsze,
-                # niezależnie od ustawień „pomijane” i niezależnie od tego, czy zwykłe
-                # planowanie rezerw jest włączone. Ustawienia te mogą wyłączyć rezerwy
-                # jako normalny etap, ale nie mogą zablokować końcowego domknięcia RBH.
+                # v498: R/R2 może domykać RBH tylko wtedy, gdy nie zostało
+                # wyłączone globalnie ani dla planowanego miesiąca.
                 reserve_row = duty_rows_by_id.get(int(reserve_id))
                 if reserve_row is None:
+                    continue
+                # v498: miesięczny/globalny zakaz R/R2 obowiązuje także przy RBH.
+                if int(reserve_id) not in auto_plan_allowed_reserve_duty_ids:
                     continue
                 reserve_tuple = (int(reserve_id), reserve_row, self.standard_service_rbh_hours(reserve_row))
                 nominal_topup_reserve_candidates.append(reserve_tuple)
                 if int(reserve_id) in auto_plan_skipped_duty_ids:
                     continue
                 reserve_candidates.append(reserve_tuple)
-            # v397: końcowe dobijanie nominalnych RBH przez R/R2 ma być niezależne
-            # od zwykłego przełącznika planowania rezerw oraz od listy pomijanych kodów.
-            # Ten etap nie planuje „rezerw dziennych” jako służb z grafiku, tylko domyka
-            # niedobór RBH po zaplanowaniu służb. Dlatego używa pełnej listy R/R2.
+            # Dobijanie RBH używa wyłącznie rezerw dozwolonych przez użytkownika.
             reserve_candidates = list(nominal_topup_reserve_candidates)
 
             def fill_same_day_unfilled_service_instead_of_reserve(
@@ -22598,6 +25097,8 @@ class DutyPlannerApp(tk.Tk):
                         continue
                     if str(entry_date) == str(source_date):
                         continue
+                    if is_hard_weekend_override_entry(entry):
+                        continue
                     if int(entry_duty_id) not in reserve_duty_id_set:
                         continue
                     if (str(entry_date), int(driver_id)) in manual_locked_driver_dates:
@@ -22871,12 +25372,17 @@ class DutyPlannerApp(tk.Tk):
                         break
 
 
-            def final_chain_rescue_missing_services_from_shifted_day_off(stage_label: str, max_changes: int = 12) -> int:
+            def final_chain_rescue_missing_services_from_shifted_day_off(
+                stage_label: str,
+                max_changes: int = 12,
+                *,
+                include_low_priority: bool = False,
+            ) -> int:
                 """Move an automatic day off by a safe chain swap to fill priority shortages.
 
                 This is intentionally used only at the end. It handles cases like:
-                driver A has automatic WG/W on the missing-service day but is already at the
-                monthly RBH norm. The function moves one automatic service from driver A on
+                driver A has an empty cell or automatic WG/W on the missing-service day but
+                is already at the monthly RBH norm. The function moves one automatic service from driver A on
                 another day to driver B who has WG/W or an empty cell there, gives driver A
                 WG/W on that source day, and assigns the missing high-priority service to A.
 
@@ -22884,7 +25390,7 @@ class DutyPlannerApp(tk.Tk):
                 assignment is checked with driver_has_required_rest, so daily/weekly rests
                 and 561 compensation rules remain active.
                 """
-                nonlocal shortage_replanned_from_wg, wg_chain_rebalanced, wg_reassigned_before_write
+                nonlocal shortage_replanned_from_wg, shortage_replanned_from_12_15, wg_chain_rebalanced, wg_reassigned_before_write
                 if not unfilled_duties:
                     return 0
 
@@ -22915,6 +25421,17 @@ class DutyPlannerApp(tk.Tk):
                         if str(entry[0]) != str(target_date) or int(entry[1]) != int(driver_id):
                             continue
                         if is_auto_day_off_entry(entry):
+                            return entry
+                    return None
+
+                def find_auto_low_priority_entry(driver_id: int, target_date: str) -> tuple[str, int, int, str, int | None, str | None] | None:
+                    for entry in list(entries):
+                        if str(entry[0]) != str(target_date) or int(entry[1]) != int(driver_id):
+                            continue
+                        if protected_note(entry[3]):
+                            continue
+                        duty_id = int(entry[2])
+                        if duty_id in shortage_skip_duty_ids:
                             return entry
                     return None
 
@@ -22957,13 +25474,32 @@ class DutyPlannerApp(tk.Tk):
                 while changes < max_changes and pass_no < max(2, max_changes * 2):
                     pass_no += 1
                     prune_resolved_unfilled_duties()
-                    blocking = [item for item in list(unfilled_duties) if item_is_blocking(item)]
-                    if not blocking:
+                    pending: list[tuple[str, int, str, str]] = []
+                    for item in list(unfilled_duties):
+                        try:
+                            pending_duty_id = int(item[1])
+                        except Exception:
+                            continue
+                        pending_duty = duty_rows_by_id.get(pending_duty_id)
+                        if pending_duty is None or self.is_day_off_duty(pending_duty):
+                            continue
+                        if pending_duty_id in reserve_duty_id_set or pending_duty_id in rn_duty_ids:
+                            continue
+                        if not include_low_priority and not item_is_blocking(item):
+                            continue
+                        pending.append(item)
+                    if not pending:
                         break
                     made_change = False
-                    blocking.sort(key=lambda item: (str(item[0]), duty_sort_key(int(item[1])) if int(item[1]) in duty_rows_by_id else (9, 9, 9999, str(item[2]))))
+                    pending.sort(
+                        key=lambda item: (
+                            0 if item_is_blocking(item) else 1,
+                            str(item[0]),
+                            duty_sort_key(int(item[1])) if int(item[1]) in duty_rows_by_id else (9, 9, 9999, str(item[2])),
+                        )
+                    )
 
-                    for missing in list(blocking):
+                    for missing in list(pending):
                         target_date, missing_duty_id_raw, missing_code, _reason = missing
                         target_date = str(target_date)
                         missing_duty_id = int(missing_duty_id_raw)
@@ -22989,27 +25525,46 @@ class DutyPlannerApp(tk.Tk):
                         target_week_index = self.week_index_in_month(target_date_obj)
                         pattern_day = ((target_date_obj.day - 1) % pattern_days) + 1
 
-                        target_candidates: list[tuple[int, float, int, tuple[str, int, int, str, int | None, str | None]]] = []
-                        for day_off_entry in list(entries):
-                            if str(day_off_entry[0]) != target_date:
-                                continue
-                            target_driver_id = int(day_off_entry[1])
+                        target_candidates: list[
+                            tuple[
+                                int,
+                                float,
+                                int,
+                                tuple[str, int, int, str, int | None, str | None] | None,
+                            ]
+                        ] = []
+                        for target_driver_id_raw in available_drivers_all:
+                            target_driver_id = int(target_driver_id_raw)
                             if target_driver_id not in available_drivers_all:
                                 continue
                             if (target_date, target_driver_id) in manual_locked_driver_dates:
                                 continue
-                            if not is_auto_day_off_entry(day_off_entry):
+                            target_day_off_entry = find_auto_day_off_entry(target_driver_id, target_date)
+                            target_has_entry = driver_has_any_entry(target_driver_id, target_date)
+                            if target_has_entry and target_day_off_entry is None:
                                 continue
                             if is_driver_blocked_by_day_exclusion(target_driver_id, target_date_obj):
                                 continue
                             if target_driver_id in duty_driver_exclusions.get(missing_duty_id, set()):
                                 continue
+                            if pair_same_shift_block_reason(target_driver_id, missing_duty_id, target_date):
+                                continue
                             if self.is_planning_weekend_or_holiday(target_date_obj) and would_make_consecutive_weekend(target_driver_id, target_date_obj):
                                 continue
                             if driver_has_work_entry_on_day(target_driver_id, target_date):
                                 continue
-                            # prefer drivers closest to the missing service vehicle/duty context, but never require it
-                            target_candidates.append((0, driver_month_work_hours[target_driver_id], target_driver_id, day_off_entry))
+                            # Najpierw wykorzystaj prawdziwie pustą komórkę. Kierowca
+                            # z wysokim RBH odda wcześniejszą służbę kandydatowi z
+                            # niedoborem, więc sam nie przekroczy normy miesiąca.
+                            target_kind_score = 0 if target_day_off_entry is None else 1
+                            target_candidates.append(
+                                (
+                                    target_kind_score,
+                                    -driver_month_work_hours[target_driver_id],
+                                    target_driver_id,
+                                    target_day_off_entry,
+                                )
+                            )
                         target_candidates.sort(key=lambda item: (item[0], item[1], item[2]))
 
                         for _score, _hours, target_driver_id, target_day_off_entry in target_candidates:
@@ -23051,7 +25606,7 @@ class DutyPlannerApp(tk.Tk):
                                 source_week_index = self.week_index_in_month(source_day_obj)
                                 source_pattern_day = ((source_day_obj.day - 1) % pattern_days) + 1
 
-                                receiver_candidates: list[tuple[float, int, tuple[str, int, int, str, int | None, str | None] | None, int]] = []
+                                receiver_candidates: list[tuple[float, float, int, tuple[str, int, int, str, int | None, str | None] | None, tuple[str, int, int, str, int | None, str | None] | None, int]] = []
                                 for receiver_id in available_drivers_all:
                                     receiver_id = int(receiver_id)
                                     if receiver_id == target_driver_id:
@@ -23062,37 +25617,56 @@ class DutyPlannerApp(tk.Tk):
                                         continue
                                     if receiver_id in duty_driver_exclusions.get(source_duty_id, set()):
                                         continue
+                                    if pair_same_shift_block_reason(receiver_id, source_duty_id, str(source_date)):
+                                        continue
                                     if self.is_planning_weekend_or_holiday(source_day_obj) and would_make_consecutive_weekend(receiver_id, source_day_obj):
                                         continue
-                                    if driver_has_work_entry_on_day(receiver_id, str(source_date)):
-                                        continue
                                     receiver_day_off_entry = find_auto_day_off_entry(receiver_id, str(source_date))
-                                    if driver_has_any_entry(receiver_id, str(source_date)) and receiver_day_off_entry is None:
+                                    receiver_low_priority_entry = find_auto_low_priority_entry(receiver_id, str(source_date))
+                                    if driver_has_work_entry_on_day(receiver_id, str(source_date)) and receiver_low_priority_entry is None:
                                         continue
-                                    if driver_month_work_hours[receiver_id] + source_hours > monthly_norm_hours + 1e-6:
+                                    if driver_has_any_entry(receiver_id, str(source_date)) and receiver_day_off_entry is None and receiver_low_priority_entry is None:
                                         continue
-                                    # prefer existing automatic WG/W over an empty cell, then the biggest RBH shortage
-                                    receiver_score = 0 if receiver_day_off_entry is not None else 1
-                                    shortage_after = monthly_norm_hours - (driver_month_work_hours[receiver_id] + source_hours)
-                                    receiver_candidates.append((receiver_score, shortage_after, receiver_day_off_entry, receiver_id))
-                                receiver_candidates.sort(key=lambda item: (item[0], item[1], item[3]))
+                                    receiver_low_hours = 0.0
+                                    if receiver_low_priority_entry is not None:
+                                        receiver_low_duty = duty_rows_by_id.get(int(receiver_low_priority_entry[2]))
+                                        if receiver_low_duty is None:
+                                            continue
+                                        receiver_low_hours = self.standard_service_rbh_hours(receiver_low_duty)
+                                    if driver_month_work_hours[receiver_id] - receiver_low_hours + source_hours > monthly_norm_hours + 1e-6:
+                                        continue
+                                    # prefer existing WG/W, then sacrificing low priority, then an empty cell.
+                                    if receiver_day_off_entry is not None:
+                                        receiver_score = 0
+                                    elif receiver_low_priority_entry is not None:
+                                        receiver_score = 1
+                                    else:
+                                        receiver_score = 2
+                                    shortage_after = monthly_norm_hours - (driver_month_work_hours[receiver_id] - receiver_low_hours + source_hours)
+                                    receiver_candidates.append((receiver_score, shortage_after, receiver_low_hours, receiver_day_off_entry, receiver_low_priority_entry, receiver_id))
+                                receiver_candidates.sort(key=lambda item: (item[0], item[1], item[5]))
 
-                                for _receiver_score, _shortage_after, receiver_day_off_entry, receiver_id in receiver_candidates:
+                                for _receiver_score, _shortage_after, receiver_low_hours, receiver_day_off_entry, receiver_low_priority_entry, receiver_id in receiver_candidates:
                                     removed_source = False
                                     removed_target_day_off = False
                                     removed_receiver_day_off = False
+                                    removed_receiver_low_priority = False
                                     source_day_off_added = False
                                     try:
                                         temporarily_remove_auto_entry(source_entry, required_counted=True, work_counted=True)
                                         removed_source = True
                                         unregister_unique_assignment(str(source_date), source_duty_id, target_driver_id)
 
-                                        temporarily_remove_auto_entry(target_day_off_entry, required_counted=False, work_counted=False)
-                                        removed_target_day_off = True
+                                        if target_day_off_entry is not None:
+                                            temporarily_remove_auto_entry(target_day_off_entry, required_counted=False, work_counted=False)
+                                            removed_target_day_off = True
 
                                         if receiver_day_off_entry is not None:
                                             temporarily_remove_auto_entry(receiver_day_off_entry, required_counted=False, work_counted=False)
                                             removed_receiver_day_off = True
+                                        if receiver_low_priority_entry is not None:
+                                            temporarily_remove_auto_entry(receiver_low_priority_entry, required_counted=True, work_counted=True)
+                                            removed_receiver_low_priority = True
 
                                         if not driver_has_required_rest(target_driver_id, missing_duty_id, target_date, allow_monthly_overtime=False):
                                             continue
@@ -23100,7 +25674,7 @@ class DutyPlannerApp(tk.Tk):
                                             continue
 
                                         source_day_off_id = day_off_duty_id_for_date(source_day_obj)
-                                        if source_day_off_id is not None:
+                                        if target_day_off_entry is not None and source_day_off_id is not None:
                                             add_entry(
                                                 str(source_date),
                                                 target_driver_id,
@@ -23121,7 +25695,11 @@ class DutyPlannerApp(tk.Tk):
                                             missing_duty_id,
                                             [
                                                 AUTO_NOTE,
-                                                f"uzupelnienie braku {missing_code} po przeniesieniu WG/W",
+                                                (
+                                                    f"uzupelnienie braku {missing_code} po przeniesieniu WG/W"
+                                                    if target_day_off_entry is not None
+                                                    else f"uzupelnienie braku {missing_code} przez lancuch z pustej komorki"
+                                                ),
                                                 f"zwolniona sluzba {str(source_duty['code'] or source_duty_id)} z dnia {source_date} przekazana innemu kierowcy",
                                                 "nie ruszano wpisow recznych",
                                                 f"dzien wzoru {pattern_day}",
@@ -23136,7 +25714,7 @@ class DutyPlannerApp(tk.Tk):
                                                 AUTO_NOTE,
                                                 f"przejecie sluzby {str(source_duty['code'] or source_duty_id)} po przeniesieniu WG/W",
                                                 f"zwolniono kierowce do brakujacej sluzby {missing_code} w dniu {target_date}",
-                                                "nie ruszano wpisow recznych",
+                                                "kosztem sluzby niskiego priorytetu" if receiver_low_priority_entry is not None else "nie ruszano wpisow recznych",
                                                 f"dzien wzoru {source_pattern_day}",
                                             ],
                                             True,
@@ -23146,19 +25724,25 @@ class DutyPlannerApp(tk.Tk):
                                         weekly_duty_driver[(source_duty_id, source_week_index)] = receiver_id
                                         weekly_driver_duty[(receiver_id, source_week_index)] = source_duty_id
                                         shortage_replanned_from_wg += 1
+                                        if receiver_low_priority_entry is not None:
+                                            skipped_shortage_12_15.append((str(source_date), str(duty_rows_by_id.get(int(receiver_low_priority_entry[2]))["code"] or int(receiver_low_priority_entry[2])) if duty_rows_by_id.get(int(receiver_low_priority_entry[2])) is not None else str(int(receiver_low_priority_entry[2]))))
+                                            shortage_replanned_from_12_15 += 1
                                         wg_chain_rebalanced += 1
                                         wg_reassigned_before_write += 1
                                         try:
                                             unfilled_duties.remove(missing)
                                         except ValueError:
                                             pass
-                                        shortage_rescue_block_details.append((target_date, str(missing_code or missing_duty_id), "WG-LANCUCH", target_driver_id, f"WG/W przeniesione na {source_date}; sluzba {str(source_duty['code'] or source_duty_id)} -> kierowca {receiver_id}"))
+                                        source_marker = "WG/W przeniesione" if target_day_off_entry is not None else "pusta komorka przeniesiona"
+                                        shortage_rescue_block_details.append((target_date, str(missing_code or missing_duty_id), "WG-LANCUCH", target_driver_id, f"{source_marker} na {source_date}; sluzba {str(source_duty['code'] or source_duty_id)} -> kierowca {receiver_id}"))
                                         changes += 1
                                         made_change = True
                                         break
                                     finally:
                                         # If no change was committed, restore the simulated removals.
                                         if not made_change:
+                                            if removed_receiver_low_priority:
+                                                restore_removed(receiver_low_priority_entry, required_counted=True, work_counted=True)
                                             if removed_receiver_day_off:
                                                 restore_removed(receiver_day_off_entry, required_counted=False, work_counted=False)
                                             if removed_target_day_off:
@@ -23181,7 +25765,7 @@ class DutyPlannerApp(tk.Tk):
 
 
             def final_swap_same_driver_reserve_to_wg_for_missing_service(stage_label: str, max_changes: int = 20) -> int:
-                """Final rescue: move same driver's R/R2 to WG and use current WG for a missing service."""
+                """Final rescue: remove another-day R/R2 and use an empty/WG day for a missing service."""
                 nonlocal reserve_used, shortage_replanned_from_wg, shortage_replanned_from_other_days, wg_chain_rebalanced
                 changes = 0
                 if not unfilled_duties:
@@ -23210,6 +25794,8 @@ class DutyPlannerApp(tk.Tk):
 
                 def usable_auto_reserve_entry(entry: tuple[str, int, int, str, int | None, str | None]) -> bool:
                     if protected_day_off_or_manual(entry):
+                        return False
+                    if is_hard_weekend_override_entry(entry):
                         return False
                     return int(entry[2]) in reserve_duty_id_set
 
@@ -23273,15 +25859,9 @@ class DutyPlannerApp(tk.Tk):
                         pattern_day = ((target_date_obj.day - 1) % pattern_days) + 1
 
                         wg_candidates = []
-                        for target_wg_entry in list(entries):
-                            if str(target_wg_entry[0]) != target_date:
-                                continue
-                            driver_id = int(target_wg_entry[1])
-                            if driver_id not in available_drivers_all:
-                                continue
+                        for driver_id_raw in available_drivers_all:
+                            driver_id = int(driver_id_raw)
                             if (target_date, driver_id) in manual_locked_driver_dates:
-                                continue
-                            if not usable_auto_wg_entry(target_wg_entry):
                                 continue
                             if is_driver_blocked_by_day_exclusion(driver_id, target_date_obj):
                                 continue
@@ -23293,10 +25873,26 @@ class DutyPlannerApp(tk.Tk):
                                 continue
                             if driver_has_rn_lock_for_service(driver_id, target_date, missing_duty_id):
                                 continue
-                            wg_candidates.append((driver_month_work_hours[driver_id], driver_id, target_wg_entry))
-                        wg_candidates.sort(key=lambda item: (item[0], item[1]))
 
-                        for _hours, driver_id, target_wg_entry in wg_candidates:
+                            target_entries = [
+                                entry for entry in list(entries)
+                                if str(entry[0]) == target_date and int(entry[1]) == driver_id
+                            ]
+                            if target_entries:
+                                target_wg_entry = next(
+                                    (entry for entry in target_entries if usable_auto_wg_entry(entry)),
+                                    None,
+                                )
+                                if target_wg_entry is None:
+                                    continue
+                                target_kind_score = 1
+                            else:
+                                target_wg_entry = None
+                                target_kind_score = 0
+                            wg_candidates.append((target_kind_score, driver_month_work_hours[driver_id], driver_id, target_wg_entry))
+                        wg_candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+
+                        for _target_kind, _hours, driver_id, target_wg_entry in wg_candidates:
                             for _distance, _direction, source_date, source_reserve_entry in same_driver_other_day_reserves(driver_id, target_date):
                                 source_reserve_id = int(source_reserve_entry[2])
                                 source_reserve_duty = duty_rows_by_id.get(source_reserve_id)
@@ -23316,11 +25912,18 @@ class DutyPlannerApp(tk.Tk):
                                 removed_source_reserve = False
                                 committed = False
                                 try:
-                                    temporarily_remove_auto_entry(target_wg_entry, required_counted=False, work_counted=False)
-                                    removed_target_wg = True
+                                    if target_wg_entry is not None:
+                                        temporarily_remove_auto_entry(target_wg_entry, required_counted=False, work_counted=False)
+                                        removed_target_wg = True
                                     temporarily_remove_auto_entry(source_reserve_entry, required_counted=False, work_counted=True)
                                     removed_source_reserve = True
-                                    if not driver_has_required_rest(driver_id, missing_duty_id, target_date, allow_monthly_overtime=False):
+                                    if not driver_has_required_rest(
+                                        driver_id,
+                                        missing_duty_id,
+                                        target_date,
+                                        allow_monthly_overtime=False,
+                                        allow_inherited_month_start_shift_mismatch=True,
+                                    ):
                                         reason = driver_rest_block_reason(driver_id, missing_duty_id, target_date, allow_monthly_overtime=False) or "odpoczynek / przepisy czasu pracy"
                                         shortage_rescue_block_details.append((target_date, str(missing_code or missing_duty_id), "WG-R/R2", driver_id, reason))
                                         continue
@@ -23351,20 +25954,23 @@ class DutyPlannerApp(tk.Tk):
                                             f"dzien wzoru {pattern_day}",
                                         ],
                                         True,
+                                        allow_inherited_month_start_shift_mismatch=True,
                                     )
                                     weekly_duty_driver[(missing_duty_id, target_week_index)] = driver_id
                                     weekly_driver_duty[(driver_id, target_week_index)] = missing_duty_id
                                     driver_month_work_count[driver_id] += 1
                                     driver_week_work_count[(driver_id, target_week_index)] += 1
                                     reserve_used = max(0, reserve_used - 1)
-                                    shortage_replanned_from_wg += 1
+                                    if target_wg_entry is not None:
+                                        shortage_replanned_from_wg += 1
                                     shortage_replanned_from_other_days += 1
                                     wg_chain_rebalanced += 1
                                     try:
                                         unfilled_duties.remove(missing)
                                     except ValueError:
                                         pass
-                                    shortage_rescue_block_details.append((target_date, str(missing_code or missing_duty_id), "WG-R/R2", driver_id, f"R/R2 z {source_date} zamienione na WG; sluzba wpisana w miejsce WG"))
+                                    target_slot_label = "WG" if target_wg_entry is not None else "puste pole"
+                                    shortage_rescue_block_details.append((target_date, str(missing_code or missing_duty_id), "WG-R/R2", driver_id, f"R/R2 z {source_date} zamienione na WG; sluzba wpisana w {target_slot_label}"))
                                     changes += 1
                                     made_change = True
                                     committed = True
@@ -23532,6 +26138,8 @@ class DutyPlannerApp(tk.Tk):
                         source_date, source_driver_id_raw, source_duty_id_raw, source_note, _car_id, _pair_no = source_entry
                         if str(source_date) != target_date:
                             continue
+                        if is_hard_weekend_override_entry(source_entry):
+                            continue
                         driver_id = int(source_driver_id_raw)
                         source_duty_id = int(source_duty_id_raw)
                         if source_duty_id not in reserve_duty_id_set:
@@ -23667,6 +26275,8 @@ class DutyPlannerApp(tk.Tk):
                         for reserve_entry in list(entries):
                             reserve_date, reserve_driver_id_raw, reserve_duty_id_raw, reserve_note, _reserve_car_id, _reserve_pair_no = reserve_entry
                             if str(reserve_date) != target_date:
+                                continue
+                            if is_hard_weekend_override_entry(reserve_entry):
                                 continue
                             reserve_driver_id = int(reserve_driver_id_raw)
                             reserve_duty_id = int(reserve_duty_id_raw)
@@ -23849,6 +26459,8 @@ class DutyPlannerApp(tk.Tk):
                                 reserve_date, reserve_driver_id_raw, reserve_duty_id_raw, reserve_note, _reserve_car_id, _reserve_pair_no = reserve_entry
                                 if str(reserve_date) != str(source_date):
                                     continue
+                                if is_hard_weekend_override_entry(reserve_entry):
+                                    continue
                                 reserve_driver_id = int(reserve_driver_id_raw)
                                 reserve_duty_id = int(reserve_duty_id_raw)
                                 if reserve_driver_id == wg_driver_id:
@@ -24006,6 +26618,8 @@ class DutyPlannerApp(tk.Tk):
                     candidates: list[tuple[int, int, int, str, int, tuple[str, int, int, str, int | None, str | None], tuple[str, int, int, str, int | None, str | None] | None]] = []
                     for source_entry in list(entries):
                         source_date, source_driver_id_raw, source_duty_id_raw, source_note, _car_id, _pair_no = source_entry
+                        if is_hard_weekend_override_entry(source_entry):
+                            continue
                         driver_id = int(source_driver_id_raw)
                         source_duty_id = int(source_duty_id_raw)
                         if str(source_date) == target_date:
@@ -24583,19 +27197,21 @@ class DutyPlannerApp(tk.Tk):
                     verify_day_obj = date(year, month, verify_day)
                     verify_date = verify_day_obj.isoformat()
                     verify_weekday = self.planning_weekday(verify_day_obj)
+                    exact_override_ids = weekend_override_ids_by_date.get(verify_date, set())
                     allowed_ids = {
                         int(row["id"])
                         for row in all_duty_rows
-                        if self.duty_allowed_on_weekday(row, verify_weekday)
+                        if int(row["id"]) in exact_override_ids
+                        or self.duty_allowed_on_weekday(row, verify_weekday)
                     }
                     required_ids = [
                         int(row["id"])
                         for row in all_duty_rows
                         if int(row["id"]) in allowed_ids
-                        and int(row["id"]) not in excluded_duty_ids
-                        and int(row["id"]) not in auto_plan_skipped_duty_ids
+                        and (int(row["id"]) in exact_override_ids or int(row["id"]) not in excluded_duty_ids)
+                        and (int(row["id"]) in exact_override_ids or int(row["id"]) not in auto_plan_skipped_duty_ids)
                         and int(row["id"]) not in rn_duty_ids
-                        and int(row["id"]) not in reserve_duty_id_set
+                        and (int(row["id"]) in exact_override_ids or int(row["id"]) not in reserve_duty_id_set)
                         and not self.is_day_off_duty(row)
                     ]
                     # v373: końcowa kontrola obejmuje wszystkie realne służby,
@@ -24653,6 +27269,277 @@ class DutyPlannerApp(tk.Tk):
                         added_count += 1
                 prune_resolved_unfilled_duties()
                 return added_count
+
+            def final_rescue_high_priority_by_sacrificing_other_day_low_priority(stage_label: str, max_passes: int = 4) -> int:
+                """Last rescue: use WG on a high-priority shortage day before leaving it open.
+
+                A driver who has automatic WG/W on the shortage date may be moved to the
+                missing high-priority service. If that driver has an automatic low-priority
+                service on another day, that source day is converted to WG/W. This deliberately
+                ignores weekly same-service continuity as a hard rule; full high-priority
+                coverage wins. Manual entries, RN, vacation/sick notes and blocks stay protected.
+                """
+                nonlocal shortage_replanned_from_12_15, shortage_replanned_from_other_days
+                if not unfilled_duties or not shortage_skip_duty_ids:
+                    return 0
+
+                def is_high_priority_shortage(item: tuple[str, int, str, str]) -> bool:
+                    try:
+                        missing_date = str(item[0])
+                        missing_duty_id = int(item[1])
+                    except Exception:
+                        return False
+                    if missing_duty_id in shortage_skip_duty_ids:
+                        return False
+                    if not unfilled_duty_blocks_nominal_topup(item):
+                        return False
+                    if any(str(entry[0]) == missing_date and int(entry[2]) == missing_duty_id for entry in planned_context_entries):
+                        return False
+                    duty = duty_rows_by_id.get(missing_duty_id)
+                    return bool(duty is not None and not self.is_day_off_duty(duty) and missing_duty_id not in rn_duty_ids and missing_duty_id not in reserve_duty_id_set)
+
+                def protected_note(note_text: object) -> bool:
+                    note_lower = str(note_text or "").lower()
+                    return (
+                        note_lower.startswith("recznie")
+                        or note_lower.startswith("r?cznie")
+                        or "manual" in note_lower
+                        or "urlop" in note_lower
+                        or "choroba" in note_lower
+                        or "blokada" in note_lower
+                        or "najem" in note_lower
+                    )
+
+                def auto_day_off_entry_for_driver_day(driver_id: int, day_text: str) -> tuple[str, int, int, str, int | None, str | None] | None:
+                    for entry in list(entries):
+                        if str(entry[0]) != str(day_text) or int(entry[1]) != int(driver_id):
+                            continue
+                        duty = entry_duty(entry)
+                        if duty is not None and self.is_day_off_duty(duty) and not protected_note(entry[3]):
+                            return entry
+                    return None
+
+                def driver_has_non_day_off_entry(driver_id: int, day_text: str, ignore_entry: tuple[str, int, int, str, int | None, str | None] | None = None) -> bool:
+                    for entry in planned_context_entries:
+                        if ignore_entry is not None and entry == ignore_entry:
+                            continue
+                        if str(entry[0]) != str(day_text) or int(entry[1]) != int(driver_id):
+                            continue
+                        duty = entry_duty(entry)
+                        if duty is not None and not self.is_day_off_duty(duty):
+                            return True
+                    return False
+
+                def missing_sort_key(item: tuple[str, int, str, str]) -> tuple[int, object]:
+                    try:
+                        day_score = -datetime.strptime(str(item[0]), "%Y-%m-%d").date().toordinal()
+                    except Exception:
+                        day_score = 0
+                    try:
+                        duty_key = duty_sort_key(int(item[1]))
+                    except Exception:
+                        duty_key = (999, str(item[2] if len(item) > 2 else item[1]))
+                    return (day_score, duty_key)
+
+                total = 0
+                seen_states: set[tuple[tuple[tuple[str, int], ...], tuple[tuple[str, int, int], ...]]] = set()
+                for pass_no in range(1, max(1, int(max_passes)) + 1):
+                    auto_plan_pulse(f"{stage_label}: niski priorytet -> WG dla wysokiego, przebieg {pass_no}/{max_passes}")
+                    rebuild_unfilled_required_services_before_save()
+                    high_missing = [item for item in list(unfilled_duties) if is_high_priority_shortage(item)]
+                    if not high_missing:
+                        break
+                    state = (
+                        tuple(sorted((str(item[0]), int(item[1])) for item in high_missing)),
+                        tuple(sorted((str(entry[0]), int(entry[1]), int(entry[2])) for entry in entries if int(entry[2]) in shortage_skip_duty_ids)),
+                    )
+                    if state in seen_states:
+                        break
+                    seen_states.add(state)
+                    changed_this_pass = 0
+
+                    for missing in sorted(high_missing, key=missing_sort_key):
+                        target_date = str(missing[0])
+                        missing_duty_id = int(missing[1])
+                        missing_code = str(missing[2])
+                        if any(str(entry[0]) == target_date and int(entry[2]) == missing_duty_id for entry in planned_context_entries):
+                            try:
+                                unfilled_duties.remove(missing)
+                            except ValueError:
+                                pass
+                            continue
+                        try:
+                            target_date_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                        except ValueError:
+                            continue
+                        missing_duty = duty_rows_by_id.get(missing_duty_id)
+                        if missing_duty is None or self.is_day_off_duty(missing_duty):
+                            continue
+                        if not self.duty_id_allowed_on_date(missing_duty_id, target_date_obj):
+                            continue
+                        missing_hours = self.standard_service_rbh_hours(missing_duty)
+                        if missing_hours <= 0:
+                            continue
+                        target_week_index = self.week_index_in_month(target_date_obj)
+                        pattern_day = ((target_date_obj.day - 1) % pattern_days) + 1
+
+                        source_candidates: list[tuple[int, int, float, int, str, tuple[str, int, int, str, int | None, str | None], tuple[str, int, int, str, int | None, str | None]]] = []
+                        for source_entry in list(entries):
+                            source_date = str(source_entry[0])
+                            source_driver_id = int(source_entry[1])
+                            source_duty_id = int(source_entry[2])
+                            if source_date == target_date:
+                                continue
+                            if source_duty_id not in shortage_skip_duty_ids:
+                                continue
+                            if source_driver_id not in available_drivers_all:
+                                continue
+                            if protected_note(source_entry[3]):
+                                continue
+                            if (source_date, source_driver_id) in manual_locked_driver_dates or (target_date, source_driver_id) in manual_locked_driver_dates:
+                                continue
+                            try:
+                                source_date_obj = datetime.strptime(source_date, "%Y-%m-%d").date()
+                            except ValueError:
+                                continue
+                            source_day_off_id = day_off_duty_id_for_date(source_date_obj)
+                            if source_day_off_id is None:
+                                continue
+                            if is_driver_blocked_by_day_exclusion(source_driver_id, source_date_obj) or is_driver_blocked_by_day_exclusion(source_driver_id, target_date_obj):
+                                continue
+                            if source_driver_id in duty_driver_exclusions.get(missing_duty_id, set()):
+                                continue
+                            if self.is_planning_weekend_or_holiday(target_date_obj) and would_make_consecutive_weekend(source_driver_id, target_date_obj):
+                                continue
+                            target_day_off_entry = auto_day_off_entry_for_driver_day(source_driver_id, target_date)
+                            if target_day_off_entry is None:
+                                continue
+                            if driver_has_non_day_off_entry(source_driver_id, target_date, ignore_entry=target_day_off_entry):
+                                continue
+                            source_duty = duty_rows_by_id.get(source_duty_id)
+                            if source_duty is None or self.is_day_off_duty(source_duty):
+                                continue
+                            source_hours = self.standard_service_rbh_hours(source_duty)
+                            if source_hours <= 0:
+                                continue
+                            projected_hours = driver_month_work_hours[source_driver_id] - source_hours + missing_hours
+                            if projected_hours > monthly_norm_hours + 1e-6:
+                                continue
+                            source_distance = abs((target_date_obj - source_date_obj).days)
+                            end_month_score = -target_date_obj.toordinal()
+                            same_week_continuity_cost = 0 if self.week_index_in_month(source_date_obj) == target_week_index else 1
+                            source_candidates.append((end_month_score, same_week_continuity_cost, abs(monthly_norm_hours - projected_hours), source_distance, source_date, source_entry, target_day_off_entry))
+                        source_candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], int(item[5][1])))
+
+                        for _end_score, _same_week_cost, _norm_gap, _distance, source_date, source_entry, target_day_off_entry in source_candidates:
+                            source_driver_id = int(source_entry[1])
+                            source_duty_id = int(source_entry[2])
+                            source_duty = duty_rows_by_id.get(source_duty_id)
+                            source_code = str(source_duty["code"] or source_duty_id) if source_duty is not None else str(source_duty_id)
+                            try:
+                                source_date_obj = datetime.strptime(str(source_entry[0]), "%Y-%m-%d").date()
+                            except ValueError:
+                                continue
+                            source_day_off_id = day_off_duty_id_for_date(source_date_obj)
+                            if source_day_off_id is None:
+                                continue
+                            source_week_index = self.week_index_in_month(source_date_obj)
+                            source_pattern_day = ((source_date_obj.day - 1) % pattern_days) + 1
+                            source_removed = False
+                            target_day_off_removed = False
+                            high_added = False
+                            source_wg_added = False
+                            try:
+                                temporarily_remove_auto_entry(source_entry, required_counted=True, work_counted=True)
+                                source_removed = True
+                                if target_day_off_entry is not None:
+                                    temporarily_remove_auto_entry(target_day_off_entry, required_counted=False, work_counted=False)
+                                    target_day_off_removed = True
+                                if not driver_has_required_rest(source_driver_id, missing_duty_id, target_date, allow_monthly_overtime=False):
+                                    reason = driver_rest_block_reason(source_driver_id, missing_duty_id, target_date, allow_monthly_overtime=False) or "odpoczynek / przepisy czasu pracy"
+                                    shortage_rescue_block_details.append((target_date, missing_code, source_code, source_driver_id, reason))
+                                    raise RuntimeError("candidate_rest_failed")
+                                add_entry(
+                                    target_date,
+                                    source_driver_id,
+                                    missing_duty_id,
+                                    [
+                                        AUTO_NOTE,
+                                        f"wysoki priorytet {missing_code} zamiast WG; niski {source_code} z innego dnia oddaje kierowce",
+                                        "v457: pelna obsada wysokiego priorytetu przed ciagloscia tygodniowa",
+                                        f"dzien wzoru {pattern_day}",
+                                    ],
+                                    True,
+                                )
+                                high_entry = existing_driver_day_context_entry(target_date, source_driver_id)
+                                if high_entry is None or int(high_entry[2]) != missing_duty_id:
+                                    raise RuntimeError("high_priority_not_added")
+                                high_added = True
+                                weekly_duty_driver[(missing_duty_id, target_week_index)] = source_driver_id
+                                weekly_driver_duty[(source_driver_id, target_week_index)] = missing_duty_id
+                                driver_month_work_count[source_driver_id] += 1
+                                driver_week_work_count[(source_driver_id, target_week_index)] += 1
+
+                                add_entry(
+                                    str(source_entry[0]),
+                                    source_driver_id,
+                                    int(source_day_off_id),
+                                    [
+                                        AUTO_NOTE,
+                                        f"WG zamiast niskiego priorytetu {source_code}",
+                                        f"v457: kierowca z WG {target_date} przeniesiony na wysoki priorytet {missing_code}",
+                                        f"dzien wzoru {source_pattern_day}",
+                                    ],
+                                    False,
+                                )
+                                source_wg_entry = existing_driver_day_context_entry(str(source_entry[0]), source_driver_id)
+                                if source_wg_entry is None or int(source_wg_entry[2]) != int(source_day_off_id):
+                                    raise RuntimeError("source_wg_not_added")
+                                source_wg_added = True
+                                shortage_replanned_from_12_15 += 1
+                                shortage_replanned_from_other_days += 1
+                                try:
+                                    unfilled_duties.remove(missing)
+                                except ValueError:
+                                    pass
+                                shortage_rescue_block_details.append((target_date, missing_code, source_code, source_driver_id, "WG w dniu braku zamienione na wysoki priorytet; niski priorytet z innego dnia zamieniony na WG"))
+                                total += 1
+                                changed_this_pass += 1
+                                break
+                            except RuntimeError as runtime_exc:
+                                if str(runtime_exc) not in {"candidate_rest_failed", "high_priority_not_added", "source_wg_not_added"}:
+                                    raise
+                                if source_wg_added:
+                                    source_wg_current = existing_driver_day_context_entry(str(source_entry[0]), source_driver_id)
+                                    if source_wg_current is not None and int(source_wg_current[2]) == int(source_day_off_id):
+                                        temporarily_remove_auto_entry(source_wg_current, required_counted=False, work_counted=False)
+                                if high_added:
+                                    high_current = existing_driver_day_context_entry(target_date, source_driver_id)
+                                    if high_current is not None and int(high_current[2]) == int(missing_duty_id):
+                                        temporarily_remove_auto_entry(high_current, required_counted=True, work_counted=True)
+                                if target_day_off_removed and target_day_off_entry is not None:
+                                    restore_auto_entry(target_day_off_entry, required_counted=False, work_counted=False)
+                                if source_removed:
+                                    restore_auto_entry(source_entry, required_counted=True, work_counted=True)
+                                continue
+                            except Exception:
+                                if source_wg_added:
+                                    source_wg_current = existing_driver_day_context_entry(str(source_entry[0]), source_driver_id)
+                                    if source_wg_current is not None and int(source_wg_current[2]) == int(source_day_off_id):
+                                        temporarily_remove_auto_entry(source_wg_current, required_counted=False, work_counted=False)
+                                if high_added:
+                                    high_current = existing_driver_day_context_entry(target_date, source_driver_id)
+                                    if high_current is not None and int(high_current[2]) == int(missing_duty_id):
+                                        temporarily_remove_auto_entry(high_current, required_counted=True, work_counted=True)
+                                if target_day_off_removed and target_day_off_entry is not None:
+                                    restore_auto_entry(target_day_off_entry, required_counted=False, work_counted=False)
+                                if source_removed:
+                                    restore_auto_entry(source_entry, required_counted=True, work_counted=True)
+                                raise
+                        prune_resolved_unfilled_duties()
+                    if changed_this_pass <= 0:
+                        break
+                return total
 
             def fill_unfilled_by_empty_cells_v380(stage_label: str, max_passes: int = 4) -> int:
                 """v380: obsadź braki bezpośrednio z pustych komórek.
@@ -24906,6 +27793,8 @@ class DutyPlannerApp(tk.Tk):
                         for entry in list(entries):
                             if entry[0] != day_text or int(entry[1]) != int(driver_id):
                                 continue
+                            if is_hard_weekend_override_entry(entry):
+                                continue
                             if int(entry[2]) not in reserve_duty_id_set:
                                 continue
                             if str(entry[3] or "").lower().startswith("ręcznie"):
@@ -25106,6 +27995,8 @@ class DutyPlannerApp(tk.Tk):
                     duty_id = int(duty_id_raw)
                     if duty_id not in reserve_duty_id_set:
                         continue
+                    if is_hard_weekend_override_entry(entry):
+                        continue
                     if (str(entry_date), driver_id) in manual_locked_driver_dates:
                         continue
                     try:
@@ -25274,7 +28165,18 @@ class DutyPlannerApp(tk.Tk):
                                     first_reason = driver_rest_block_reason(driver_id, int(candidate_id), day_text, allow_monthly_overtime=False) or "odpoczynek / przepisy"
                                     reserve_skipped_rest += 1
                                     continue
+                                rest_optimization_rank = (0, 0.0)
+                                if check_weekly_rest and check_regulation_561:
+                                    candidate_interval = duty_interval_for_date(int(candidate_id), day_text)
+                                    rest_optimization_rank = self.weekly_rest_candidate_optimization_rank(
+                                        list(driver_work_intervals.get(int(driver_id), [])),
+                                        candidate_interval,
+                                        reduced_weekly_rest,
+                                        regular_weekly_rest,
+                                    )
                                 score = (
+                                    rest_optimization_rank[0],
+                                    rest_optimization_rank[1],
                                     abs(remaining_hours - reserve_hours),
                                     self.week_index_in_month(day_obj),
                                     day_obj.day,
@@ -25325,6 +28227,7 @@ class DutyPlannerApp(tk.Tk):
             rebuild_unfilled_required_services_before_save()
             if unfilled_duties or rn_unfilled:
                 fill_unfilled_by_releasing_other_day_reserve_or_low_priority()
+                final_rescue_high_priority_by_sacrificing_other_day_low_priority("v456 koniec miesiaca: niski priorytet z innego dnia", max_passes=3)
                 fill_remaining_services_allowing_shift_changes()
                 rebuild_unfilled_required_services_before_save()
                 rebuild_unfilled_required_services_before_save()
@@ -25413,6 +28316,15 @@ class DutyPlannerApp(tk.Tk):
                     week_starts.add(week_start_dt.date())
 
                 for driver_id in available_drivers_all:
+                    selected_rest_keys = {
+                        (item["start"], item["end"])
+                        for item in self.selected_weekly_rest_gaps(
+                            list(driver_work_intervals.get(int(driver_id), [])),
+                            reduced_weekly_rest if check_regulation_561 else min_weekly_rest,
+                            regular_weekly_rest,
+                        )
+                    }
+                    marked_rest_keys: set[tuple[datetime, datetime]] = set()
                     for week_start_day in sorted(week_starts):
                         week_start_dt = datetime.combine(week_start_day, datetime.min.time())
                         week_end_dt = week_start_dt + timedelta(days=7)
@@ -25420,6 +28332,13 @@ class DutyPlannerApp(tk.Tk):
                         if not any(start_dt < week_end_dt and end_dt > week_start_dt for start_dt, end_dt in driver_work_intervals.get(int(driver_id), [])):
                             continue
                         gap_start, gap_end, gap_hours = best_gap_for_week(driver_id, week_start_dt, week_end_dt)
+                        gap_key = (gap_start, gap_end)
+                        # Oznaczamy wyłącznie odpoczynki wybrane do legalnej
+                        # sekwencji. Nadmiarowy drugi odpoczynek 45 h pozostaje
+                        # dostępny do wypełnienia służbą albo R/R2.
+                        if gap_key not in selected_rest_keys or gap_key in marked_rest_keys:
+                            continue
+                        marked_rest_keys.add(gap_key)
                         minimum_weekly_gap = reduced_weekly_rest if check_regulation_561 else min_weekly_rest
                         if check_weekly_rest and gap_hours < minimum_weekly_gap - 1e-6:
                             continue
@@ -25437,8 +28356,29 @@ class DutyPlannerApp(tk.Tk):
                                 candidate_days.append(probe)
                             probe += timedelta(days=1)
                         candidate_days.sort(key=lambda d: (0 if self.is_calendar_workday_for_norm(d) else 1, d))
-                        marked_hours = 0.0
+                        existing_day_off_dates: set[date] = set()
+                        for entry in planned_context_entries:
+                            if int(entry[1]) != int(driver_id):
+                                continue
+                            existing_duty = duty_rows_by_id.get(int(entry[2]))
+                            if existing_duty is None or not self.is_day_off_duty(existing_duty):
+                                continue
+                            try:
+                                existing_day = datetime.strptime(str(entry[0]), "%Y-%m-%d").date()
+                            except ValueError:
+                                continue
+                            existing_day_off_dates.add(existing_day)
+                        # Już zapisane UW/UO/W/WG są częścią tego samego realnego
+                        # odpoczynku. Bez ich zaliczenia licznik zaczynał od zera i
+                        # dopisywał kolejne WG po długim urlopie (np. Baran W.).
+                        marked_hours = self.existing_day_off_hours_in_rest_gap(
+                            gap_start,
+                            gap_end,
+                            existing_day_off_dates,
+                        )
                         required_hours = regular_weekly_rest if (not check_regulation_561 or gap_hours >= regular_weekly_rest - 1e-6) else reduced_weekly_rest
+                        if marked_hours + 1e-6 >= required_hours:
+                            continue
                         for day_obj in candidate_days:
                             day_off_id = day_off_duty_id_for_date(day_obj)
                             if day_off_id is None:
@@ -25721,6 +28661,7 @@ class DutyPlannerApp(tk.Tk):
             # wpisów nie ruszamy, bo nie ma ich na liście nowych wpisów automatu.
             # WG/W zostaje tylko wtedy, gdy pochodzi z etapu wymaganego odpoczynku.
             disabled_auto_duty_ids_v268 = set(auto_plan_skipped_duty_ids)
+            disabled_auto_duty_ids_v268.update(auto_plan_disabled_reserve_duty_ids)
             # v373: kody niskiego priorytetu nie są wyłączone z automatu. Nie dodawaj
             # ich tutaj do filtra kasującego, bo wtedy mogłyby zniknąć przed zapisem.
             if not (auto_plan_reserves_enabled or auto_plan_nominal_rbh_topup_enabled):
@@ -25735,7 +28676,8 @@ class DutyPlannerApp(tk.Tk):
                 removed_by_disabled_filter = 0
                 for entry in list(entries):
                     try:
-                        if int(entry[2]) in disabled_auto_duty_ids_v268:
+                        entry_is_exact_override = int(entry[2]) in weekend_override_ids_by_date.get(str(entry[0]), set())
+                        if int(entry[2]) in disabled_auto_duty_ids_v268 and not entry_is_exact_override:
                             drop_auto_entry_before_save(entry)
                             removed_by_disabled_filter += 1
                     except Exception:
@@ -25799,6 +28741,7 @@ class DutyPlannerApp(tk.Tk):
 
                     fill_unfilled_by_empty_cells_v380(f"{stage_label} - bezpośrednio z pustych komórek", max_passes=2)
                     fill_unfilled_by_releasing_other_day_reserve_or_low_priority()
+                    final_rescue_high_priority_by_sacrificing_other_day_low_priority(f"{stage_label} - niski priorytet z innego dnia", max_passes=3)
                     fill_unfilled_by_wg_and_reserve_balance()
                     fill_missing_services_from_wg_for_rbh_shortage()
                     final_chain_rescue_missing_services_from_shifted_day_off(f"{stage_label} - lancuch WG/W")
@@ -26136,6 +29079,7 @@ class DutyPlannerApp(tk.Tk):
 
                 if unfilled_duties:
                     fill_unfilled_by_releasing_other_day_reserve_or_low_priority()
+                    final_rescue_high_priority_by_sacrificing_other_day_low_priority(f"v427 niski priorytet z innego dnia, przebieg {_v427_final_pass}", max_passes=3)
                     fill_unfilled_by_wg_and_reserve_balance()
                     fill_missing_services_from_wg_for_rbh_shortage()
                     final_chain_rescue_missing_services_from_shifted_day_off(f"v427 przesunięcie WG/W, przebieg {_v427_final_pass}", max_changes=8)
@@ -26177,6 +29121,11 @@ class DutyPlannerApp(tk.Tk):
                     day_obj = date(year, month, target_day)
                     day_text = day_obj.isoformat()
                     is_norm_workday = self.is_calendar_workday_for_norm(day_obj)
+                    if is_norm_workday:
+                        # WG w dni robocze wolno dodać wyłącznie w osobnym etapie
+                        # wymaganego odpoczynku tygodniowego. Nie maskuj pustej
+                        # komórki technicznym WG, szczególnie przy niedoborze RBH.
+                        continue
                     day_off_id_for_day = weekday_day_off_duty_id if is_norm_workday else (weekend_day_off_duty_id or weekday_day_off_duty_id)
                     if day_off_id_for_day is None:
                         continue
@@ -26660,11 +29609,582 @@ class DutyPlannerApp(tk.Tk):
                         break
                 return changed_total
 
-            # v435: końcówka planowania bez używania świeżo dopisanego technicznego WG/W do RBH.
+            def rebalance_filled_weekend_services_for_rbh(stage_label: str, max_passes: int = 12) -> int:
+                """Domknij RBH przez legalną zamianę już obsadzonej służby weekendowej.
+
+                Kierowca z niedoborem przejmuje automatyczną służbę z pustej soboty
+                lub niedzieli. Dotychczasowy kierowca dostaje w zamian legalne R/R2
+                w swojej pustej komórce roboczej, więc żadna służba nie traci obsady
+                i żaden z kierowców nie zostaje poniżej normy. Wpisów ręcznych,
+                RN, bloków dwóch służb ani wymaganych odpoczynków nie ruszamy.
+                """
+                nonlocal reserve_used, nominal_topup_after_rescue, weekend_rbh_rebalanced
+                if not nominal_topup_reserve_candidates:
+                    return 0
+
+                blocked_duty_ids = {
+                    int(block[key])
+                    for block in duty_blocks
+                    for key in ("duty1_id", "duty2_id")
+                    if block.get(key) is not None
+                }
+
+                def has_any_entry(driver_id: int, day_text: str) -> bool:
+                    return any(
+                        str(entry[0]) == day_text and int(entry[1]) == int(driver_id)
+                        for entry in planned_context_entries
+                    )
+
+                def reserve_slot_for_source(
+                    source_driver_id: int,
+                    required_hours: float,
+                ) -> tuple[date, int, sqlite3.Row, float] | None:
+                    candidates: list[tuple[tuple[object, ...], date, int, sqlite3.Row, float]] = []
+                    for day_number in range(1, month_days + 1):
+                        day_obj = date(year, month, day_number)
+                        if not self.is_calendar_workday_for_norm(day_obj):
+                            continue
+                        day_text = day_obj.isoformat()
+                        if (day_text, int(source_driver_id)) in manual_locked_driver_dates:
+                            continue
+                        if has_any_entry(int(source_driver_id), day_text):
+                            continue
+                        if is_driver_blocked_by_day_exclusion(int(source_driver_id), day_obj):
+                            continue
+                        if is_driver_blocked_by_vacation_for_auto_work(int(source_driver_id), day_obj):
+                            continue
+                        preferred_shift = reserve_preferred_shift_for_date(int(source_driver_id), day_obj)
+                        preferred_code = reserve_code_for_shift(preferred_shift)
+                        for reserve_id_raw, reserve_duty, reserve_hours_raw in nominal_topup_reserve_candidates:
+                            reserve_id = int(reserve_id_raw)
+                            reserve_hours = float(reserve_hours_raw)
+                            reserve_code = self.normalize_code(reserve_duty["code"])
+                            if reserve_code not in {"R", "R2"}:
+                                continue
+                            if abs(reserve_hours - float(required_hours)) > 1e-6:
+                                continue
+                            if not self.duty_day_flag_allowed_on_weekday(
+                                reserve_duty,
+                                self.planning_weekday(day_obj),
+                            ):
+                                continue
+                            if reserve_daily_limit_reached(reserve_id, day_text):
+                                continue
+                            if int(source_driver_id) in duty_driver_exclusions.get(reserve_id, set()):
+                                continue
+                            if not driver_has_required_rest(
+                                int(source_driver_id),
+                                reserve_id,
+                                day_text,
+                                allow_monthly_overtime=False,
+                            ):
+                                continue
+                            score = (
+                                0 if reserve_code == preferred_code else 1,
+                                abs((day_obj - date(year, month, 15)).days),
+                                day_obj,
+                                reserve_id,
+                            )
+                            candidates.append((score, day_obj, reserve_id, reserve_duty, reserve_hours))
+                    if not candidates:
+                        return None
+                    candidates.sort(key=lambda item: item[0])
+                    _score, day_obj, reserve_id, reserve_duty, reserve_hours = candidates[0]
+                    return day_obj, reserve_id, reserve_duty, reserve_hours
+
+                changed = 0
+                for pass_number in range(1, max_passes + 1):
+                    made_change = False
+                    target_drivers = sorted(
+                        (
+                            (monthly_norm_hours - driver_month_work_hours[int(driver_id)], int(driver_id))
+                            for driver_id in available_drivers_all
+                            if monthly_norm_hours - driver_month_work_hours[int(driver_id)] > 1e-6
+                        ),
+                        key=lambda item: (abs(item[0] - 8.0), -item[0], item[1]),
+                    )
+                    for deficit, target_driver_id in target_drivers:
+                        auto_plan_pulse(
+                            f"{stage_label}: zamiana weekendu do RBH, przebieg {pass_number}"
+                        )
+                        for day_number in range(1, month_days + 1):
+                            day_obj = date(year, month, day_number)
+                            if not self.is_planning_weekend_or_holiday(day_obj):
+                                continue
+                            day_text = day_obj.isoformat()
+                            if (day_text, target_driver_id) in manual_locked_driver_dates:
+                                continue
+                            if has_any_entry(target_driver_id, day_text):
+                                continue
+                            if is_driver_blocked_by_day_exclusion(target_driver_id, day_obj):
+                                continue
+                            if is_driver_blocked_by_vacation_for_auto_work(target_driver_id, day_obj):
+                                continue
+                            if would_make_consecutive_weekend(target_driver_id, day_obj):
+                                continue
+
+                            source_entries = []
+                            for entry in list(entries):
+                                if str(entry[0]) != day_text:
+                                    continue
+                                source_driver_id = int(entry[1])
+                                duty_id = int(entry[2])
+                                if source_driver_id == target_driver_id:
+                                    continue
+                                duty = duty_rows_by_id.get(duty_id)
+                                if duty is None or self.is_day_off_duty(duty):
+                                    continue
+                                if duty_id in rn_duty_ids or duty_id in reserve_duty_id_set:
+                                    continue
+                                if duty_id in blocked_duty_ids:
+                                    continue
+                                duty_hours = self.standard_service_rbh_hours(duty)
+                                if duty_hours <= 0 or duty_hours > deficit + 1e-6:
+                                    continue
+                                if driver_month_work_hours[source_driver_id] < monthly_norm_hours - 1e-6:
+                                    continue
+                                source_entries.append((duty_hours, str(duty["code"] or duty_id), entry))
+                            source_entries.sort(key=lambda item: (abs(deficit - item[0]), item[1], int(item[2][1])))
+
+                            for duty_hours, duty_code, source_entry in source_entries:
+                                source_driver_id = int(source_entry[1])
+                                duty_id = int(source_entry[2])
+                                if target_driver_id in duty_driver_exclusions.get(duty_id, set()):
+                                    continue
+                                if not self.duty_id_allowed_on_date(duty_id, day_obj):
+                                    continue
+
+                                temporarily_remove_auto_entry(
+                                    source_entry,
+                                    required_counted=True,
+                                    work_counted=True,
+                                )
+                                committed = False
+                                try:
+                                    if not driver_has_required_rest(
+                                        target_driver_id,
+                                        duty_id,
+                                        day_text,
+                                        allow_monthly_overtime=False,
+                                    ):
+                                        continue
+                                    reserve_slot = reserve_slot_for_source(source_driver_id, duty_hours)
+                                    if reserve_slot is None:
+                                        continue
+                                    reserve_day, reserve_id, reserve_duty, reserve_hours = reserve_slot
+                                    target_before = len(entries)
+                                    add_entry(
+                                        day_text,
+                                        target_driver_id,
+                                        duty_id,
+                                        [
+                                            AUTO_NOTE,
+                                            f"weekendowa służba {duty_code} zamiast W - domknięcie RBH",
+                                            f"przejęta od {driver_names.get(source_driver_id, source_driver_id)}",
+                                            "odpoczynki i maksymalnie 6 dni pracy sprawdzone",
+                                            f"rbh przed: {self.format_rbh_value(driver_month_work_hours[target_driver_id])}",
+                                            f"rbh po: {self.format_rbh_value(driver_month_work_hours[target_driver_id] + duty_hours)}",
+                                        ],
+                                        True,
+                                    )
+                                    if len(entries) == target_before:
+                                        continue
+                                    target_week = self.week_index_in_month(day_obj)
+                                    driver_month_work_count[target_driver_id] += 1
+                                    driver_week_work_count[(target_driver_id, target_week)] += 1
+
+                                    reserve_text = reserve_day.isoformat()
+                                    source_before = len(entries)
+                                    add_entry(
+                                        reserve_text,
+                                        source_driver_id,
+                                        reserve_id,
+                                        [
+                                            AUTO_NOTE,
+                                            f"{self.normalize_code(reserve_duty['code'])} po przekazaniu weekendu",
+                                            f"służba {duty_code} przekazana kierowcy z niedoborem RBH",
+                                            "bilans RBH obu kierowców zachowany",
+                                            f"rbh przed: {self.format_rbh_value(driver_month_work_hours[source_driver_id])}",
+                                            f"rbh po: {self.format_rbh_value(driver_month_work_hours[source_driver_id] + reserve_hours)}",
+                                        ],
+                                        False,
+                                    )
+                                    if len(entries) == source_before:
+                                        target_entry = entries[-1]
+                                        temporarily_remove_auto_entry(
+                                            target_entry,
+                                            required_counted=True,
+                                            work_counted=True,
+                                        )
+                                        continue
+                                    source_week = self.week_index_in_month(reserve_day)
+                                    driver_month_work_count[source_driver_id] += 1
+                                    driver_week_work_count[(source_driver_id, source_week)] += 1
+                                    reserve_used += 1
+                                    nominal_topup_after_rescue += 1
+                                    weekend_rbh_rebalanced += 1
+                                    changed += 1
+                                    committed = True
+                                    made_change = True
+                                    break
+                                finally:
+                                    if not committed:
+                                        restore_auto_entry(
+                                            source_entry,
+                                            required_counted=True,
+                                            work_counted=True,
+                                        )
+                                if made_change:
+                                    break
+                            if made_change:
+                                break
+                        if made_change:
+                            break
+                    if not made_change:
+                        break
+                return changed
+
+            def assign_weekly_rest_buffer_by_rbh_shortage(stage_label: str) -> int:
+                """Przekaż buforowane służby innym kierowcom z niedoborem RBH.
+
+                Ten etap działa po zwykłej obsadzie miesiąca, ale przed R/R2.
+                Oryginalny właściciel tygodnia jest wykluczony, bo służba trafiła
+                do bufora właśnie z powodu wymaganej przerwy. Wszystkie twarde
+                kontrole odpoczynku i zakazy są wykonywane ponownie.
+                """
+                nonlocal weekly_rest_buffer_reassigned
+                if not weekly_rest_duty_buffer:
+                    return 0
+
+                pending_by_date: dict[str, list[tuple[str, int, str, int, str]]] = defaultdict(list)
+                seen_keys: set[tuple[str, int]] = set()
+                for item in weekly_rest_duty_buffer:
+                    day_text, duty_id_raw, _code, _owner_driver_id, _reason = item
+                    duty_id = int(duty_id_raw)
+                    key = (str(day_text), duty_id)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    if any(str(entry[0]) == key[0] and int(entry[2]) == duty_id for entry in entries):
+                        continue
+                    pending_by_date[key[0]].append(item)
+
+                def eligible(
+                    day_text: str,
+                    duty_id: int,
+                    driver_id: int,
+                    owner_driver_id: int,
+                ) -> bool:
+                    if int(driver_id) == int(owner_driver_id):
+                        return False
+                    try:
+                        day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                    except ValueError:
+                        return False
+                    if not self.is_calendar_workday_for_norm(day_obj):
+                        return False
+                    if (day_text, int(driver_id)) in manual_locked_driver_dates:
+                        return False
+                    if any(str(entry[0]) == day_text and int(entry[1]) == int(driver_id) for entry in entries):
+                        return False
+                    if is_driver_blocked_by_day_exclusion(int(driver_id), day_obj):
+                        return False
+                    if is_driver_blocked_by_vacation_for_auto_work(int(driver_id), day_obj):
+                        return False
+                    if int(driver_id) in duty_driver_exclusions.get(int(duty_id), set()):
+                        return False
+                    if not self.duty_id_allowed_on_date(int(duty_id), day_obj):
+                        return False
+                    duty = duty_rows_by_id.get(int(duty_id))
+                    if duty is None or self.is_day_off_duty(duty):
+                        return False
+                    duty_hours = self.standard_service_rbh_hours(duty)
+                    if duty_hours <= 0:
+                        return False
+                    if monthly_norm_hours - driver_month_work_hours[int(driver_id)] < duty_hours - 1e-6:
+                        return False
+                    return driver_has_required_rest(
+                        int(driver_id),
+                        int(duty_id),
+                        day_text,
+                        allow_monthly_overtime=False,
+                    )
+
+                def candidate_key(day_text: str, duty_id: int, driver_id: int) -> tuple[object, ...]:
+                    day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                    duty = duty_rows_by_id[int(duty_id)]
+                    duty_hours = self.standard_service_rbh_hours(duty)
+                    week_idx = self.week_index_in_month(day_obj)
+                    same_service = weekday_weekly_driver_duty.get((int(driver_id), int(week_idx))) == int(duty_id)
+                    preferred = effective_preferred_shift_for_date(int(driver_id), day_obj)
+                    duty_shift = self.duty_shift_part(duty)
+                    shift_mismatch = duty_shift in {"morning", "afternoon"} and duty_shift != preferred
+                    return self.weekly_rest_buffer_rbh_rank(
+                        monthly_norm_hours,
+                        driver_month_work_hours[int(driver_id)],
+                        duty_hours,
+                        same_service,
+                        shift_mismatch,
+                        driver_month_work_count[int(driver_id)],
+                        int(driver_id),
+                    )
+
+                total = 0
+                for day_text in sorted(pending_by_date):
+                    auto_plan_pulse(f"{stage_label}: {day_text}")
+                    items = pending_by_date[day_text]
+                    duty_items = {int(item[1]): item for item in items}
+                    edges: dict[int, list[int]] = {}
+                    for duty_id, item in duty_items.items():
+                        owner_driver_id = int(item[3])
+                        edges[duty_id] = sorted(
+                            [
+                                int(driver_id)
+                                for driver_id in available_drivers_all
+                                if eligible(day_text, duty_id, int(driver_id), owner_driver_id)
+                            ],
+                            key=lambda driver_id: candidate_key(day_text, duty_id, driver_id),
+                        )
+
+                    driver_to_duty: dict[int, int] = {}
+
+                    def augment(duty_id: int, seen: set[int]) -> bool:
+                        for driver_id in edges.get(duty_id, []):
+                            if driver_id in seen:
+                                continue
+                            seen.add(driver_id)
+                            previous_duty = driver_to_duty.get(driver_id)
+                            if previous_duty is None or augment(previous_duty, seen):
+                                driver_to_duty[driver_id] = duty_id
+                                return True
+                        return False
+
+                    for duty_id in sorted(duty_items, key=lambda value: (len(edges.get(value, [])), value)):
+                        augment(duty_id, set())
+
+                    for driver_id, duty_id in sorted(driver_to_duty.items(), key=lambda value: value[1]):
+                        item = duty_items[duty_id]
+                        _item_day, _item_duty, code, owner_driver_id, regulation_reason = item
+                        duty = duty_rows_by_id[duty_id]
+                        before_hours = driver_month_work_hours[int(driver_id)]
+                        entry_count_before = len(entries)
+                        add_entry(
+                            day_text,
+                            int(driver_id),
+                            int(duty_id),
+                            [
+                                AUTO_NOTE,
+                                f"służba {code} przejęta z bufora wymaganej przerwy",
+                                f"pierwotny właściciel tygodnia: {driver_names.get(int(owner_driver_id), owner_driver_id)}",
+                                f"powód przerwy: {regulation_reason}",
+                                f"uzupełnienie RBH: {self.format_rbh_value(before_hours)} -> {self.format_rbh_value(before_hours + self.standard_service_rbh_hours(duty))}",
+                                "bufor rozliczony przed R/R2 i bez technicznego WG",
+                            ],
+                            True,
+                        )
+                        if len(entries) == entry_count_before:
+                            continue
+                        day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                        week_idx = self.week_index_in_month(day_obj)
+                        weekly_driver_duty.setdefault((int(driver_id), int(week_idx)), int(duty_id))
+                        driver_month_work_count[int(driver_id)] += 1
+                        driver_week_work_count[(int(driver_id), int(week_idx))] += 1
+                        weekly_rest_buffer_reassigned += 1
+                        total += 1
+                        unfilled_duties[:] = [
+                            missing
+                            for missing in unfilled_duties
+                            if not (str(missing[0]) == day_text and int(missing[1]) == int(duty_id))
+                        ]
+                rebuild_unfilled_required_services_before_save()
+                return total
+
+            def global_match_missing_services_to_empty_cells_weekend_first(stage_label: str) -> int:
+                """Maksymalizuj obsadę braków, zawsze zaczynając od weekendów.
+
+                Dla jednego dnia budujemy pełne dopasowanie służba-kierowca, zamiast
+                wybierać kandydatów zachłannie po jednej służbie. Zmiana I/II oraz
+                RBH porządkują kandydatów, ale nie mogą pominąć legalnej służby
+                weekendowej. Twarde pozostają wpisy ręczne, zakazy i przepisy.
+                """
+                nonlocal empty_cell_service_rescue, overtime_used
+                rebuild_unfilled_required_services_before_save()
+                missing_by_date: dict[str, list[tuple[str, int, str, str]]] = defaultdict(list)
+                for item in list(unfilled_duties):
+                    try:
+                        day_text, duty_id_raw, _code, _reason = item
+                        duty_id = int(duty_id_raw)
+                    except Exception:
+                        continue
+                    duty = duty_rows_by_id.get(duty_id)
+                    if duty is None or self.is_day_off_duty(duty) or duty_id in reserve_duty_id_set or duty_id in rn_duty_ids:
+                        continue
+                    if any(str(entry[0]) == str(day_text) and int(entry[2]) == duty_id for entry in entries):
+                        continue
+                    missing_by_date[str(day_text)].append(item)
+
+                def driver_has_saved_entry(day_text: str, driver_id: int) -> bool:
+                    # Sprawdzaj bufor rzeczywiście zapisywany do SQLite. Pomocniczy
+                    # kontekst może zawierać ślad wpisu zdjętego w ratunku.
+                    return any(str(entry[0]) == str(day_text) and int(entry[1]) == int(driver_id) for entry in entries)
+
+                def eligible(day_text: str, duty_id: int, driver_id: int) -> bool:
+                    try:
+                        day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                    except ValueError:
+                        return False
+                    if (day_text, int(driver_id)) in manual_locked_driver_dates:
+                        return False
+                    if driver_has_saved_entry(day_text, int(driver_id)):
+                        return False
+                    if is_driver_blocked_by_day_exclusion(int(driver_id), day_obj):
+                        return False
+                    if is_driver_blocked_by_vacation_for_auto_work(int(driver_id), day_obj):
+                        return False
+                    if int(driver_id) in duty_driver_exclusions.get(int(duty_id), set()):
+                        return False
+                    if not self.duty_id_allowed_on_date(int(duty_id), day_obj):
+                        return False
+                    if self.is_planning_weekend_or_holiday(day_obj) and weekend_auto_block_reason(int(driver_id), day_obj):
+                        return False
+                    return driver_has_required_rest(
+                        int(driver_id),
+                        int(duty_id),
+                        day_text,
+                        allow_monthly_overtime=self.is_planning_weekend_or_holiday(day_obj),
+                    )
+
+                def candidate_key(day_text: str, duty_id: int, driver_id: int) -> tuple[object, ...]:
+                    day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                    duty = duty_rows_by_id[int(duty_id)]
+                    duty_shift = self.duty_shift_part(duty)
+                    preferred = effective_preferred_shift_for_date(int(driver_id), day_obj)
+                    shift_mismatch = duty_shift in {"morning", "afternoon"} and preferred != duty_shift
+                    deficit = max(0.0, monthly_norm_hours - driver_month_work_hours[int(driver_id)])
+                    weekend_load = len(driver_month_weekend_limit_keys(int(driver_id))) if self.is_planning_weekend_or_holiday(day_obj) else 0
+                    return (
+                        weekend_load,
+                        0 if deficit > 1e-6 else 1,
+                        0 if not shift_mismatch else 1,
+                        -deficit,
+                        driver_month_work_count[int(driver_id)],
+                        int(driver_id),
+                    )
+
+                day_order: list[tuple[int, int, str]] = []
+                for day_text, items in missing_by_date.items():
+                    day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                    possible: set[int] = set()
+                    for item in items:
+                        duty_id = int(item[1])
+                        possible.update(
+                            int(driver_id)
+                            for driver_id in available_drivers_all
+                            if eligible(day_text, duty_id, int(driver_id))
+                        )
+                    weekend_rank = 0 if self.is_planning_weekend_or_holiday(day_obj) else 1
+                    day_order.append((weekend_rank, len(possible), day_text))
+
+                total = 0
+                for _weekend_rank, _possible_count, day_text in sorted(day_order):
+                    auto_plan_pulse(f"{stage_label}: {day_text}")
+                    items = list(missing_by_date.get(day_text, []))
+                    duty_items = {int(item[1]): item for item in items}
+                    edges = {
+                        duty_id: sorted(
+                            [
+                                int(driver_id)
+                                for driver_id in available_drivers_all
+                                if eligible(day_text, duty_id, int(driver_id))
+                            ],
+                            key=lambda driver_id: candidate_key(day_text, duty_id, driver_id),
+                        )
+                        for duty_id in duty_items
+                    }
+                    duty_order = sorted(
+                        duty_items,
+                        key=lambda duty_id: (
+                            len(edges.get(duty_id, [])),
+                            1 if duty_id in shortage_skip_duty_ids else 0,
+                            duty_id,
+                        ),
+                    )
+                    driver_to_duty: dict[int, int] = {}
+
+                    def augment(duty_id: int, seen: set[int]) -> bool:
+                        for driver_id in edges.get(duty_id, []):
+                            if driver_id in seen:
+                                continue
+                            seen.add(driver_id)
+                            previous = driver_to_duty.get(driver_id)
+                            if previous is None or augment(previous, seen):
+                                driver_to_duty[driver_id] = duty_id
+                                return True
+                        return False
+
+                    for duty_id in duty_order:
+                        augment(duty_id, set())
+
+                    for driver_id, duty_id in sorted(driver_to_duty.items(), key=lambda item: item[1]):
+                        source_item = duty_items[duty_id]
+                        duty = duty_rows_by_id[duty_id]
+                        day_obj = datetime.strptime(day_text, "%Y-%m-%d").date()
+                        week_idx = self.week_index_in_month(day_obj)
+                        preferred = effective_preferred_shift_for_date(driver_id, day_obj)
+                        duty_shift = self.duty_shift_part(duty)
+                        before_hours = driver_month_work_hours[int(driver_id)]
+                        note_parts = [
+                            AUTO_NOTE,
+                            f"globalne uzupełnienie braku {source_item[2]}",
+                            "pełne dopasowanie dnia; weekendy przed tygodniem",
+                            "służba przed R/R2 i przed zgodnością zmiany I/II",
+                        ]
+                        if duty_shift in {"morning", "afternoon"} and duty_shift != preferred:
+                            note_parts.append(f"awaryjna zmiana na {self.preferred_shift_label(duty_shift)}")
+                        if before_hours + self.standard_service_rbh_hours(duty) > monthly_norm_hours + 1e-6:
+                            note_parts.append("NADGODZINY - obowiązkowa służba weekendowa")
+                        entry_count_before = len(entries)
+                        add_entry(day_text, driver_id, duty_id, note_parts, True)
+                        if len(entries) == entry_count_before:
+                            continue
+                        weekly_duty_driver[(duty_id, week_idx)] = driver_id
+                        weekly_driver_duty[(driver_id, week_idx)] = duty_id
+                        driver_month_work_count[driver_id] += 1
+                        driver_week_work_count[(driver_id, week_idx)] += 1
+                        if before_hours + self.standard_service_rbh_hours(duty) > monthly_norm_hours + 1e-6:
+                            overtime_used += 1
+                        empty_cell_service_rescue += 1
+                        total += 1
+                        try:
+                            unfilled_duties.remove(source_item)
+                        except ValueError:
+                            pass
+                rebuild_unfilled_required_services_before_save()
+                return total
+
+            auto_plan_pulse("bufor wymaganych przerw: uzupełnianie RBH", force=True)
+            assign_weekly_rest_buffer_by_rbh_shortage(
+                "bufor wymaganych przerw"
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+
+            auto_plan_pulse("globalne dopasowanie braków: weekendy przed tygodniem", force=True)
+            global_match_missing_services_to_empty_cells_weekend_first(
+                "globalne dopasowanie braków"
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+
+            # Końcówka planowania bez używania technicznego WG/W do RBH.
             # Najpierw wykorzystaj realnie puste komórki roboczo: brakujące służby tego samego dnia,
             # a potem R/R2 do nominału. Nie dopisuj tutaj WG/W, bo WG/W jest dniem wolnym i nie dobija RBH.
             fill_remaining_empty_workday_cells_with_reserve_or_wg(allow_reserve_fill=True, allow_technical_wg=False)
             v435_topup_rbh_from_empty_cells_before_final_wg("v435 domknięcie RBH z pustych komórek przed WG/W", max_passes=10)
+            rebalance_filled_weekend_services_for_rbh(
+                "v487 weekendowa zamiana służby dla niedoboru RBH",
+                max_passes=12,
+            )
             clear_resolved_rn_unfilled()
             rebuild_unfilled_required_services_before_save()
 
@@ -26720,6 +30240,7 @@ class DutyPlannerApp(tk.Tk):
                 rebuild_unfilled_required_services_before_save()
                 fill_unfilled_by_wg_and_reserve_balance()
                 fill_unfilled_by_releasing_other_day_reserve_or_low_priority()
+                final_rescue_high_priority_by_sacrificing_other_day_low_priority(f"v454 niski priorytet z innego dnia, przebieg {_v454_final_balance_pass}", max_passes=3)
                 fill_remaining_services_allowing_shift_changes()
                 rebuild_unfilled_required_services_before_save()
                 final_close_rbh_from_wg_services_then_reserves_v426(
@@ -26752,9 +30273,11 @@ class DutyPlannerApp(tk.Tk):
             clear_resolved_rn_unfilled()
             rebuild_unfilled_required_services_before_save()
 
-            # Nie uzywaj finalnego technicznego WG jako etapu planowania.
-            # Dobijanie RBH ma odbyc sie przed koncowym wypelnieniem pustych komorek.
-            for _v455_post_wg_rbh_pass in range(0):
+            # v458: po końcowym wypełnieniu pustych komórek nie zostawiaj kierowcy
+            # poniżej nominału tylko dlatego, że komórka ma już techniczne WG/W.
+            # Bezpiecznik może zamienić wyłącznie automatyczne, niechronione WG/W
+            # na legalną brakującą służbę albo R/R2, bez przekroczenia normy.
+            for _v455_post_wg_rbh_pass in range(1, 5):
                 _v455_changes = v429_topup_rbh_from_technical_day_offs(
                     f"v455 RBH zamiast finalnego WG/W, przebieg {_v455_post_wg_rbh_pass}",
                     max_passes=8,
@@ -26768,6 +30291,54 @@ class DutyPlannerApp(tk.Tk):
                 )
                 clear_resolved_rn_unfilled()
                 rebuild_unfilled_required_services_before_save()
+            # v497: rezerwa z innego dnia nie jest celem planowania. Jeżeli
+            # istnieje brak realnej służby, wykorzystaj kierowcę mającego w dniu
+            # braku automatyczne WG/W, zdejmij jego R/R2 z innego dnia i przenieś
+            # pracę na brakującą służbę. Kontrola odpoczynków odbywa się już po
+            # czasowym zdjęciu obu wpisów, więc oceniany jest docelowy układ.
+            rebuild_unfilled_required_services_before_save()
+            final_swap_same_driver_reserve_to_wg_for_missing_service(
+                "v497 końcowy audyt służb przed rezerwami z innych dni",
+                max_changes=20,
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+            # v495: serie R/R2 są dozwolone. Ostatni, ograniczony audyt sprawdza
+            # wyłącznie ten sam dzień: jeśli kierowca z automatycznym R/R2 może
+            # legalnie objąć brakującą realną służbę wysokiego priorytetu, służba
+            # zastępuje rezerwę. Nie uruchamiamy kosztownej korekty całego miesiąca.
+            rebuild_unfilled_required_services_before_save()
+            reclaim_lower_priority_entries_for_high_priority_shortages(
+                "v495 końcowy audyt służby przed R/R2",
+                max_passes=2,
+                include_low_priority_missing=True,
+                allow_inherited_month_start_shift_mismatch=True,
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+            # v499: ostatnie dopasowanie obejmuje cały miesiąc, a nie tylko
+            # wpisane WG/W. Najpierw próbujemy ratować wyłącznie służby wysokiego
+            # priorytetu, następnie pozostałe. Każdy łańcuch zachowuje RBH dawcy,
+            # zwiększa RBH kierowcy z niedoborem i ponownie sprawdza odpoczynki.
+            auto_plan_pulse("v499 bilansowanie końca miesiąca: wysoki priorytet", force=True)
+            final_chain_rescue_missing_services_from_shifted_day_off(
+                "v499 pusty dzień -> brak wysokiego priorytetu",
+                max_changes=24,
+                include_low_priority=False,
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+            auto_plan_pulse("v499 bilansowanie końca miesiąca: pozostałe służby", force=True)
+            final_chain_rescue_missing_services_from_shifted_day_off(
+                "v499 pusty dzień -> pozostały brak",
+                max_changes=24,
+                include_low_priority=True,
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
+            # v501: po wszystkich zamianach końcowych odtwórz ręcznie wymaganą
+            # liczbę R/R2 z pustych pól albo z automatycznego WG/W.
+            ensure_exact_weekend_reserve_counts_before_save()
             # v302/v303/v306: diagnostyka RBH musi być liczona po ostatnim dobiciu R/R2 i po
             # ostatecznym wypełnieniu pustych pól, a nie przed finałowymi filtrami.
             drivers_below_nominal_rbh.clear()
@@ -26793,17 +30364,47 @@ class DutyPlannerApp(tk.Tk):
 
             cur = self.conn.cursor()
             backup_id, backup_count = preplan_backup_id, preplan_backup_count
-            # Plan automatyczny dla miesiąca został już wyczyszczony na początku funkcji.
-            # To DELETE zostaje jako zabezpieczenie na wypadek dopisania wpisów auto
-            # w czasie działania planowania przez inną operację.
+            # Keep the reset inside the same transaction as generation and saving.
             final_reset_stats = self.reset_month_before_replan(start, end, month_key)
-            cur.executemany(
-                """
-                INSERT INTO planned_schedule(plan_date, driver_id, duty_id, note, entry_source, car_id, pair_no)
-                VALUES (?, ?, ?, ?, 'auto', ?, ?)
-                """,
-                entries,
-            )
+
+            deduped_entries: list[tuple[str, int, int, str, int | None, str | None]] = []
+            deduped_index_by_key: dict[tuple[str, int], int] = {}
+            for entry in entries:
+                key = (str(entry[0]), int(entry[1]))
+                previous_index = deduped_index_by_key.get(key)
+                if previous_index is None:
+                    deduped_index_by_key[key] = len(deduped_entries)
+                    deduped_entries.append(entry)
+                    continue
+                previous_entry = deduped_entries[previous_index]
+                duplicate_driver_day_prevented += 1
+                if auto_entry_priority(entry) > auto_entry_priority(previous_entry):
+                    log_driver_day_conflict(key[0], key[1], previous_entry, int(entry[2]), str(entry[3] or ""), "final_save:replace_lower_priority_auto")
+                    deduped_entries[previous_index] = entry
+                else:
+                    log_driver_day_conflict(key[0], key[1], previous_entry, int(entry[2]), str(entry[3] or ""), "final_save:skip_duplicate_auto")
+            entries[:] = deduped_entries
+
+            for entry in entries:
+                cur.execute(
+                    """
+                    INSERT INTO planned_schedule(plan_date, driver_id, duty_id, note, entry_source, car_id, pair_no)
+                    VALUES (?, ?, ?, ?, 'auto', ?, ?)
+                    ON CONFLICT(plan_date, driver_id) DO UPDATE SET
+                        duty_id=excluded.duty_id,
+                        note=excluded.note,
+                        entry_source='auto',
+                        car_id=excluded.car_id,
+                        pair_no=excluded.pair_no,
+                        updated_at=CURRENT_TIMESTAMP
+                    WHERE COALESCE(NULLIF(TRIM(planned_schedule.entry_source), ''), 'manual')='auto'
+                    """,
+                    entry,
+                )
+                if cur.rowcount == 0:
+                    duplicate_driver_day_prevented += 1
+                    log_driver_day_conflict(str(entry[0]), int(entry[1]), existing_driver_day_context_entry(str(entry[0]), int(entry[1])), int(entry[2]), str(entry[3] or ""), "final_save:manual_conflict_skip")
+            self.enforce_manual_trip_companions_for_period(start, end)
             self.enforce_manual_rn_pairs_for_period(start, end)
             cur.execute("INSERT OR REPLACE INTO app_meta(key, value) VALUES ('last_auto_plan', ?)", (datetime.now().isoformat(timespec="seconds"),))
             cur.execute("INSERT OR REPLACE INTO app_meta(key, value) VALUES ('last_target_year', ?)", (str(year),))
@@ -26811,46 +30412,10 @@ class DutyPlannerApp(tk.Tk):
             cur.execute("INSERT OR REPLACE INTO app_meta(key, value) VALUES ('last_auto_plan_seed', ?)", (str(plan_seed),))
             self.conn.commit()
 
-            # v438: uporządkowano przydział służb: lekka preferencja powtarzalnej służby działa tylko jako tie-breaker, a końcowa korekta tygodniowa ma większy limit i nadal zachowuje RBH, przepisy, wysokie priorytety, wpisy ręczne oraz kolejność zmian I/II.
-# v439: koncowa korekta ciaglosci szuka takze komplementarnej zamiany miedzy dwoma kierowcami z pojedynczym odstepstwem w tygodniu.
-# v437: końcowa korekta ciągłości służb zachowuje kolejność zmian I/II; nie przepisuje służby na tydzień niezgodny ze zmianą kierowcy.
-# v436: po pełnym ułożeniu planu i końcowym WG/W spróbuj kosmetycznie
-            # poprawić ciągłość tych samych służb w tygodniu. To jest ostatnia,
-            # ograniczona korekta: nie rusza ręcznych wpisów/RN, nie dobija RBH
-            # i nie może zostawić służb wysokiego priorytetu bez obsady.
-            if not proposal_simulation:
-                try:
-                    auto_plan_pulse("v436 końcowa korekta tych samych służb w tygodniu", force=True)
-                    prev_max_selected = getattr(self, "_weekly_continuity_max_selected", None)
-                    prev_max_checks = getattr(self, "_weekly_continuity_max_checks", None)
-                    self._weekly_continuity_max_selected = 24
-                    self._weekly_continuity_max_checks = 90
-                    try:
-                        weekly_continuity_rewrites = int(self.auto_rewrite_weekly_continuity_for_month(start, end) or 0)
-                    finally:
-                        if prev_max_selected is None:
-                            try:
-                                delattr(self, "_weekly_continuity_max_selected")
-                            except Exception:
-                                pass
-                        else:
-                            self._weekly_continuity_max_selected = prev_max_selected
-                        if prev_max_checks is None:
-                            try:
-                                delattr(self, "_weekly_continuity_max_checks")
-                            except Exception:
-                                pass
-                        else:
-                            self._weekly_continuity_max_checks = prev_max_checks
-                    if weekly_continuity_rewrites:
-                        self.conn.commit()
-                except Exception as exc:
-                    # Nie przerywaj gotowego planowania, jeżeli kosmetyczna korekta
-                    # ciągłości nie znajdzie legalnej zamiany albo natrafi na błąd.
-                    weekly_continuity_rewrites = 0
-                    # Pominięcie tej korekty nie jest błędem krytycznym; pełny plan
-                    # pozostaje zapisany. Szczegóły są celowo nieblokujące dla GUI.
-                    pass
+            # v473: pomiń dawną końcową korektę ciągłości. Stabilny właściciel
+            # służby jest wybierany od początku tygodnia, a wymagane przerwy
+            # obsługuje bufor RBH przed R/R2. Nie wykonujemy kolejnych symulacji
+            # całego planu po zapisie.
 
             self.result_start_var.set(start)
             self.result_end_var.set(end)
@@ -26874,15 +30439,6 @@ class DutyPlannerApp(tk.Tk):
                     f"Pominięto weekendową służbę {code}.",
                     "Reguła awaryjna: gdy brakuje obsady, w weekendy nie planować służb 80, 86 i 139.",
                     "Możesz włączyć planowanie tych służb w ustawieniach albo dopisać je ręcznie, jeśli pojawi się kierowca.",
-                ))
-            for plan_date, code in skipped_late_saturday_duties:
-                extra_warnings.append((
-                    plan_date,
-                    "SOBOTA_POZNA_POMINIETA",
-                    None,
-                    f"Pominięto późną sobotnią służbę {code}.",
-                    "Brak kierowcy: pierwszeństwo ma wcześniejsza służba sobotnia.",
-                    "Zostaw późną służbę nieobsadzoną albo wpisz ją ręcznie, jeśli pojawi się dodatkowy kierowca.",
                 ))
             for plan_date, code1, code2 in split_duty_blocks:
                 extra_warnings.append((
@@ -27014,6 +30570,27 @@ class DutyPlannerApp(tk.Tk):
                     "Zablokowano duplikat służby w jednym dniu.",
                     "; ".join(seen_dup) + more,
                     "Jedna realna służba może być przypisana tylko raz w danym dniu. Sprawdź nieobsadzone służby albo zmień ręczne/proponowane wpisy.",
+                ))
+
+            if duplicate_driver_day_prevented:
+                seen_driver_day = []
+                seen_driver_day_keys = set()
+                for plan_date, driver_id, driver_name, existing_label, new_label in duplicate_driver_day_details:
+                    key = (plan_date, int(driver_id), existing_label, new_label)
+                    if key in seen_driver_day_keys:
+                        continue
+                    seen_driver_day_keys.add(key)
+                    seen_driver_day.append(f"{plan_date}: {driver_name}, zostaje {existing_label}, pominięto {new_label}")
+                    if len(seen_driver_day) >= 10:
+                        break
+                more = "" if len(seen_driver_day_keys) <= len(seen_driver_day) else f" i {len(seen_driver_day_keys) - len(seen_driver_day)} kolejnych"
+                extra_warnings.append((
+                    start,
+                    "DUPLIKAT_KIEROWCA_DZIEN",
+                    None,
+                    "Zablokowano drugi wpis kierowcy w tym samym dniu.",
+                    "; ".join(seen_driver_day) + more,
+                    "Jeden kierowca może mieć najwyżej jeden wpis w planned_schedule dla danego dnia. Szczegóły zapisano w logu planowania.",
                 ))
 
             if duty_driver_exclusion_skips:
@@ -27218,10 +30795,6 @@ class DutyPlannerApp(tk.Tk):
                 sample = ", ".join(f"{d}: {c}" for d, c in skipped_weekend_shortage_optional_duties[:8])
                 more = "" if len(skipped_weekend_shortage_optional_duties) <= 8 else f" i {len(skipped_weekend_shortage_optional_duties) - 8} kolejnych"
                 status += f", pominięto weekendowe 80/86/139 z braku kierowców: {len(skipped_weekend_shortage_optional_duties)} ({sample}{more})"
-            if skipped_late_saturday_duties:
-                sample = ", ".join(f"{d}: {c}" for d, c in skipped_late_saturday_duties[:8])
-                more = "" if len(skipped_late_saturday_duties) <= 8 else f" i {len(skipped_late_saturday_duties) - 8} kolejnych"
-                status += f", pominięto późne soboty po 20:00: {len(skipped_late_saturday_duties)} ({sample}{more})"
             if unfilled_duties:
                 sample = ", ".join(f"{d}: {c}" for d, _id, c, _reason in unfilled_duties[:8])
                 more = "" if len(unfilled_duties) <= 8 else f" i {len(unfilled_duties) - 8} kolejnych"
@@ -27236,6 +30809,8 @@ class DutyPlannerApp(tk.Tk):
                 status += f", kierowcy wyłączeni z RN: {len(no_rn_driver_ids)}"
             if reserve_used:
                 status += f", uzupełniono R/R2 do nominalnych rbh: {reserve_used}"
+            if weekend_rbh_rebalanced:
+                status += f", weekendowe zamiany dla RBH: {weekend_rbh_rebalanced}"
             if nominal_topup_after_rescue:
                 status += f", końcowo domknięto nominalne RBH: {nominal_topup_after_rescue}"
             if nominal_topup_forced_rest:
@@ -27262,8 +30837,15 @@ class DutyPlannerApp(tk.Tk):
                 status += f", usunięto techniczne WG/W przed zapisem: {technical_wg_removed_before_save}"
             if duplicate_daily_duty_prevented:
                 status += f", zablokowano duplikaty służb dnia: {duplicate_daily_duty_prevented}"
+            if duplicate_driver_day_prevented:
+                status += f", zablokowano duplikaty kierowca/dzień: {duplicate_driver_day_prevented}"
             if low_priority_deferred_planned:
                 status += f", służby niskiego priorytetu zaplanowano po zwykłych służbach: {low_priority_deferred_planned}"
+            if weekly_rest_buffered:
+                status += (
+                    f", służby odłożone przez wymagane przerwy: {weekly_rest_buffered}, "
+                    f"przekazane do uzupełnienia RBH: {weekly_rest_buffer_reassigned}"
+                )
             if shortage_replanned_from_12_15:
                 status += f", zamieniono kody niskiego priorytetu na braki: {shortage_replanned_from_12_15}"
             if wg_reassigned_before_write:
@@ -27289,7 +30871,7 @@ class DutyPlannerApp(tk.Tk):
                 status += f", diagnostyka końcowej obsady: {len(final_shortage_candidate_block_details)}"
             if duty_driver_exclusion_skips:
                 status += f", pominięto przez zakazy służba-kierowca: {duty_driver_exclusion_skips}"
-            status += f", limit RN: maks. 6 na kierowcę/miesiąc, RN 8 RBH i 20:20-07:20 dla odpoczynków, maks. {max_consecutive_work_days} dni pracy z rzędu, NAJEM całodniowo bez godzin odpoczynku"
+            status += f", limit RN: maks. 6 na kierowcę/miesiąc, RN 8 RBH i 20:20-07:20 dla odpoczynków, maks. {max_consecutive_work_days} dni pracy z rzędu, odpoczynki NAJEM/ZAGŁĘBIE z godzin służb"
             if skipped_excluded_drivers:
                 status += f", pominięto wyłączonych kierowców w dniach miesiąca: {skipped_excluded_drivers}"
             if fixed_used:
@@ -27346,10 +30928,10 @@ class DutyPlannerApp(tk.Tk):
                 "wrong_reserve_shift_fixed": wrong_reserve_shift_fixed,
                 "wrong_reserve_shift_removed": wrong_reserve_shift_removed,
                 "below_nominal_rbh": len(drivers_below_nominal_rbh),
+                "below_nominal_rbh_hours": sum(float(hours) for _driver_id, hours in drivers_below_nominal_rbh),
                 "above_nominal_rbh": len(drivers_above_nominal_rbh),
                 "unfilled": len(unfilled_duties),
                 "rn_unfilled": len(rn_unfilled),
-                "late_saturday_skipped": len(skipped_late_saturday_duties),
                 "weekend_80_86_139_skipped": len(skipped_weekend_shortage_optional_duties),
                 "violation_count": violation_count,
                 "wg_swaps": shortage_replanned_from_wg,
@@ -27364,6 +30946,8 @@ class DutyPlannerApp(tk.Tk):
                 "shift_change_used": shift_change_used,
                 "short_compensation_overrides": len(short_compensation_override_details),
                 "weekly_continuity_rewrites": weekly_continuity_rewrites,
+                "weekly_rest_buffered": weekly_rest_buffered,
+                "weekly_rest_buffer_reassigned": weekly_rest_buffer_reassigned,
                 "low_priority_swaps": shortage_replanned_from_12_15,
                 "low_priority_deferred_planned": low_priority_deferred_planned,
                 "backup_count": backup_count,
@@ -28751,6 +32335,116 @@ class DutyPlannerApp(tk.Tk):
             missing_names = ", ".join(self.ui_driver_label_by_id(x) for x in missing) or "nieznany kierowca"
             raise sqlite3.IntegrityError(f"Nie utworzono ręcznego wpisu RN dla pary: {missing_names}")
 
+    def manual_trip_companion_driver_id_from_note(
+        self,
+        note: object,
+        base_driver_id: int | None = None,
+    ) -> int | None:
+        """Odczytaj kierowcę z notatki „z kierowcą ...” starszego wpisu."""
+        note_text = self.normalize_text(str(note or "")).casefold()
+        marker = "z kierowca"
+        if marker not in note_text:
+            return None
+        tail = note_text.split(marker, 1)[1].strip()
+        if not tail:
+            return None
+        candidates: list[tuple[int, int]] = []
+        for row in self.rows("SELECT id, name FROM drivers WHERE COALESCE(TRIM(name), '')<>''"):
+            try:
+                driver_id = int(row["id"])
+                if base_driver_id is not None and driver_id == int(base_driver_id):
+                    continue
+                normalized_name = self.normalize_text(str(row["name"] or "")).strip().casefold()
+            except Exception:
+                continue
+            if normalized_name and normalized_name in tail:
+                candidates.append((-len(normalized_name), driver_id))
+        if not candidates:
+            return None
+        candidates.sort()
+        return int(candidates[0][1])
+
+    def enforce_manual_trip_companions_for_period(self, start_date: str, end_date: str) -> int:
+        """Odtwórz brakującego kierowcę ręcznego NAJMU/ZAGŁĘBIA/Rezerwacji.
+
+        Starsze wersje potrafiły zachować u kierowcy głównego notatkę o parze,
+        ale zgubić osobny rekord drugiego kierowcy. Naprawa zastępuje tylko
+        wpis automatyczny. Innego wpisu ręcznego nigdy nie nadpisuje.
+        """
+        rows = self.rows(
+            """
+            SELECT p.plan_date, p.driver_id, p.duty_id, COALESCE(p.note, '') AS note,
+                   p.car_id, p.pair_no,
+                   d.code, d.name, d.duty_type, d.shift, d.line
+            FROM planned_schedule p
+            JOIN duties d ON d.id=p.duty_id
+            WHERE p.plan_date BETWEEN ? AND ?
+              AND p.driver_id IS NOT NULL
+              AND COALESCE(NULLIF(TRIM(p.entry_source), ''), 'manual')='manual'
+              AND COALESCE(p.note, '') LIKE '%kierowc%'
+            ORDER BY p.plan_date, p.id
+            """,
+            (str(start_date), str(end_date)),
+        )
+        changed = 0
+        for row in rows:
+            duty_view = {
+                "code": row["code"],
+                "name": row["name"],
+                "duty_type": row["duty_type"],
+                "shift": row["shift"],
+                "line": row["line"],
+            }
+            if not self.is_multi_driver_manual_duty(duty_view):
+                continue
+            try:
+                plan_date = str(row["plan_date"])
+                base_driver_id = int(row["driver_id"])
+                duty_id = int(row["duty_id"])
+            except Exception:
+                continue
+            companion_id = self.manual_trip_companion_driver_id_from_note(
+                row["note"],
+                base_driver_id,
+            )
+            if companion_id is None:
+                continue
+            existing = self.conn.execute(
+                """
+                SELECT id, duty_id, COALESCE(NULLIF(TRIM(entry_source), ''), 'manual') AS entry_source
+                FROM planned_schedule
+                WHERE plan_date=? AND driver_id=?
+                ORDER BY id
+                LIMIT 1
+                """,
+                (plan_date, int(companion_id)),
+            ).fetchone()
+            if existing is not None:
+                existing_source = str(existing["entry_source"] or "manual").strip().lower()
+                if existing_source == "manual":
+                    # Ten sam ręczny wyjazd już istnieje albo kierowca ma inny
+                    # ręczny wpis, którego automat nie ma prawa nadpisać.
+                    continue
+                self.conn.execute("DELETE FROM planned_schedule WHERE id=?", (int(existing["id"]),))
+                changed += 1
+            self.conn.execute(
+                """
+                INSERT INTO planned_schedule(
+                    plan_date, driver_id, duty_id, note, entry_source, car_id, pair_no
+                ) VALUES (?, ?, ?, ?, 'manual', ?, ?)
+                """,
+                (
+                    plan_date,
+                    int(companion_id),
+                    duty_id,
+                    str(row["note"] or "Ręcznie"),
+                    int(row["car_id"]) if row["car_id"] is not None else None,
+                    str(row["pair_no"] or "") or None,
+                ),
+            )
+            changed += 1
+        return changed
+
     def enforce_manual_rn_pairs_for_period(self, start_date: str, end_date: str) -> int:
         """Wymuś ręczne pary RN jako jedyne RN w danym dniu.
 
@@ -28855,7 +32549,7 @@ class DutyPlannerApp(tk.Tk):
         return int(cur.rowcount or 0)
 
     def save_reservation_plan_entries_single(self, plan_date: str, duty_id: int, duty_row: sqlite3.Row, driver_ids: set[int], car_id: int | None = None) -> str:
-        """Zapisz służbę Rezerwacja dla wielu kierowców jako ręczne wpisy."""
+        """Zapisz ręczną służbę wyjazdową dla wszystkich wybranych kierowców."""
         plan_date = self.validate_date(plan_date)
         if not plan_date:
             messagebox.showerror("Błędna data", "Podaj datę w formacie RRRR-MM-DD, np. 2026-05-01.")
@@ -28884,7 +32578,7 @@ class DutyPlannerApp(tk.Tk):
                     f"Kierowca {self.ui_driver_label_by_id(int(driver_id))} ma zakaz tej służby w bazie. Usuń zakaz albo wybierz innego kierowcę.",
                 )
                 return "error"
-            if self.manual_driver_conflict_blocks_save(plan_date, int(driver_id), active_edit_ids, "Kierowca Rezerwacji", set()):
+            if self.manual_driver_conflict_blocks_save(plan_date, int(driver_id), active_edit_ids, f"Kierowca {title}", set()):
                 return "error"
         removed_auto_conflicts = 0
         try:
@@ -29024,11 +32718,13 @@ class DutyPlannerApp(tk.Tk):
         vacation_duty_ids_manual = {duty_id for duty_id in (self.duty_id_by_code("UW"), self.duty_id_by_code("UO")) if duty_id is not None}
         sickness_duty_ids_manual = {duty_id for duty_id in (self.duty_id_by_code("CH"),) if duty_id is not None}
         rental_duty_ids_manual = {duty_id for duty_id in (self.duty_id_by_code("NAJEM"), self.duty_id_by_code("NAJEM2")) if duty_id is not None}
+        zaglebie_duty_ids_manual = {duty_id for duty_id in (self.duty_id_by_code("ZAGLEBIE"),) if duty_id is not None}
         repeatable_manual_duty_ids = (
             {int(x) for x in reserve_duty_ids_manual}
             | {int(x) for x in vacation_duty_ids_manual}
             | {int(x) for x in sickness_duty_ids_manual}
             | {int(x) for x in rental_duty_ids_manual}
+            | {int(x) for x in zaglebie_duty_ids_manual}
         )
         active_edit_ids: set[int] = set()
         if not getattr(self, "_manual_range_mode", False):
@@ -29091,7 +32787,7 @@ class DutyPlannerApp(tk.Tk):
                 )
                 return "error"
 
-        # R/R2, urlopy UW/UO, choroba CH oraz NAJEM/NAJEM2 mogą wystąpić w tym samym dniu u wielu kierowców.
+        # R/R2, urlopy UW/UO, choroba CH, NAJEM/NAJEM2 oraz ZAGLEBIE mogą wystąpić w tym samym dniu u wielu kierowców.
         # Nadal działa unikalność plan_date+driver_id, więc jeden kierowca ma tylko jeden wpis na dzień.
         if duty_id not in self.wg_duty_ids() and int(duty_id) not in repeatable_manual_duty_ids:
             is_rn = self.is_rn_duty(duty_row) if duty_row is not None else False
@@ -29168,7 +32864,7 @@ class DutyPlannerApp(tk.Tk):
                 if duplicate_other:
                     messagebox.showerror(
                         "Służba już zaplanowana",
-                        "Ta służba jest już zaplanowana w wybranym dniu. Każda służba może wystąpić tylko raz dziennie. Wyjątki: WG/W jako dzień wolny, R/R2 jako rezerwa, UW/UO jako urlop, CH jako choroba, NAJEM/NAJEM2 jako najem oraz RN według limitu RN.",
+                        "Ta służba jest już zaplanowana w wybranym dniu. Każda służba może wystąpić tylko raz dziennie. Wyjątki: WG/W jako dzień wolny, R/R2 jako rezerwa, UW/UO jako urlop, CH jako choroba, NAJEM/NAJEM2 jako najem, ZAGLEBIE oraz RN według limitu RN.",
                     )
                     return "error"
         # v165: przy planowaniu ręcznym nie blokuj zapisu z powodu RBH i nie pokazuj
@@ -30222,6 +33918,12 @@ class DutyPlannerApp(tk.Tk):
         """
         month_key = self.plan_month_key_for_range(start, end)
         excluded_duty_ids = self.excluded_duty_ids_for_month(month_key)
+        excluded_driver_ids = self.excluded_driver_ids_for_month(month_key)
+        weekend_override_counts_by_date = self.weekend_duty_override_counts(start, end)
+        weekend_override_ids_by_date = {
+            plan_date: set(counts)
+            for plan_date, counts in weekend_override_counts_by_date.items()
+        }
         rows = self.rows(
             """
             SELECT id, code, name, line, duty_type, shift, work_range, work_hours,
@@ -30238,8 +33940,13 @@ class DutyPlannerApp(tk.Tk):
         reserve_duty_ids = {duty_id for duty_id in (self.duty_id_by_code("R"), self.duty_id_by_code("R2")) if duty_id is not None}
 
         assigned_by_date: dict[str, list[int]] = defaultdict(list)
-        for row in self.rows("SELECT plan_date, duty_id FROM planned_schedule WHERE plan_date BETWEEN ? AND ?", (start, end)):
+        for row in self.rows(
+            "SELECT plan_date, duty_id, driver_id FROM planned_schedule WHERE plan_date BETWEEN ? AND ?",
+            (start, end),
+        ):
             try:
+                if row["driver_id"] is not None and int(row["driver_id"]) in excluded_driver_ids:
+                    continue
                 assigned_by_date[str(row["plan_date"])].append(int(row["duty_id"]))
             except Exception:
                 continue
@@ -30254,20 +33961,24 @@ class DutyPlannerApp(tk.Tk):
             iso_date = current_day.isoformat()
             day_obj = current_day
             weekday = self.planning_weekday(day_obj)
-            assigned_ids = set(assigned_by_date.get(iso_date, []))
+            assigned_counts = Counter(assigned_by_date.get(iso_date, []))
+            assigned_ids = set(assigned_counts)
 
             for duty_id, duty in duties_by_id.items():
-                if duty_id in excluded_duty_ids:
+                exact_weekend_override = duty_id in weekend_override_ids_by_date.get(iso_date, set())
+                if duty_id in excluded_duty_ids and not exact_weekend_override:
                     continue
                 if duty_id in rn_ids:
                     continue
-                if duty_id in {int(x) for x in reserve_duty_ids}:
+                if duty_id in {int(x) for x in reserve_duty_ids} and not exact_weekend_override:
                     continue
                 if self.is_day_off_duty(duty):
                     continue
-                if not self.duty_allowed_on_weekday(duty, weekday):
+                if not exact_weekend_override and not self.duty_allowed_on_weekday(duty, weekday):
                     continue
-                if duty_id not in assigned_ids:
+                required_count = max(1, int(weekend_override_counts_by_date.get(iso_date, {}).get(duty_id, 1) or 1))
+                missing_count = max(0, required_count - int(assigned_counts.get(duty_id, 0)))
+                if duty_id not in assigned_ids or missing_count:
                     results.append({
                         "date": iso_date,
                         "weekday": POLISH_WEEKDAYS[weekday],
@@ -30276,7 +33987,7 @@ class DutyPlannerApp(tk.Tk):
                         "line": duty["line"] or "",
                         "work_range": duty["work_range"] or "",
                         "work_hours": duty["work_hours"] or "",
-                        "missing": 1,
+                        "missing": missing_count or 1,
                         "reason": self.short_unplanned_reason_suggestion("", duty["code"] or "")[0],
                         "suggestion": self.short_unplanned_reason_suggestion("", duty["code"] or "")[1],
                     })
@@ -30285,10 +33996,17 @@ class DutyPlannerApp(tk.Tk):
                 rn_duty_id = min(rn_ids)
                 rn_duty = duties_by_id.get(rn_duty_id)
                 assigned = sum(1 for duty_id in assigned_by_date.get(iso_date, []) if duty_id in rn_ids)
-                if rn_duty is not None and (assigned or (rn_duty_id not in excluded_duty_ids and self.duty_allowed_on_weekday(rn_duty, weekday))):
-                    required = self.rn_required_count_for_date(day_obj)
+                if rn_duty is not None and (
+                    assigned
+                    or rn_duty_id in weekend_override_ids_by_date.get(iso_date, set())
+                    or (rn_duty_id not in excluded_duty_ids and self.duty_allowed_on_weekday(rn_duty, weekday))
+                ):
+                    required = max(
+                        self.rn_required_count_for_date(day_obj),
+                        int(weekend_override_counts_by_date.get(iso_date, {}).get(rn_duty_id, 0) or 0),
+                    )
                     if assigned:
-                        required = max(required, min(assigned, self.rn_required_count_for_date(day_obj)))
+                        required = max(required, min(assigned, required))
                     missing = max(0, required - assigned)
                     if missing:
                         results.append({
@@ -30304,28 +34022,10 @@ class DutyPlannerApp(tk.Tk):
                             "suggestion": self.short_unplanned_reason_suggestion("", rn_duty["code"] or "RN")[1],
                         })
             current_day += timedelta(days=1)
-        # v376: dodatkowy bezpiecznik zgodności raportu. Jeżeli dana służba
-        # istnieje już w planned_schedule dla tej daty, nie wolno jej pokazać
-        # w sekcji „Niezaplanowane służby”.
-        assigned_codes_by_date: dict[str, set[str]] = defaultdict(set)
-        for row in self.rows(
-            """
-            SELECT p.plan_date, d.code
-            FROM planned_schedule p
-            JOIN duties d ON d.id = p.duty_id
-            WHERE p.plan_date BETWEEN ? AND ?
-            """,
-            (start, end),
-        ):
-            assigned_codes_by_date[str(row["plan_date"])].add(self.normalize_code(row["code"] or ""))
-        filtered_results: list[dict[str, object]] = []
-        for item in results:
-            item_date = str(item.get("date", ""))
-            item_code = self.normalize_code(str(item.get("code", "")))
-            if item_code and item_code in assigned_codes_by_date.get(item_date, set()):
-                continue
-            filtered_results.append(item)
-        return filtered_results
+        # v501: powyższe liczenie porównuje wymaganą i faktyczną liczbę obsad.
+        # Nie wolno już usuwać braku tylko dlatego, że istnieje jedna sztuka
+        # tego samego kodu — dla datowanego R/R2/RN może ich być wymaganych kilka.
+        return results
 
 
     def change_proposal_schedule_snapshot(self, start: str, end: str) -> dict[tuple[str, int], dict[str, object]]:
@@ -31459,7 +35159,10 @@ class DutyPlannerApp(tk.Tk):
             dominant_code = self.normalize_code(str(stats.get("dominant_code", "") or ""))
             dominant_count = int(stats.get("dominant_count", 0) or 0)
             counts = dict(stats.get("counts", {}) or {})
-            if not dominant_code or dominant_count < 2:
+            # Próbuj również tygodnie całkowicie mieszane, w których każdy
+            # numer występuje tylko raz. Bezpieczna zamiana tego samego dnia
+            # może dopiero utworzyć pierwszą służbę dominującą.
+            if not dominant_code:
                 continue
             entries = list(stats.get("entries", []) or [])
             entries.sort(key=lambda item: (int(counts.get(str(item.get("_week_code", "") or ""), 0)), str(item.get("_week_date", ""))))
@@ -31653,6 +35356,324 @@ class DutyPlannerApp(tk.Tk):
             return applied_total
         finally:
             self._weekly_continuity_rewrite_running = previous_flag
+
+    def monthly_handover_candidates(self, start: str, end: str, month_key: str) -> list[dict[str, object]]:
+        """Zwróć aktywne realne służby, które można przekazać na cały miesiąc."""
+        excluded = self.excluded_duty_ids_for_month(month_key)
+        rows = self.rows(
+            """
+            SELECT id, code, name, duty_type,
+                   COALESCE(auto_plan_enabled, 1) AS auto_plan_enabled,
+                   COALESCE(can_plan_weekdays, 1) AS can_plan_weekdays,
+                   COALESCE(can_plan_saturday, 1) AS can_plan_saturday,
+                   COALESCE(can_plan_sunday, 1) AS can_plan_sunday
+            FROM duties
+            """
+        )
+
+        first = datetime.strptime(start, "%Y-%m-%d").date()
+        last = datetime.strptime(end, "%Y-%m-%d").date()
+        result: list[dict[str, object]] = []
+        for row in rows:
+            duty_id = int(row["id"])
+            code = self.normalize_code(row["code"] or "")
+            duty_type = self.normalize_code(row["duty_type"] or "")
+            if duty_id in excluded or not code.isdigit() or not int(row["auto_plan_enabled"] or 0):
+                continue
+            if any(part in duty_type for part in ("TECH", "SPECIAL", "NAJEM", "REZERW", "URLOP", "WOLNE", "CHOR")):
+                continue
+            occurrences = 0
+            day_obj = first
+            while day_obj <= last:
+                occurrences += int(self.duty_allowed_on_weekday(row, self.planning_weekday(day_obj)))
+                day_obj += timedelta(days=1)
+            if occurrences:
+                result.append(
+                    {
+                        "id": duty_id,
+                        "code": code,
+                        "name": str(row["name"] or ""),
+                        "occurrences": occurrences,
+                    }
+                )
+        return result
+
+    def monthly_handover_metrics(self, start: str, end: str) -> dict[str, object]:
+        unplanned = self.unplanned_services_for_range(start, end)
+        high_priority, low_priority = self.change_proposal_split_unplanned_by_priority(unplanned)
+        violations = self.build_compliance_violations(start, end)
+        blocking = sum(
+            self.normalize_code(item.get("severity", "")) in {"ERROR", "BLAD", "BŁĄD"}
+            for item in violations
+        )
+        summary = dict(getattr(self, "_proposal_simulation_summary", None) or {})
+
+        def missing_total(items: list[dict[str, object]]) -> int:
+            return sum(int(item.get("missing", 1) or 1) for item in items)
+
+        return {
+            "high_unplanned": missing_total(high_priority),
+            "violations": blocking,
+            "shift_changes": int(summary.get("shift_change_used", 0) or 0),
+            "below_rbh": int(summary.get("below_nominal_rbh", 0) or 0),
+            "rbh_shortage": float(summary.get("below_nominal_rbh_hours", 0) or 0),
+            "all_unplanned": missing_total(unplanned),
+            "low_unplanned": missing_total(low_priority),
+        }
+
+    def simulate_monthly_handover_variant(
+        self,
+        base_path: Path,
+        start: str,
+        end: str,
+        month_key: str,
+        duty_id: int | None,
+    ) -> dict[str, object]:
+        """Uruchom pełny generator na izolowanej kopii SQLite."""
+        variant_path = base_path.with_name(f"handover_{uuid.uuid4().hex}.sqlite")
+        shutil.copy2(base_path, variant_path)
+        original_conn = self.conn
+        temp_conn: sqlite3.Connection | None = None
+        old_simulation = bool(getattr(self, "_proposal_simulation_running", False))
+        old_followup = bool(getattr(self, "_auto_plan_followup_running", False))
+        old_summary = getattr(self, "_proposal_simulation_summary", None)
+        had_rng_override = "auto_plan_rng_for_month" in self.__dict__
+        old_rng_override = self.__dict__.get("auto_plan_rng_for_month")
+        seed = int(hashlib.sha256(f"handover:{month_key}".encode("utf-8")).hexdigest()[:16], 16)
+        try:
+            temp_conn = sqlite3.connect(variant_path)
+            temp_conn.row_factory = sqlite3.Row
+            self.conn = temp_conn
+            self._proposal_simulation_running = True
+            self._auto_plan_followup_running = True
+            self._proposal_simulation_summary = None
+            self.auto_plan_rng_for_month = lambda _month_key: (random.Random(seed), seed)
+            if duty_id is not None:
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)",
+                    (month_key, int(duty_id)),
+                )
+                self.conn.commit()
+            self.auto_plan_all_drivers()
+            return self.monthly_handover_metrics(start, end)
+        finally:
+            self.conn = original_conn
+            self._proposal_simulation_running = old_simulation
+            self._auto_plan_followup_running = old_followup
+            self._proposal_simulation_summary = old_summary
+            if had_rng_override:
+                self.__dict__["auto_plan_rng_for_month"] = old_rng_override
+            else:
+                self.__dict__.pop("auto_plan_rng_for_month", None)
+            if temp_conn is not None:
+                temp_conn.close()
+            variant_path.unlink(missing_ok=True)
+
+    def monthly_handover_rank_key(self, item: dict[str, object]) -> tuple[object, ...]:
+        metrics = dict(item["metrics"])
+        return (
+            metrics["high_unplanned"],
+            metrics["violations"],
+            metrics["shift_changes"],
+            metrics["below_rbh"],
+            metrics["rbh_shortage"],
+            metrics["all_unplanned"],
+            metrics["low_unplanned"],
+            item["occurrences"],
+            item["code"],
+        )
+
+    def analyze_monthly_duty_handover(self) -> None:
+        target = self.get_target_year_month()
+        if target is None:
+            return
+        year, month = target
+        start, end = self.month_range(year, month)
+        month_key = f"{year:04d}-{month:02d}"
+        candidates = self.monthly_handover_candidates(start, end, month_key)
+        if not candidates:
+            messagebox.showinfo(
+                "Analiza służby do przekazania",
+                "Brak dopuszczalnych realnych służb w tym miesiącu.",
+            )
+            return
+        if not messagebox.askyesno(
+            "Analiza służby do przekazania",
+            f"Wykonać {len(candidates) + 1} pełnych symulacji miesiąca {month_key}?\n\n"
+            "Może to potrwać kilkanaście minut. Baza i wpisy ręczne nie zostaną zmienione.",
+        ):
+            return
+
+        base_path: Path | None = None
+        results: list[dict[str, object]] = []
+        started = time.monotonic()
+        total_limit = max(1800, (len(candidates) + 1) * 120)
+        self.begin_long_operation("Analiza służby do przekazania")
+        try:
+            base_path = self.create_change_proposal_temp_database()
+            baseline = self.simulate_monthly_handover_variant(base_path, start, end, month_key, None)
+            for position, candidate in enumerate(candidates, 1):
+                if time.monotonic() - started > total_limit:
+                    raise RuntimeError(f"Przekroczono limit {total_limit // 60} min.")
+                self.update_long_operation_status(
+                    "Analiza służby do przekazania",
+                    f"{position}/{len(candidates)}: służba {candidate['code']}",
+                )
+                self.update_idletasks()
+                results.append(
+                    {
+                        **candidate,
+                        "metrics": self.simulate_monthly_handover_variant(
+                            base_path,
+                            start,
+                            end,
+                            month_key,
+                            int(candidate["id"]),
+                        ),
+                    }
+                )
+            results.sort(key=self.monthly_handover_rank_key)
+            report = {
+                "month_key": month_key,
+                "start": start,
+                "end": end,
+                "baseline": baseline,
+                "results": results,
+                "elapsed": time.monotonic() - started,
+            }
+            self._last_monthly_handover_report = report
+            self.show_monthly_handover_report(report)
+        except Exception as exc:
+            self.log_exception("analyze_monthly_duty_handover", exc)
+            messagebox.showerror(
+                "Analiza służby do przekazania",
+                f"Analiza przerwana bez zmian w głównej bazie.\n\n{exc}",
+            )
+        finally:
+            self.end_long_operation()
+            if base_path is not None:
+                base_path.unlink(missing_ok=True)
+            try:
+                self.load_reference_data(update_month=False)
+                self.refresh_all()
+            except Exception:
+                pass
+
+    def show_monthly_handover_report(self, report: dict[str, object]) -> None:
+        results = list(report["results"])
+        baseline = dict(report["baseline"])
+        if not results:
+            return
+        best = dict(results[0])
+        metrics = dict(best["metrics"])
+        window = tk.Toplevel(self)
+        window.title("Analiza służby do przekazania")
+        window.geometry("1080x560")
+        window.transient(self)
+        box = ttk.Frame(window, padding=12)
+        box.pack(fill="both", expand=True)
+        ttk.Label(
+            box,
+            text=f"Rekomendacja dla {report['month_key']}: służba {best['code']}",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            box,
+            text=f"Występuje: {best['occurrences']} dni. Analiza: {float(report['elapsed']) / 60:.1f} min.",
+        ).pack(anchor="w", pady=(2, 8))
+        reason = (
+            f"Wysoki priorytet {baseline['high_unplanned']} → {metrics['high_unplanned']}; "
+            f"naruszenia {baseline['violations']} → {metrics['violations']}; "
+            f"awaryjne zmiany {baseline['shift_changes']} → {metrics['shift_changes']}; "
+            f"poniżej RBH {baseline['below_rbh']} → {metrics['below_rbh']}; "
+            f"niedobór RBH {float(baseline['rbh_shortage']):.2f} → {float(metrics['rbh_shortage']):.2f} h."
+        )
+        ttk.Label(box, text=reason, wraplength=1020).pack(anchor="w", pady=(0, 10))
+        columns = ("rank", "code", "days", "high", "viol", "shift", "below", "short", "all")
+        tree = ttk.Treeview(box, columns=columns, show="headings", height=min(4, len(results)))
+        labels = (
+            "Miejsce",
+            "Służba",
+            "Dni",
+            "Wysoki priorytet",
+            "Naruszenia",
+            "Zmiany awaryjne",
+            "Poniżej RBH",
+            "Niedobór RBH",
+            "Wszystkie braki",
+        )
+        for column, label in zip(columns, labels):
+            tree.heading(column, text=label)
+            tree.column(column, width=110, anchor="center")
+        for rank, item in enumerate(results[:4], 1):
+            item_metrics = dict(item["metrics"])
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    rank,
+                    item["code"],
+                    item["occurrences"],
+                    item_metrics["high_unplanned"],
+                    item_metrics["violations"],
+                    item_metrics["shift_changes"],
+                    item_metrics["below_rbh"],
+                    f"{float(item_metrics['rbh_shortage']):.2f} h",
+                    item_metrics["all_unplanned"],
+                ),
+            )
+        tree.pack(fill="x")
+        ttk.Label(
+            box,
+            text="Ranking: wysoki priorytet → naruszenia/odpoczynki → zmiany awaryjne → RBH → inne braki.",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=8)
+        buttons = ttk.Frame(box)
+        buttons.pack(fill="x", side="bottom")
+        ttk.Button(
+            buttons,
+            text="Wyłącz tę służbę na cały miesiąc",
+            command=lambda: self.apply_monthly_handover_exclusion(report, best, window),
+        ).pack(side="left")
+        ttk.Button(buttons, text="Zamknij", command=window.destroy).pack(side="right")
+
+    def apply_monthly_handover_exclusion(
+        self,
+        report: dict[str, object],
+        candidate: dict[str, object],
+        window: tk.Toplevel | None = None,
+    ) -> None:
+        month_key = str(report["month_key"])
+        duty_id = int(candidate["id"])
+        code = str(candidate["code"])
+        if not messagebox.askyesno(
+            "Wyłącz służbę",
+            f"Wyłączyć służbę {code} na cały miesiąc {month_key}?\n\nWpisy ręczne pozostaną nietknięte.",
+        ):
+            return
+        try:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)",
+                (month_key, duty_id),
+            )
+            removed = self.remove_duties_from_plan_for_month(month_key, {duty_id})
+            self.conn.commit()
+            self.load_monthly_excluded_duty_ids()
+            self.refresh_all()
+            if window is not None and window.winfo_exists():
+                window.destroy()
+            messagebox.showinfo(
+                "Wyłączono służbę",
+                f"Wyłączono {code} dla {month_key}. Usunięto {removed} wpisów automatycznych. "
+                "Wpisów ręcznych nie zmieniono.",
+            )
+        except Exception as exc:
+            self.conn.rollback()
+            self.log_exception("apply_monthly_handover_exclusion", exc)
+            messagebox.showerror(
+                "Wyłącz służbę",
+                f"Nie udało się zapisać wyłączenia.\n\n{exc}",
+            )
 
     def create_change_proposal_temp_database(self) -> Path:
         """Utwórz tymczasową kopię aktywnej bazy do bezpiecznej symulacji."""

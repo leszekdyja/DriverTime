@@ -6,5 +6,9 @@ public interface ICurrentUserService
 
     Guid CompanyId { get; }
 
+    Guid DriverId { get; }
+
+    bool IsMobileDriver { get; }
+
     bool IsAuthenticated { get; }
 }

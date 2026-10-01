@@ -50,8 +50,15 @@ public class DriverService : IDriverService
             filteredDriversCount,
             string.Join(", ", driverCompanyIds));
 
-        return await _dbContext.Drivers
-            .Where(x => x.CompanyId == _currentUser.CompanyId)
+        var query = _dbContext.Drivers
+            .Where(x => x.CompanyId == _currentUser.CompanyId);
+
+        if (_currentUser.IsMobileDriver)
+        {
+            query = query.Where(x => x.Id == _currentUser.DriverId);
+        }
+
+        return await query
             .OrderBy(x => x.LastName)
             .ThenBy(x => x.FirstName)
             .Select(x => new DriverDto
@@ -70,6 +77,11 @@ public class DriverService : IDriverService
 
     public async Task<DriverDetailsDto?> GetByIdAsync(Guid id)
     {
+        if (_currentUser.IsMobileDriver && id != _currentUser.DriverId)
+        {
+            return null;
+        }
+
         var driver = await _dbContext.Drivers
             .AsNoTracking()
             .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId)
