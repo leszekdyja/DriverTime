@@ -21,7 +21,7 @@ export async function getCompanySettings(): Promise<CompanySettings> {
     const response = await apiFetch("/api/company/settings");
 
     if (!response.ok) {
-        throw new Error(await readError(response, "Nie udalo sie pobrac ustawien firmy."));
+        throw new Error(await readError(response, "Nie udało się pobrać ustawień firmy."));
     }
 
     return response.json() as Promise<CompanySettings>;
@@ -37,7 +37,7 @@ export async function updateCompanySettings(
     });
 
     if (!response.ok) {
-        throw new Error(await readError(response, "Nie udalo sie zapisac ustawien firmy."));
+        throw new Error(await readError(response, "Nie udało się zapisać ustawień firmy."));
     }
 
     return response.json() as Promise<CompanySettings>;

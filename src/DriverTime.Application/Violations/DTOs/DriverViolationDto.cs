@@ -23,4 +23,6 @@ public class DriverViolationDto
     public long ActualDurationMinutes { get; set; }
 
     public long LimitDurationMinutes { get; set; }
+
+    public Dictionary<string, object> Metadata { get; set; } = new();
 }

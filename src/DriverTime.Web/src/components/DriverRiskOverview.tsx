@@ -12,6 +12,7 @@ import {
     type DriverRisk,
     type DriverRiskOverview as DriverRiskOverviewData,
 } from "../services/dashboardService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import Pagination from "./Pagination";
 import { EmptyState, TableSkeleton } from "./UiStates";
 
@@ -32,7 +33,7 @@ function formatDays(value: number | null) {
 }
 
 function getRiskLabel(status: DriverRisk["riskStatus"]) {
-    return { Low: "Niskie", Medium: "Srednie", High: "Wysokie", Critical: "Krytyczne" }[status];
+    return { Low: "Niskie", Medium: "Średnie", High: "Wysokie", Critical: "Krytyczne" }[status];
 }
 
 function DriverRiskOverview() {
@@ -51,7 +52,7 @@ function DriverRiskOverview() {
             } catch (loadError) {
                 setError(loadError instanceof Error
                     ? loadError.message
-                    : "Wystapil blad podczas pobierania ryzyka kierowcow.");
+                    : "Wystąpił błąd podczas pobierania ryzyka kierowców.");
             } finally {
                 setIsLoading(false);
             }
@@ -63,7 +64,7 @@ function DriverRiskOverview() {
         const drivers = overview?.drivers ?? [];
         return drivers.filter((driver) => {
             const matchesRisk = riskFilter === "All" || driver.riskStatus === riskFilter;
-            const haystack = `${driver.firstName} ${driver.lastName} ${driver.cardNumber}`
+            const haystack = `${driver.lastName} ${driver.firstName} ${driver.cardNumber}`
                 .toLocaleLowerCase("pl-PL");
             return matchesRisk && (!deferredSearch || haystack.includes(deferredSearch));
         });
@@ -84,8 +85,8 @@ function DriverRiskOverview() {
         <section className="driver-risk-section">
             <div className="panel-heading">
                 <div>
-                    <h3>Ryzyko kierowcow</h3>
-                    <p>Alerty na podstawie naruszen i aktualnosci danych DDD.</p>
+                    <h3>Ryzyko kierowców</h3>
+                    <p>Alerty na podstawie naruszeń i aktualności danych DDD.</p>
                 </div>
             </div>
 
@@ -97,7 +98,7 @@ function DriverRiskOverview() {
                 <>
                     <div className="driver-risk-cards">
                         <RiskCard label="Niskie" count={overview.lowRiskCount} status="low" />
-                        <RiskCard label="Srednie" count={overview.mediumRiskCount} status="medium" />
+                        <RiskCard label="Średnie" count={overview.mediumRiskCount} status="medium" />
                         <RiskCard label="Wysokie" count={overview.highRiskCount} status="high" />
                         <RiskCard label="Krytyczne" count={overview.criticalRiskCount} status="critical" />
                     </div>
@@ -105,7 +106,7 @@ function DriverRiskOverview() {
                     <div className="risk-quick-stats">
                         <span><strong>{overview.drivers.length}</strong> monitorowanych</span>
                         <span><strong>{overview.highRiskCount + overview.criticalRiskCount}</strong> wymaga reakcji</span>
-                        <span><strong>{severeTotal}</strong> ciezkich naruszen</span>
+                        <span><strong>{severeTotal}</strong> ciężkich naruszeń</span>
                     </div>
 
                     <div className="risk-toolbar">
@@ -123,21 +124,21 @@ function DriverRiskOverview() {
                         >
                             <option value="All">Wszystkie statusy</option>
                             <option value="Low">Niskie</option>
-                            <option value="Medium">Srednie</option>
+                            <option value="Medium">Średnie</option>
                             <option value="High">Wysokie</option>
                             <option value="Critical">Krytyczne</option>
                         </select>
                     </div>
 
                     {overview.drivers.length === 0 ? (
-                        <EmptyState title="Brak kierowcow" description="Zaimportuj dane DDD, aby uruchomic analize ryzyka floty." />
+                        <EmptyState title="Brak kierowców" description="Zaimportuj dane DDD, aby uruchomić analizę ryzyka floty." />
                     ) : filteredDrivers.length === 0 ? (
-                        <EmptyState title="Brak wynikow" description="Zmien wyszukiwanie lub wybrany status ryzyka." />
+                        <EmptyState title="Brak wyników" description="Zmień wyszukiwanie lub wybrany status ryzyka." />
                     ) : (
                         <>
                             <div className="dashboard-table-wrapper driver-risk-table-wrapper">
                                 <table className="dashboard-table driver-risk-table">
-                                    <thead><tr><th>Kierowca</th><th>Karta</th><th>Status</th><th>Naruszenia</th><th>Ciezkie</th><th>Ostatni import</th><th>Bez aktywnosci</th><th>Bez importu</th></tr></thead>
+                                    <thead><tr><th>Kierowca</th><th>Karta</th><th>Status</th><th>Naruszenia</th><th>Ciężkie</th><th>Ostatni import</th><th>Bez aktywności</th><th>Bez importu</th></tr></thead>
                                     <tbody>{visibleDrivers.map((driver) => <RiskRow driver={driver} key={driver.driverId} />)}</tbody>
                                 </table>
                             </div>
@@ -153,7 +154,7 @@ function DriverRiskOverview() {
 const RiskRow = memo(function RiskRow({ driver }: { driver: DriverRisk }) {
     return (
         <tr className={driver.riskStatus === "Critical" ? "critical-risk-row" : undefined}>
-            <td><Link to={`/drivers/${driver.driverId}`}>{`${driver.firstName} ${driver.lastName}`.trim() || "Brak danych"}</Link></td>
+            <td><Link to={`/drivers/${driver.driverId}`}>{formatDriverNameOrFallback(driver.firstName, driver.lastName)}</Link></td>
             <td>{driver.cardNumber || "Brak danych"}</td>
             <td><span className={`risk-badge ${driver.riskStatus.toLowerCase()}`}>{getRiskLabel(driver.riskStatus)}</span></td>
             <td>{driver.violationsCount}</td>
@@ -166,7 +167,7 @@ const RiskRow = memo(function RiskRow({ driver }: { driver: DriverRisk }) {
 });
 
 const RiskCard = memo(function RiskCard({ label, count, status }: { label: string; count: number; status: string }) {
-    return <article className={`driver-risk-card ${status}`}><span>{label}</span><strong>{count}</strong><small>kierowcow</small></article>;
+    return <article className={`driver-risk-card ${status}`}><span>{label}</span><strong>{count}</strong><small>kierowców</small></article>;
 });
 
 export default memo(DriverRiskOverview);

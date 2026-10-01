@@ -1,4 +1,4 @@
-namespace DriverTime.Domain.Entities;
+﻿namespace DriverTime.Domain.Entities;
 
 public class Driver
 {
@@ -18,7 +18,17 @@ public class Driver
 
     public string CardIssuingCountry { get; set; } = string.Empty;
 
+    public bool IncludeInPlanning { get; set; } = true;
+
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
+
+    public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();
+
+    public ICollection<DriverWorkEvidenceEntry> WorkEvidenceEntries { get; set; } = new List<DriverWorkEvidenceEntry>();
+
+    public ICollection<MobileAppInvite> MobileAppInvites { get; set; } = new List<MobileAppInvite>();
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
+
+

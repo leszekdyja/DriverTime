@@ -9,20 +9,43 @@ import {
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
+import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/reports.css";
 
 const pageSize = 12;
+const defaultReportRangeDays = 60;
 
-const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
+const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",
 });
+
+const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
+    dateStyle: "medium",
+});
+
+const activityLabels: Record<string, string> = {
+    DRIVING: "Jazda",
+    WORK: "Praca",
+    REST: "Odpoczynek",
+    AVAILABILITY: "Dyspozycyjność",
+};
 
 function formatDate(value: string) {
     const date = new Date(value);
 
     return Number.isNaN(date.getTime())
         ? "Brak danych"
+        : dateTimeFormatter.format(date);
+}
+
+function formatDateOnly(value: string) {
+    if (!value) return "Nie wybrano";
+
+    const date = new Date(`${value}T00:00:00`);
+
+    return Number.isNaN(date.getTime())
+        ? "Nie wybrano"
         : dateFormatter.format(date);
 }
 
@@ -31,19 +54,77 @@ function formatDuration(seconds: number) {
     const hours = Math.floor(safeSeconds / 3600);
     const minutes = Math.floor((safeSeconds % 3600) / 60);
 
-    return `${hours} godz. ${minutes} min`;
+    return `${hours} godz. ${minutes.toString().padStart(2, "0")} min`;
+}
+
+function formatNumber(value: number | null | undefined) {
+    return value === null || value === undefined
+        ? "Brak danych"
+        : value.toLocaleString("pl-PL");
+}
+
+function formatKm(value: number | null | undefined) {
+    return value === null || value === undefined
+        ? "Brak danych"
+        : `${value.toLocaleString("pl-PL")} km`;
+}
+
+function getDriverName(driver?: ReportDriver) {
+    if (!driver) return "Wybierz kierowcę";
+
+    return formatDriverNameOrFallback(driver.firstName, driver.lastName, "Kierowca bez nazwy");
+}
+
+function getActivityLabel(activityType: string) {
+    const normalized = activityType.toUpperCase();
+
+    return activityLabels[normalized] ?? (activityType || "Brak danych");
+}
+
+function getActivityClass(activityType: string) {
+    const normalized = activityType.toUpperCase();
+
+    if (normalized === "DRIVING") return "driving";
+    if (normalized === "WORK") return "work";
+    if (normalized === "REST") return "rest";
+    if (normalized === "AVAILABILITY") return "availability";
+
+    return "other";
+}
+
+function getVehicle(activity: ReportActivity) {
+    return activity.vehicleRegistration
+        || activity.vehicleRegistrationNumber
+        || activity.vehicle
+        || "Brak danych";
 }
 
 function escapeCsv(value: string | number) {
     return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+function toDateInputValue(date: Date) {
+    return date.toISOString().slice(0, 10);
+}
+
+function getDefaultDateRange() {
+    const today = new Date();
+    const from = new Date(today);
+    from.setUTCDate(today.getUTCDate() - defaultReportRangeDays);
+
+    return {
+        from: toDateInputValue(from),
+        to: toDateInputValue(today),
+    };
+}
+
 export default function ReportsPage() {
+    const defaultDateRange = useMemo(() => getDefaultDateRange(), []);
     const [drivers, setDrivers] = useState<ReportDriver[]>([]);
     const [activities, setActivities] = useState<ReportActivity[]>([]);
-    const [driverCardNumber, setDriverCardNumber] = useState("");
-    const [dateFrom, setDateFrom] = useState("");
-    const [dateTo, setDateTo] = useState("");
+    const [selectedDriverId, setSelectedDriverId] = useState("");
+    const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
+    const [dateTo, setDateTo] = useState(defaultDateRange.to);
     const [isLoading, setIsLoading] = useState(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
@@ -51,7 +132,7 @@ export default function ReportsPage() {
     const [currentPage, setCurrentPage] = useState(1);
 
     async function loadActivities(
-        cardNumber = driverCardNumber,
+        driverId = selectedDriverId,
         from = dateFrom,
         to = dateTo,
     ) {
@@ -59,14 +140,22 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            const loadedActivities = await getReportActivities(cardNumber, from, to);
+            const driver = drivers.find((item) => item.id === driverId);
+
+            if (!driver) {
+                setError("Wybierz kierowcę przed wygenerowaniem raportu.");
+                setActivities([]);
+                return;
+            }
+
+            const loadedActivities = await getReportActivities(driver.id, from, to, driver.cardNumber);
             setCurrentPage(1);
             setActivities(loadedActivities);
         } catch (loadError) {
             setError(
                 loadError instanceof Error
                     ? loadError.message
-                    : "Wystapil blad podczas pobierania raportu.",
+                    : "Wystąpił błąd podczas pobierania raportu.",
             );
         } finally {
             setIsLoading(false);
@@ -78,19 +167,16 @@ export default function ReportsPage() {
             setIsLoading(true);
 
             try {
-                const [loadedDrivers, loadedActivities] = await Promise.all([
-                    getReportDrivers(),
-                    getReportActivities("", "", ""),
-                ]);
+                const loadedDrivers = await getReportDrivers();
 
                 setCurrentPage(1);
                 setDrivers(loadedDrivers);
-                setActivities(loadedActivities);
+                setActivities([]);
             } catch (loadError) {
                 setError(
                     loadError instanceof Error
                         ? loadError.message
-                        : "Wystapil blad podczas pobierania raportu.",
+                        : "Wystąpił błąd podczas pobierania raportu.",
                 );
             } finally {
                 setIsLoading(false);
@@ -100,8 +186,21 @@ export default function ReportsPage() {
         void loadInitialData();
     }, []);
 
+    const selectedDriver = useMemo(
+        () => drivers.find((item) => item.id === selectedDriverId),
+        [selectedDriverId, drivers],
+    );
+
+    const dateRangeLabel = useMemo(() => {
+        if (!dateFrom && !dateTo) return "Pełny dostępny zakres danych";
+        if (dateFrom && dateTo) return `${formatDateOnly(dateFrom)} - ${formatDateOnly(dateTo)}`;
+        if (dateFrom) return `Od ${formatDateOnly(dateFrom)}`;
+
+        return `Do ${formatDateOnly(dateTo)}`;
+    }, [dateFrom, dateTo]);
+
     const totals = useMemo(() => {
-        const result = { driving: 0, rest: 0, work: 0 };
+        const result = { driving: 0, rest: 0, work: 0, availability: 0, distanceKm: 0, hasDistance: false };
 
         for (const activity of activities) {
             const duration = Math.max(activity.durationSeconds, 0);
@@ -116,6 +215,14 @@ export default function ReportsPage() {
                 case "WORK":
                     result.work += duration;
                     break;
+                case "AVAILABILITY":
+                    result.availability += duration;
+                    break;
+            }
+
+            if (activity.distanceKm !== null && activity.distanceKm !== undefined) {
+                result.distanceKm += activity.distanceKm;
+                result.hasDistance = true;
             }
         }
 
@@ -131,7 +238,12 @@ export default function ReportsPage() {
         event.preventDefault();
 
         if (dateFrom && dateTo && dateFrom > dateTo) {
-            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            setError("Data początkowa nie może być późniejsza niż data końcowa.");
+            return;
+        }
+
+        if (!selectedDriverId) {
+            setError("Wybierz kierowcę przed wygenerowaniem raportu.");
             return;
         }
 
@@ -143,22 +255,32 @@ export default function ReportsPage() {
             [
                 "Kierowca",
                 "Numer karty",
-                "Poczatek",
+                "Początek",
                 "Koniec",
-                "Typ aktywnosci",
+                "Typ aktywności",
+                "Czas trwania",
                 "Czas trwania (sekundy)",
+                "Pojazd",
+                "Przebieg początkowy",
+                "Przebieg końcowy",
+                "Km",
             ],
             ...activities.map((activity) => [
-                `${activity.driverFirstName} ${activity.driverLastName}`.trim(),
-                activity.driverCardNumber,
-                activity.startUtc,
-                activity.endUtc,
-                activity.activityType,
+                formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName),
+                activity.driverCardNumber || "Brak danych",
+                formatDate(activity.startUtc),
+                formatDate(activity.endUtc),
+                getActivityLabel(activity.activityType),
+                formatDuration(activity.durationSeconds),
                 activity.durationSeconds,
+                getVehicle(activity),
+                formatNumber(activity.startOdometerKm),
+                formatNumber(activity.endOdometerKm),
+                formatNumber(activity.distanceKm),
             ]),
         ];
         const csv = rows
-            .map((row) => row.map(escapeCsv).join(","))
+            .map((row) => row.map(escapeCsv).join(";"))
             .join("\r\n");
         const blob = new Blob([`\uFEFF${csv}`], {
             type: "text/csv;charset=utf-8",
@@ -167,23 +289,21 @@ export default function ReportsPage() {
         const link = document.createElement("a");
 
         link.href = url;
-        link.download = "drivertime-activities-report.csv";
+        link.download = "raport-aktywnosci-kierowcy-z-kilometrami.csv";
         link.click();
         URL.revokeObjectURL(url);
     }
 
     async function handlePdfExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
+        const driver = selectedDriver;
 
         if (!driver || !dateFrom || !dateTo) {
-            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+            setError("Wybierz kierowcę oraz pełny zakres dat przed eksportem.");
             return;
         }
 
         if (dateFrom > dateTo) {
-            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            setError("Data początkowa nie może być późniejsza niż data końcowa.");
             return;
         }
 
@@ -196,7 +316,7 @@ export default function ReportsPage() {
             setError(
                 exportError instanceof Error
                     ? exportError.message
-                    : "Nie udalo sie pobrac pliku PDF.",
+                    : "Nie udało się pobrać pliku PDF.",
             );
         } finally {
             setIsGeneratingPdf(false);
@@ -204,17 +324,13 @@ export default function ReportsPage() {
     }
 
     async function handleExcelExport() {
-        const driver = drivers.find(
-            (item) => item.cardNumber === driverCardNumber,
-        );
-
-        if (!driver || !dateFrom || !dateTo) {
-            setError("Wybierz kierowce oraz pelny zakres dat przed eksportem.");
+        if (!selectedDriver || !dateFrom || !dateTo) {
+            setError("Wybierz kierowcę oraz pełny zakres dat przed eksportem.");
             return;
         }
 
         if (dateFrom > dateTo) {
-            setError("Data poczatkowa nie moze byc pozniejsza niz data koncowa.");
+            setError("Data początkowa nie może być późniejsza niż data końcowa.");
             return;
         }
 
@@ -222,12 +338,12 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await downloadDriverReport(driver.id, dateFrom, dateTo, "excel");
+            await downloadDriverReport(selectedDriver.id, dateFrom, dateTo, "excel");
         } catch (exportError) {
             setError(
                 exportError instanceof Error
                     ? exportError.message
-                    : "Nie udalo sie pobrac pliku Excel.",
+                    : "Nie udało się pobrać pliku Excel.",
             );
         } finally {
             setIsGeneratingExcel(false);
@@ -236,62 +352,42 @@ export default function ReportsPage() {
 
     return (
         <div className="reports-page">
-            <div className="reports-heading">
-                <div>
-                    <h2>Raport aktywnosci</h2>
-                    <p>Analiza czasu pracy kierowcow na podstawie importow DDD.</p>
+            <section className="reports-hero">
+                <div className="reports-hero-copy">
+                    <span className="reports-eyebrow">Raport kierowcy</span>
+                    <h2>Aktywności kierowcy z kilometrami</h2>
+                    <p>
+                        Sprawdź czas jazdy, pracy, odpoczynku, dyspozycyjności oraz kilometry
+                        przypisane do użyć pojazdu z plików DDD.
+                    </p>
                 </div>
-                <div className="reports-actions">
-                    <button
-                        className="csv-button"
-                        type="button"
-                        onClick={exportCsv}
-                        disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
-                    >
-                        Eksportuj CSV
-                    </button>
-                    <button
-                        className="pdf-button"
-                        type="button"
-                        onClick={() => void handlePdfExport()}
-                        disabled={
-                            !driverCardNumber
-                            || !dateFrom
-                            || !dateTo
-                            || isGeneratingPdf
-                            || isGeneratingExcel
-                        }
-                    >
-                        {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
-                    </button>
-                    <button
-                        className="excel-button"
-                        type="button"
-                        onClick={() => void handleExcelExport()}
-                        disabled={
-                            !driverCardNumber
-                            || !dateFrom
-                            || !dateTo
-                            || isGeneratingPdf
-                            || isGeneratingExcel
-                        }
-                    >
-                        {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
-                    </button>
+                <div className="reports-context-card" aria-label="Zakres raportu">
+                    <span>Aktualny raport</span>
+                    <strong>{getDriverName(selectedDriver)}</strong>
+                    <dl>
+                        <div>
+                            <dt>Numer karty</dt>
+                            <dd>{selectedDriver?.cardNumber || "Nie wybrano"}</dd>
+                        </div>
+                        <div>
+                            <dt>Zakres dat</dt>
+                            <dd>{dateRangeLabel}</dd>
+                        </div>
+                    </dl>
                 </div>
-            </div>
+            </section>
 
             <form className="reports-filters" onSubmit={handleSubmit}>
                 <label>
                     Kierowca
                     <select
-                        value={driverCardNumber}
-                        onChange={(event) => setDriverCardNumber(event.target.value)}
+                        value={selectedDriverId}
+                        onChange={(event) => setSelectedDriverId(event.target.value)}
                     >
-                        <option value="">Wszyscy kierowcy</option>
+                        <option value="">Wybierz kierowcę</option>
                         {drivers.map((driver) => (
-                            <option key={driver.id} value={driver.cardNumber}>
-                                {driver.firstName} {driver.lastName} ({driver.cardNumber})
+                            <option key={driver.id} value={driver.id}>
+                                {formatDriverNameOrFallback(driver.firstName, driver.lastName)} ({driver.cardNumber})
                             </option>
                         ))}
                     </select>
@@ -316,69 +412,128 @@ export default function ReportsPage() {
                 </label>
 
                 <button type="submit" disabled={isLoading}>
-                    {isLoading ? "Ladowanie..." : "Generuj raport"}
+                    {isLoading ? "Ładowanie..." : "Generuj raport"}
                 </button>
             </form>
 
             {error && (
-                <p className="reports-error" role="alert">
-                    {error}
-                </p>
+                <div className="reports-error" role="alert">
+                    <strong>Nie można przygotować raportu</strong>
+                    <span>{error}</span>
+                </div>
             )}
 
             {isLoading && activities.length === 0 ? (
-                <section className="report-summary report-summary-skeleton" aria-label="Ladowanie podsumowania">
-                    {Array.from({ length: 3 }, (_, index) => <div className="ui-skeleton report-card-skeleton" key={index} />)}
+                <section className="report-summary report-summary-skeleton" aria-label="Ładowanie podsumowania">
+                    {Array.from({ length: 5 }, (_, index) => (
+                        <div className="ui-skeleton report-card-skeleton" key={index} />
+                    ))}
                 </section>
             ) : (
-                <section className="report-summary" aria-label="Podsumowanie czasu">
-                    <SummaryCard label="Czas jazdy" seconds={totals.driving} />
-                    <SummaryCard label="Czas odpoczynku" seconds={totals.rest} />
-                    <SummaryCard label="Czas pracy" seconds={totals.work} />
+                <section className="report-summary report-summary-five" aria-label="Podsumowanie raportu">
+                    <SummaryCard label="Jazda" seconds={totals.driving} tone="driving" />
+                    <SummaryCard label="Praca" seconds={totals.work} tone="work" />
+                    <SummaryCard label="Odpoczynek" seconds={totals.rest} tone="rest" />
+                    <SummaryCard label="Dyspozycyjność" seconds={totals.availability} tone="availability" />
+                    <DistanceSummaryCard distanceKm={totals.hasDistance ? totals.distanceKm : null} />
                 </section>
             )}
 
             <section className="reports-panel">
                 <div className="reports-panel-heading">
-                    <h3>Aktywnosci</h3>
-                    <span>{activities.length} rekordow</span>
+                    <div>
+                        <span>Lista aktywności</span>
+                        <h3>Aktywności, pojazdy i kilometry</h3>
+                    </div>
+                    <div className="reports-actions">
+                        <span className="reports-count">{activities.length} rekordów</span>
+                        <button
+                            className="csv-button"
+                            type="button"
+                            onClick={exportCsv}
+                            disabled={activities.length === 0 || isGeneratingPdf || isGeneratingExcel}
+                        >
+                            Eksport CSV
+                        </button>
+                        <button
+                            className="pdf-button"
+                            type="button"
+                            onClick={() => void handlePdfExport()}
+                            disabled={
+                                !selectedDriverId
+                                || !dateFrom
+                                || !dateTo
+                                || isGeneratingPdf
+                                || isGeneratingExcel
+                            }
+                        >
+                            {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                        </button>
+                        <button
+                            className="excel-button"
+                            type="button"
+                            onClick={() => void handleExcelExport()}
+                            disabled={
+                                !selectedDriverId
+                                || !dateFrom
+                                || !dateTo
+                                || activities.length === 0
+                                || isGeneratingPdf
+                                || isGeneratingExcel
+                            }
+                        >
+                            {isGeneratingExcel ? "Generowanie Excel..." : "Eksport Excel"}
+                        </button>
+                    </div>
                 </div>
 
                 {isLoading && activities.length === 0 ? (
-                    <TableSkeleton rows={7} columns={6} />
+                    <TableSkeleton rows={7} columns={10} />
                 ) : activities.length === 0 ? (
                     <EmptyState
-                        title="Brak danych raportu"
-                        description="Dla wybranego kierowcy i zakresu dat nie znaleziono aktywnosci."
+                        title="Brak aktywności w raporcie"
+                        description="Wybierz kierowcę i zakres dat. Po imporcie plików DDD aktywności pojawią się tutaj automatycznie."
                     />
                 ) : (
                     <div className={isLoading ? "reports-content is-refreshing" : "reports-content"} aria-busy={isLoading}>
                         <div className="reports-table-wrapper">
-                            <table className="reports-table">
-                            <thead>
-                                <tr>
-                                    <th>Kierowca</th>
-                                    <th>Numer karty</th>
-                                    <th>Poczatek</th>
-                                    <th>Koniec</th>
-                                    <th>Aktywnosc</th>
-                                    <th>Czas</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {visibleActivities.map((activity) => (
-                                    <tr key={activity.id}>
-                                        <td>
-                                            {`${activity.driverFirstName} ${activity.driverLastName}`.trim() || "Brak danych"}
-                                        </td>
-                                        <td>{activity.driverCardNumber || "Brak danych"}</td>
-                                        <td>{formatDate(activity.startUtc)}</td>
-                                        <td>{formatDate(activity.endUtc)}</td>
-                                        <td>{activity.activityType || "Brak danych"}</td>
-                                        <td>{formatDuration(activity.durationSeconds)}</td>
+                            <table className="reports-table reports-table-wide">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Od</th>
+                                        <th>Do</th>
+                                        <th>Aktywność</th>
+                                        <th>Pojazd</th>
+                                        <th>Czas trwania</th>
+                                        <th>Przebieg początkowy</th>
+                                        <th>Przebieg końcowy</th>
+                                        <th>Km</th>
                                     </tr>
-                                ))}
-                            </tbody>
+                                </thead>
+                                <tbody>
+                                    {visibleActivities.map((activity) => (
+                                        <tr key={activity.id}>
+                                            <td data-label="Data">{formatDateOnly(activity.startUtc.slice(0, 10))}</td>
+                                            <td data-label="Od">{formatDate(activity.startUtc)}</td>
+                                            <td data-label="Do">{formatDate(activity.endUtc)}</td>
+                                            <td data-label="Aktywność">
+                                                <span className={`activity-badge ${getActivityClass(activity.activityType)}`}>
+                                                    {getActivityLabel(activity.activityType)}
+                                                </span>
+                                            </td>
+                                            <td data-label="Pojazd">{getVehicle(activity)}</td>
+                                            <td data-label="Czas trwania">
+                                                <strong>{formatDuration(activity.durationSeconds)}</strong>
+                                            </td>
+                                            <td data-label="Przebieg początkowy">{formatNumber(activity.startOdometerKm)}</td>
+                                            <td data-label="Przebieg końcowy">{formatNumber(activity.endOdometerKm)}</td>
+                                            <td data-label="Km">
+                                                <strong>{formatKm(activity.distanceKm)}</strong>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
                             </table>
                         </div>
                         <Pagination
@@ -397,13 +552,25 @@ export default function ReportsPage() {
 type SummaryCardProps = {
     label: string;
     seconds: number;
+    tone: "driving" | "work" | "rest" | "availability";
 };
 
-function SummaryCard({ label, seconds }: SummaryCardProps) {
+function SummaryCard({ label, seconds, tone }: SummaryCardProps) {
     return (
-        <article className="report-summary-card">
+        <article className={`report-summary-card ${tone}`}>
             <span>{label}</span>
             <strong>{formatDuration(seconds)}</strong>
+            <small>Łączny czas w wybranym raporcie</small>
+        </article>
+    );
+}
+
+function DistanceSummaryCard({ distanceKm }: { distanceKm: number | null }) {
+    return (
+        <article className="report-summary-card distance">
+            <span>Kilometry</span>
+            <strong>{formatKm(distanceKm)}</strong>
+            <small>Łączny dystans z dostępnych danych</small>
         </article>
     );
 }

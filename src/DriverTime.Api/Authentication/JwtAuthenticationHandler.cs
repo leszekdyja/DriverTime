@@ -81,14 +81,20 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
             throw new InvalidOperationException("JWT validation failed.");
         }
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, GetString(payload, "sub")),
             new Claim(ClaimTypes.Email, GetString(payload, "email")),
             new Claim(ClaimTypes.Name, GetString(payload, "name")),
             new Claim(ClaimTypes.Role, GetString(payload, "role")),
-            new Claim("company_id", GetString(payload, "company_id"))
+            new Claim("company_id", GetString(payload, "company_id")),
+            new Claim("token_type", payload.TryGetProperty("token_type", out var tokenType) ? tokenType.GetString() ?? "user" : "user")
         };
+
+        if (payload.TryGetProperty("driver_id", out var driverId))
+        {
+            claims.Add(new Claim("driver_id", driverId.GetString() ?? string.Empty));
+        }
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
     }

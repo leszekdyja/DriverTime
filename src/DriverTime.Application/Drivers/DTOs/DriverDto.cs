@@ -14,5 +14,8 @@ public class DriverDto
 
     public string CardIssuingCountry { get; set; } = string.Empty;
 
+    public bool IncludeInPlanning { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
 }
+

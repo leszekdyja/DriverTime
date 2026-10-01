@@ -6,11 +6,12 @@ import {
 } from "react";
 
 import {
+    DddUploadError,
     uploadDddFile,
     type DddUploadResult,
 } from "../services/dddUploadService";
 
-type UploadStatus = "ready" | "uploading" | "success" | "error" | "unsupported";
+type UploadStatus = "ready" | "uploading" | "success" | "error" | "unsupported" | "duplicate";
 
 type UploadItem = {
     id: string;
@@ -32,15 +33,17 @@ function createFileId(file: File) {
 function getStatusLabel(item: UploadItem) {
     switch (item.status) {
         case "ready":
-            return "Gotowy do wyslania";
+            return "Gotowy do wysłania";
         case "uploading":
-            return `Przesylanie ${item.progress}%`;
+            return `Przesyłanie ${item.progress}%`;
         case "success":
-            return "Import zakonczony pomyslnie";
+            return "Import zakończony pomyślnie";
         case "unsupported":
-            return "Nieobslugiwany plik. Wybierz plik .ddd";
+            return "Nieobsługiwany plik. Wybierz plik .ddd";
         case "error":
-            return item.message || "Import nie powiodl sie";
+            return item.message || "Import nie powiódł się";
+        case "duplicate":
+            return item.message || "Plik został już wcześniej zaimportowany";
     }
 }
 
@@ -123,12 +126,14 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                 hasSuccessfulImport = true;
                 window.dispatchEvent(new Event("drivertime:data-changed"));
             } catch (uploadError) {
+                const isDuplicate = uploadError instanceof DddUploadError && uploadError.status === 409;
                 updateItem(item.id, {
-                    status: "error",
+                    status: isDuplicate ? "duplicate" : "error",
+                    progress: isDuplicate ? 100 : item.progress,
                     message:
                         uploadError instanceof Error
                             ? uploadError.message
-                            : "Import nie powiodl sie.",
+                            : "Import nie powiódł się.",
                 });
             }
         }
@@ -169,8 +174,8 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                     disabled={isUploading}
                     hidden
                 />
-                <strong>Przeciagnij pliki DDD tutaj</strong>
-                <span>lub wybierz jeden albo kilka plikow z dysku</span>
+                <strong>Przeciągnij pliki DDD tutaj</strong>
+                <span>lub wybierz jeden albo kilka plików z dysku</span>
                 <button
                     type="button"
                     className="select-files-button"
@@ -190,7 +195,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                                     <strong>{item.file.name}</strong>
                                     <span>{getStatusLabel(item)}</span>
                                 </div>
-                                {!isUploading && item.status !== "success" && (
+                                {!isUploading && item.status !== "success" && item.status !== "duplicate" && (
                                     <button
                                         type="button"
                                         className="remove-file-button"
@@ -202,7 +207,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                                             )
                                         }
                                     >
-                                        Usun
+                                        Usuń
                                     </button>
                                 )}
                             </div>
@@ -211,7 +216,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                                 <div
                                     className="upload-progress"
                                     role="progressbar"
-                                    aria-label={`Postep wysylania ${item.file.name}`}
+                                    aria-label={`Postęp wysyłania ${item.file.name}`}
                                     aria-valuemin={0}
                                     aria-valuemax={100}
                                     aria-valuenow={item.progress}
@@ -223,7 +228,7 @@ export default function DddDropzone({ onImportsChanged }: DddDropzoneProps) {
                             {item.result && (
                                 <p>
                                     <strong>{item.result.importMessage}</strong>{" "}
-                                    Aktywnosci: {item.result.activities.length}, pojazdy:{" "}
+                                    Aktywności: {item.result.activities.length}, pojazdy:{" "}
                                     {item.result.vehicle_uses.length}, kraje:{" "}
                                     {item.result.country_code_entries.length}
                                 </p>

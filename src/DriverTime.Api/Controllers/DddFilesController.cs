@@ -1,4 +1,5 @@
-﻿using DriverTime.Application.Interfaces;
+using DriverTime.Application.DDD.Exceptions;
+using DriverTime.Application.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DriverTime.Api.Controllers;
@@ -38,6 +39,10 @@ public class DddFilesController : ControllerBase
                 file.FileName);
 
             return Ok(result);
+        }
+        catch (DuplicateDddFileException exception)
+        {
+            return Conflict(new { message = exception.Message });
         }
         catch (InvalidOperationException exception)
         {

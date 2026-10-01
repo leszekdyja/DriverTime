@@ -8,6 +8,10 @@ public interface IDddFileService
         Stream fileStream,
         string originalFileName);
 
+    Task<bool> RetryImportAsync(
+        Guid monitoringId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<DddFileDto>> GetAllAsync();
 
     Task<DddFileDetailsDto?> GetByIdAsync(Guid id);

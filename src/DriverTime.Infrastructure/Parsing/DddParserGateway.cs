@@ -75,7 +75,12 @@ public sealed class DddParserGateway : IDddParserGateway
             source.GetRawText(),
             options);
 
-        return parsed ?? throw new InvalidOperationException("DDD parser returned invalid JSON.");
+        if (parsed is null)
+            throw new InvalidOperationException("DDD parser returned invalid JSON.");
+
+        NormalizeParsedText(parsed);
+
+        return parsed;
     }
 
     private static string ExtractJson(string text)
@@ -172,5 +177,57 @@ public sealed class DddParserGateway : IDddParserGateway
         {
             return null;
         }
+    }
+
+    private static void NormalizeParsedText(DddParseResultDto parsed)
+    {
+        parsed.ParserName = FixMojibake(parsed.ParserName);
+        parsed.ParserVersion = FixMojibake(parsed.ParserVersion);
+        parsed.FileType = FixMojibake(parsed.FileType);
+        parsed.ImportMessage = FixMojibake(parsed.ImportMessage);
+
+        parsed.Driver.FirstName = FixMojibake(parsed.Driver.FirstName);
+        parsed.Driver.LastName = FixMojibake(parsed.Driver.LastName);
+        parsed.Driver.CardIssuingCountry = FixMojibake(parsed.Driver.CardIssuingCountry);
+
+        foreach (var activity in parsed.Activities)
+        {
+            activity.Activity = FixMojibake(activity.Activity);
+            activity.Source = FixMojibake(activity.Source);
+        }
+
+        foreach (var countryEntry in parsed.CountryCodeEntries)
+        {
+            countryEntry.EntryType = FixMojibake(countryEntry.EntryType);
+            countryEntry.CountryName = FixMojibake(countryEntry.CountryName);
+            countryEntry.Status = FixMojibake(countryEntry.Status);
+            countryEntry.Note = FixMojibake(countryEntry.Note);
+            countryEntry.Source = FixMojibake(countryEntry.Source);
+        }
+
+        foreach (var vehicleUse in parsed.VehicleUses)
+        {
+            vehicleUse.Source = FixMojibake(vehicleUse.Source);
+        }
+    }
+
+    private static string FixMojibake(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+
+        return value
+            .Replace('³', 'ł')
+            .Replace('£', 'Ł')
+            .Replace('¶', 'ś')
+            .Replace('¦', 'Ś')
+            .Replace('¿', 'ż')
+            .Replace('¯', 'Ż')
+            .Replace('æ', 'ć')
+            .Replace('Æ', 'Ć')
+            .Replace('ñ', 'ń')
+            .Replace('Ñ', 'Ń')
+            .Replace('ê', 'ę')
+            .Replace('Ê', 'Ę');
     }
 }

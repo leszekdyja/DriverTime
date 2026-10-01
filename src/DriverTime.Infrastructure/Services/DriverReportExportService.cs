@@ -107,13 +107,20 @@ public class DriverReportExportService : IDriverReportExportService
                 && x.StartUtc < toUtcExclusive
                 && x.EndUtc > fromUtc)
             .OrderBy(x => x.StartUtc)
-            .Select(x => new DriverReportActivityDto
+            .Select(x => new DriverReportActivitySource
             {
+                Id = x.Id,
+                DddFileId = x.DddFileId,
+                DriverId = x.DddFile.DriverId,
+                DriverCardNumber = x.DddFile.DriverCardNumber,
                 StartUtc = x.StartUtc,
                 EndUtc = x.EndUtc,
                 ActivityType = x.ActivityType
             })
             .ToListAsync(cancellationToken);
+
+        var deduplicatedActivities = DeduplicateActivities(activities);
+        var vehicleUses = await GetVehicleUsesAsync(deduplicatedActivities, cancellationToken);
 
         var report = new DriverReportDto
         {
@@ -128,20 +135,244 @@ public class DriverReportExportService : IDriverReportExportService
             DriverCardNumber = driver.CardNumber,
             From = from,
             To = to,
-            Activities = activities
+            Activities = BuildReportActivities(
+                deduplicatedActivities,
+                vehicleUses,
+                fromUtc,
+                toUtcExclusive)
         };
 
-        foreach (var activity in activities)
+        foreach (var activity in report.Activities)
         {
-            var start = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
-            var end = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
-            activity.DurationSeconds = end > start ? (long)(end - start).TotalSeconds : 0;
             AddDuration(report, activity.ActivityType, activity.DurationSeconds);
         }
+
+        report.TotalDistanceKm = SumDistance(report.Activities);
 
         return report;
     }
 
+    internal static List<DriverReportActivityDto> BuildReportActivities(
+        IEnumerable<DriverReportActivitySource> activities,
+        IReadOnlyCollection<VehicleUseReportSource> vehicleUses,
+        DateTime fromUtc,
+        DateTime toUtcExclusive)
+    {
+        var usedMileageKeys = new HashSet<string>();
+        var uniqueVehicleUses = DeduplicateVehicleUses(vehicleUses);
+        var reportActivities = new List<DriverReportActivityDto>();
+
+        foreach (var activity in DeduplicateActivities(activities))
+        {
+            var clippedStart = activity.StartUtc < fromUtc ? fromUtc : activity.StartUtc;
+            var clippedEnd = activity.EndUtc > toUtcExclusive ? toUtcExclusive : activity.EndUtc;
+            var vehicleUse = FindBestVehicleUse(activity, uniqueVehicleUses);
+            var vehicleUseKey = vehicleUse is null
+                ? string.Empty
+                : GetVehicleUseMileageKey(vehicleUse);
+            var showVehicleUseDistance = vehicleUse is not null
+                && CanReportVehicleUseDistance(activity)
+                && usedMileageKeys.Add(vehicleUseKey);
+
+            reportActivities.Add(new DriverReportActivityDto
+            {
+                DddFileId = activity.DddFileId,
+                VehicleUseId = vehicleUse?.Id,
+                VehicleUseBusinessKey = vehicleUseKey,
+                StartUtc = clippedStart,
+                EndUtc = clippedEnd,
+                ActivityType = activity.ActivityType,
+                VehicleRegistration = ToReportVehicleDisplay(
+                    vehicleUse?.RegistrationNumber ?? string.Empty),
+                DurationSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(clippedStart, clippedEnd),
+                StartOdometerKm = showVehicleUseDistance ? vehicleUse?.StartOdometerKm : null,
+                EndOdometerKm = showVehicleUseDistance ? vehicleUse?.EndOdometerKm : null,
+                DistanceKm = showVehicleUseDistance ? vehicleUse?.DistanceKm : null
+            });
+        }
+
+        return reportActivities;
+    }
+    private async Task<List<VehicleUseReportSource>> GetVehicleUsesAsync(
+        IReadOnlyCollection<DriverReportActivitySource> activities,
+        CancellationToken cancellationToken)
+    {
+        if (activities.Count == 0)
+        {
+            return new List<VehicleUseReportSource>();
+        }
+
+        var dddFileIds = activities.Select(x => x.DddFileId).Distinct().ToList();
+        var fromUtc = activities.Min(x => x.StartUtc);
+        var toUtc = activities.Max(x => x.EndUtc);
+
+        var vehicleUses = await _dbContext.VehicleUses
+            .AsNoTracking()
+            .Where(x =>
+                dddFileIds.Contains(x.DddFileId)
+                && !string.IsNullOrWhiteSpace(x.RegistrationNumber)
+                && x.StartUtc < toUtc
+                && x.EndUtc > fromUtc)
+            .Select(x => new VehicleUseReportSource
+            {
+                Id = x.Id,
+                DddFileId = x.DddFileId,
+                RegistrationNumber = x.RegistrationNumber,
+                StartUtc = x.StartUtc,
+                EndUtc = x.EndUtc,
+                StartOdometerKm = x.StartOdometerKm,
+                EndOdometerKm = x.EndOdometerKm,
+                DistanceKm = x.DistanceKm
+            })
+            .ToListAsync(cancellationToken);
+
+        return DeduplicateVehicleUses(vehicleUses);
+    }
+
+
+    private static List<VehicleUseReportSource> DeduplicateVehicleUses(
+        IEnumerable<VehicleUseReportSource> vehicleUses)
+    {
+        return vehicleUses
+            .GroupBy(GetVehicleUseBusinessKey)
+            .Select(group => group
+                .OrderBy(x => x.StartUtc)
+                .ThenBy(x => x.EndUtc)
+                .ThenBy(x => x.Id)
+                .First())
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+    }
+
+    private static bool CanReportVehicleUseDistance(DriverReportActivitySource activity) =>
+        activity.ActivityType.Equals("DRIVING", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetVehicleUseBusinessKey(VehicleUseReportSource vehicleUse) => string.Join(
+        "|",
+        vehicleUse.DddFileId.ToString("D"),
+        vehicleUse.RegistrationNumber.Trim().ToUpperInvariant(),
+        vehicleUse.StartUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.EndUtc.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+        vehicleUse.StartOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.EndOdometerKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
+        vehicleUse.DistanceKm?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+    private static string GetVehicleUseMileageKey(VehicleUseReportSource vehicleUse) =>
+        VehicleUseMileageKeyBuilder.Build(
+            vehicleUse.RegistrationNumber,
+            vehicleUse.StartOdometerKm,
+            vehicleUse.EndOdometerKm,
+            vehicleUse.DistanceKm,
+            vehicleUse.StartUtc,
+            vehicleUse.EndUtc);
+
+    private static List<DriverReportActivitySource> DeduplicateActivities(
+        IEnumerable<DriverReportActivitySource> activities)
+    {
+        return activities
+            .GroupBy(x => new
+            {
+                DriverKey = x.DriverId?.ToString("D") ?? x.DriverCardNumber,
+                x.StartUtc,
+                x.EndUtc,
+                ActivityType = x.ActivityType.ToUpperInvariant()
+            })
+            .Select(x => x.OrderBy(activity => activity.Id).First())
+            .OrderBy(x => x.StartUtc)
+            .ThenBy(x => x.EndUtc)
+            .ToList();
+    }
+
+    internal static string FindVehicleRegistration(
+        DriverReportActivitySource activity,
+        IReadOnlyCollection<VehicleUseReportSource> vehicleUses)
+    {
+        return FindBestVehicleUse(activity, vehicleUses)?.RegistrationNumber.Trim() ?? string.Empty;
+    }
+
+    internal static VehicleUseReportSource? FindBestVehicleUse(
+        DriverReportActivitySource activity,
+        IReadOnlyCollection<VehicleUseReportSource> vehicleUses)
+    {
+        var candidates = vehicleUses
+            .Where(x =>
+                x.DddFileId == activity.DddFileId
+                && x.StartUtc < activity.EndUtc
+                && x.EndUtc > activity.StartUtc)
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        return candidates
+            .Select(x => new
+            {
+                VehicleUse = x,
+                IsContaining = x.StartUtc <= activity.StartUtc && x.EndUtc >= activity.EndUtc,
+                OverlapSeconds = ActivityIntervalAggregationHelper.GetDurationSeconds(
+                    x.StartUtc > activity.StartUtc ? x.StartUtc : activity.StartUtc,
+                    x.EndUtc < activity.EndUtc ? x.EndUtc : activity.EndUtc)
+            })
+            .OrderByDescending(x => x.IsContaining)
+            .ThenByDescending(x => x.OverlapSeconds)
+            .Select(x => x.VehicleUse)
+            .FirstOrDefault();
+    }
+
+    private static string ToReportVehicleDisplay(string registrationNumber) =>
+        string.IsNullOrWhiteSpace(registrationNumber)
+            ? "Brak danych"
+            : registrationNumber.Trim();
+
+    private static long GetDistanceSeconds(
+        DriverReportActivitySource activity,
+        VehicleUseReportSource vehicleUse)
+    {
+        if (vehicleUse.StartUtc < activity.EndUtc && vehicleUse.EndUtc > activity.StartUtc)
+        {
+            return 0;
+        }
+
+        var distance = vehicleUse.EndUtc <= activity.StartUtc
+            ? activity.StartUtc - vehicleUse.EndUtc
+            : vehicleUse.StartUtc - activity.EndUtc;
+
+        return Math.Max(0, (long)Math.Ceiling(distance.TotalSeconds));
+    }
+
+    internal static int? SumDistance(IEnumerable<DriverReportActivityDto> activities)
+    {
+        var distances = activities
+            .Where(x => x.DistanceKm.HasValue)
+            .GroupBy(GetReportActivityVehicleUseKey)
+            .Select(x => x.First().DistanceKm!.Value)
+            .ToList();
+
+        return distances.Count == 0 ? null : distances.Sum();
+    }
+
+    private static string GetReportActivityVehicleUseKey(DriverReportActivityDto activity)
+    {
+        if (!string.IsNullOrWhiteSpace(activity.VehicleUseBusinessKey))
+        {
+            return activity.VehicleUseBusinessKey;
+        }
+
+        if (activity.VehicleUseId.HasValue)
+        {
+            return activity.VehicleUseId.Value.ToString("D");
+        }
+
+        return VehicleUseMileageKeyBuilder.Build(
+            activity.VehicleRegistration,
+            activity.StartOdometerKm,
+            activity.EndOdometerKm,
+            activity.DistanceKm,
+            activity.StartUtc,
+            activity.EndUtc);
+    }
     private static byte[] GeneratePdf(DriverReportDto report)
     {
         const int rowsPerPage = 16;
@@ -257,9 +488,10 @@ public class DriverReportExportService : IDriverReportExportService
         page.Text(634, 451, $"Okres: {FormatDate(report.From)} - {FormatDate(report.To)}", 9, false, "#475569");
 
         DrawSummaryCard(page, 34, "Jazda", FormatDuration(report.DrivingSeconds), "#2563EB");
-        DrawSummaryCard(page, 231, "Praca", FormatDuration(report.WorkSeconds), "#0F766E");
-        DrawSummaryCard(page, 428, "Odpoczynek", FormatDuration(report.RestSeconds), "#7C3AED");
-        DrawSummaryCard(page, 625, "Dyspozycyjnosc", FormatDuration(report.AvailabilitySeconds), "#D97706");
+        DrawSummaryCard(page, 189, "Praca", FormatDuration(report.WorkSeconds), "#0F766E");
+        DrawSummaryCard(page, 344, "Odpoczynek", FormatDuration(report.RestSeconds), "#7C3AED");
+        DrawSummaryCard(page, 499, "Dyspozycyjnosc", FormatDuration(report.AvailabilitySeconds), "#D97706");
+        DrawSummaryCard(page, 654, "Kilometry", FormatDistance(report.TotalDistanceKm), "#334155");
 
         page.Text(margin, 345, "Aktywnosci", 13, true, "#0F172A");
         page.Text(808, 345, $"{report.Activities.Count} rekordow", 9, false, "#64748B", PdfTextAlign.Right);
@@ -269,10 +501,15 @@ public class DriverReportExportService : IDriverReportExportService
         const double rowHeight = 17;
         page.FillRectangle(tableX, headerY, 774, 22, "#1E293B");
         page.Text(46, 323, "Lp.", 8, true, "#FFFFFF");
-        page.Text(82, 323, "Poczatek", 8, true, "#FFFFFF");
-        page.Text(218, 323, "Koniec", 8, true, "#FFFFFF");
-        page.Text(354, 323, "Aktywnosc", 8, true, "#FFFFFF");
-        page.Text(522, 323, "Czas", 8, true, "#FFFFFF");
+        page.Text(82, 323, "Data", 7, true, "#FFFFFF");
+        page.Text(152, 323, "Od", 7, true, "#FFFFFF");
+        page.Text(230, 323, "Do", 7, true, "#FFFFFF");
+        page.Text(308, 323, "Aktywnosc", 7, true, "#FFFFFF");
+        page.Text(396, 323, "Pojazd", 7, true, "#FFFFFF");
+        page.Text(472, 323, "Czas", 7, true, "#FFFFFF");
+        page.Text(548, 323, "Prz. pocz.", 7, true, "#FFFFFF");
+        page.Text(630, 323, "Prz. kon.", 7, true, "#FFFFFF");
+        page.Text(724, 323, "Km", 7, true, "#FFFFFF");
 
         if (report.Activities.Count == 0)
         {
@@ -289,10 +526,15 @@ public class DriverReportExportService : IDriverReportExportService
                 page.FillRectangle(tableX, y, 774, rowHeight, rowIndex % 2 == 0 ? "#FFFFFF" : "#F1F5F9");
                 page.StrokeRectangle(tableX, y, 774, rowHeight, "#E2E8F0");
                 page.Text(46, y + 6, (row.Index + 1).ToString(CultureInfo.InvariantCulture), 8, false, "#334155", PdfTextAlign.Left, "F3");
-                page.Text(82, y + 6, FormatDateTime(row.Activity.StartUtc), 8, false, "#334155", PdfTextAlign.Left, "F3");
-                page.Text(218, y + 6, FormatDateTime(row.Activity.EndUtc), 8, false, "#334155", PdfTextAlign.Left, "F3");
-                page.Text(354, y + 6, Truncate(GetActivityLabel(row.Activity.ActivityType), 30), 8, false, "#334155");
-                page.Text(522, y + 6, FormatDuration(row.Activity.DurationSeconds), 8, false, "#334155");
+                page.Text(82, y + 6, FormatDate(row.Activity.StartUtc), 7, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(152, y + 6, FormatTime(row.Activity.StartUtc), 7, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(230, y + 6, FormatTime(row.Activity.EndUtc), 7, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(308, y + 6, Truncate(GetActivityLabel(row.Activity.ActivityType), 16), 7, false, "#334155");
+                page.Text(396, y + 6, Truncate(DisplayValue(row.Activity.VehicleRegistration), 13), 7, false, "#334155");
+                page.Text(472, y + 6, FormatDuration(row.Activity.DurationSeconds), 7, false, "#334155");
+                page.Text(548, y + 6, FormatNullableInt(row.Activity.StartOdometerKm), 7, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(630, y + 6, FormatNullableInt(row.Activity.EndOdometerKm), 7, false, "#334155", PdfTextAlign.Left, "F3");
+                page.Text(724, y + 6, FormatNullableInt(row.Activity.DistanceKm), 7, false, "#334155", PdfTextAlign.Left, "F3");
             }
         }
 
@@ -310,8 +552,8 @@ public class DriverReportExportService : IDriverReportExportService
         string value,
         string accentColor)
     {
-        page.FillRectangle(x, 374, 183, 42, "#FFFFFF");
-        page.StrokeRectangle(x, 374, 183, 42, "#E2E8F0");
+        page.FillRectangle(x, 374, 145, 42, "#FFFFFF");
+        page.StrokeRectangle(x, 374, 145, 42, "#E2E8F0");
         page.FillRectangle(x, 374, 5, 42, accentColor);
         page.Text(x + 17, 399, label, 8, true, "#64748B");
         page.Text(x + 17, 383, value, 14, true, "#0F172A");
@@ -379,12 +621,13 @@ public class DriverReportExportService : IDriverReportExportService
         WriteKeyValueRow(writer, 14, "Zakres raportu", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
         WriteKeyValueRow(writer, 15, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
         WriteStringRow(writer, 17, 3, "Podsumowanie czasu");
-        WriteStringRow(writer, 18, 6, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc");
+        WriteStringRow(writer, 18, 6, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc", "Kilometry");
         WriteStringRow(writer, 19, 7,
             FormatDuration(report.DrivingSeconds),
             FormatDuration(report.WorkSeconds),
             FormatDuration(report.RestSeconds),
-            FormatDuration(report.AvailabilitySeconds));
+            FormatDuration(report.AvailabilitySeconds),
+            FormatDistance(report.TotalDistanceKm));
         WriteKeyValueRow(writer, 21, "Liczba aktywnosci", report.Activities.Count.ToString(CultureInfo.InvariantCulture));
 
         writer.WriteEndElement();
@@ -435,7 +678,7 @@ public class DriverReportExportService : IDriverReportExportService
 
         writer.WriteEndElement();
         writer.WriteStartElement("sheetData");
-        WriteStringRow(writer, 1, 8, "Lp.", "Poczatek", "Koniec", "Aktywnosc", "Czas");
+        WriteStringRow(writer, 1, 8, "Lp.", "Data", "Od", "Do", "Aktywnosc", "Pojazd", "Czas trwania", "Przebieg poczatkowy", "Przebieg koncowy", "Km");
 
         for (var index = 0; index < report.Activities.Count; index++)
         {
@@ -446,16 +689,21 @@ public class DriverReportExportService : IDriverReportExportService
             writer.WriteStartElement("row");
             writer.WriteAttributeString("r", row.ToString(CultureInfo.InvariantCulture));
             WriteNumberCell(writer, $"A{row}", index + 1, style);
-            WriteDateCell(writer, $"B{row}", activity.StartUtc, 11);
-            WriteDateCell(writer, $"C{row}", activity.EndUtc, 11);
-            WriteStringCell(writer, $"D{row}", GetActivityLabel(activity.ActivityType), style);
-            WriteDurationCell(writer, $"E{row}", activity.DurationSeconds, 12);
+            WriteDateOnlyCell(writer, $"B{row}", activity.StartUtc, 11);
+            WriteDateCell(writer, $"C{row}", activity.StartUtc, 11);
+            WriteDateCell(writer, $"D{row}", activity.EndUtc, 11);
+            WriteStringCell(writer, $"E{row}", GetActivityLabel(activity.ActivityType), style);
+            WriteStringCell(writer, $"F{row}", DisplayValue(activity.VehicleRegistration), style);
+            WriteDurationCell(writer, $"G{row}", activity.DurationSeconds, 12);
+            WriteNullableNumberCell(writer, $"H{row}", activity.StartOdometerKm, style);
+            WriteNullableNumberCell(writer, $"I{row}", activity.EndOdometerKm, style);
+            WriteNullableNumberCell(writer, $"J{row}", activity.DistanceKm, style);
             writer.WriteEndElement();
         }
 
         writer.WriteEndElement();
         writer.WriteStartElement("autoFilter");
-        writer.WriteAttributeString("ref", $"A1:E{Math.Max(1, report.Activities.Count + 1)}");
+        writer.WriteAttributeString("ref", $"A1:J{Math.Max(1, report.Activities.Count + 1)}");
         writer.WriteEndElement();
         writer.WriteStartElement("pageMargins");
         writer.WriteAttributeString("left", "0.4");
@@ -479,10 +727,15 @@ public class DriverReportExportService : IDriverReportExportService
         return new[]
         {
             8d,
-            21d,
-            21d,
+            14d,
+            18d,
+            18d,
             Math.Clamp(activityWidth, 18, 34),
-            18d
+            21d,
+            18d,
+            18d,
+            18d,
+            12d
         };
     }
 
@@ -577,6 +830,28 @@ public class DriverReportExportService : IDriverReportExportService
         int style) =>
         WriteNumberCell(writer, reference, value.ToOADate(), style);
 
+    private static void WriteDateOnlyCell(
+        XmlWriter writer,
+        string reference,
+        DateTime value,
+        int style) =>
+        WriteNumberCell(writer, reference, value.Date.ToOADate(), style);
+
+    private static void WriteNullableNumberCell(
+        XmlWriter writer,
+        string reference,
+        int? value,
+        int style)
+    {
+        if (value.HasValue)
+        {
+            WriteNumberCell(writer, reference, value.Value, style);
+            return;
+        }
+
+        WriteStringCell(writer, reference, string.Empty, style);
+    }
+
     private static void WriteDurationCell(
         XmlWriter writer,
         string reference,
@@ -649,7 +924,11 @@ public class DriverReportExportService : IDriverReportExportService
     }
 
     private static string FormatDate(DateOnly value) => value.ToString("dd.MM.yyyy");
+    private static string FormatDate(DateTime value) => value.ToString("dd.MM.yyyy");
+    private static string FormatTime(DateTime value) => value.ToString("HH:mm:ss");
     private static string FormatDateTime(DateTime value) => value.ToString("dd.MM.yyyy HH:mm:ss");
+    private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "-";
+    private static string FormatDistance(int? value) => value.HasValue ? $"{value.Value} km" : "Brak danych";
     private static string DisplayValue(string value) => string.IsNullOrWhiteSpace(value) ? "Brak danych" : value;
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
@@ -678,6 +957,42 @@ public class DriverReportExportService : IDriverReportExportService
         <= '\u007f' => character,
         _ => '?'
     };
+
+    internal sealed class DriverReportActivitySource
+    {
+        public Guid Id { get; set; }
+
+        public Guid DddFileId { get; set; }
+
+        public Guid? DriverId { get; set; }
+
+        public string DriverCardNumber { get; set; } = string.Empty;
+
+        public DateTime StartUtc { get; set; }
+
+        public DateTime EndUtc { get; set; }
+
+        public string ActivityType { get; set; } = string.Empty;
+    }
+
+    internal sealed class VehicleUseReportSource
+    {
+        public Guid Id { get; set; }
+
+        public Guid DddFileId { get; set; }
+
+        public string RegistrationNumber { get; set; } = string.Empty;
+
+        public DateTime StartUtc { get; set; }
+
+        public DateTime EndUtc { get; set; }
+
+        public int? StartOdometerKm { get; set; }
+
+        public int? EndOdometerKm { get; set; }
+
+        public int? DistanceKm { get; set; }
+    }
 
     private enum PdfTextAlign
     {

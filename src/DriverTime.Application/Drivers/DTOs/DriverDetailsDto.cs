@@ -23,6 +23,10 @@ public class DriverDetailsDto : DriverDto
     public List<DriverViolationDto> RecentViolations { get; set; } = new();
 
     public List<DriverVehicleDto> Vehicles { get; set; } = new();
+
+    public List<DriverCountryEntryDto> CountryEntries { get; set; } = new();
+
+    public List<DriverVehicleUseDto> VehicleUses { get; set; } = new();
 }
 
 public class DriverImportDto
@@ -58,4 +62,32 @@ public class DriverVehicleDto
     public DateTime LastUsedAtUtc { get; set; }
 
     public int UsageCount { get; set; }
+}
+
+public class DriverCountryEntryDto
+{
+    public Guid Id { get; set; }
+
+    public DateTime EntryTimeUtc { get; set; }
+
+    public string CountryCode { get; set; } = string.Empty;
+
+    public string EntryType { get; set; } = "Unknown";
+}
+
+public class DriverVehicleUseDto
+{
+    public Guid Id { get; set; }
+
+    public DateTime StartUtc { get; set; }
+
+    public DateTime EndUtc { get; set; }
+
+    public string RegistrationNumber { get; set; } = string.Empty;
+
+    public int? DistanceKm { get; set; }
+
+    public int? StartOdometerKm { get; set; }
+
+    public int? EndOdometerKm { get; set; }
 }

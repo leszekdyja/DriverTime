@@ -18,6 +18,12 @@ export type ReportActivity = {
     endUtc: string;
     activityType: string;
     durationSeconds: number;
+    vehicle?: string;
+    vehicleRegistration?: string;
+    vehicleRegistrationNumber?: string;
+    startOdometerKm?: number | null;
+    endOdometerKm?: number | null;
+    distanceKm?: number | null;
 };
 
 type ReportFormat = "pdf" | "excel";
@@ -46,32 +52,40 @@ async function getJson<T>(url: string, errorMessage: string): Promise<T> {
 export function getReportDrivers(): Promise<ReportDriver[]> {
     return getJson<ReportDriver[]>(
         `${API_URL}/api/drivers`,
-        "Nie udalo sie pobrac listy kierowcow.",
+        "Nie udało się pobrać listy kierowców.",
     );
 }
 
 export function getReportActivities(
-    driverCardNumber: string,
+    driverId: string,
     dateFrom: string,
     dateTo: string,
+    driverCardNumber?: string,
 ): Promise<ReportActivity[]> {
     const parameters = new URLSearchParams();
+    const safeDriverId = driverId.trim();
+    const safeDriverCardNumber = driverCardNumber?.trim() ?? "";
+    const safeDateFrom = dateFrom.trim();
+    const safeDateTo = dateTo.trim();
 
-    if (driverCardNumber) {
-        parameters.set("driverCardNumber", driverCardNumber);
+    if ((!safeDriverId && !safeDriverCardNumber) || !safeDateFrom || !safeDateTo) {
+        throw new Error("Wybierz kierowcę i pełny zakres dat przed pobraniem aktywności.");
     }
 
-    if (dateFrom) {
-        parameters.set("from", `${dateFrom}T00:00:00Z`);
+    if (safeDriverId) {
+        parameters.set("driverId", safeDriverId);
     }
 
-    if (dateTo) {
-        parameters.set("to", `${dateTo}T23:59:59Z`);
+    if (safeDriverCardNumber) {
+        parameters.set("driverCardNumber", safeDriverCardNumber);
     }
+
+    parameters.set("from", `${safeDateFrom}T00:00:00Z`);
+    parameters.set("to", `${safeDateTo}T23:59:59Z`);
 
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
-        "Nie udalo sie pobrac danych raportu.",
+        "Nie udało się pobrać danych raportu.",
     );
 }
 
@@ -90,7 +104,7 @@ export async function downloadDriverReport(
     );
 
     if (!response.ok) {
-        let message = `Nie udalo sie pobrac raportu ${format.toUpperCase()}.`;
+        let message = `Nie udało się pobrać raportu ${format.toUpperCase()}.`;
 
         try {
             const error = (await response.json()) as { message?: string };
@@ -106,7 +120,7 @@ export async function downloadDriverReport(
     const responseType = response.headers.get("Content-Type")?.split(";", 1)[0];
 
     if (responseType && responseType !== file.contentType) {
-        throw new Error(`API zwrocilo nieprawidlowy format pliku ${format.toUpperCase()}.`);
+        throw new Error(`API zwróciło nieprawidłowy format pliku ${format.toUpperCase()}.`);
     }
 
     const blob = await response.blob();

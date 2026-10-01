@@ -16,6 +16,8 @@ public class Violation : BaseEntity
 
     public int DurationMinutes { get; set; }
 
+    public string MetadataJson { get; set; } = "{}";
+
     public DateTime ViolationStart { get; set; }
 
     public DateTime ViolationEnd { get; set; }

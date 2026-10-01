@@ -32,16 +32,32 @@ public class DriverReportDto
 
     public long AvailabilitySeconds { get; set; }
 
+    public int? TotalDistanceKm { get; set; }
+
     public List<DriverReportActivityDto> Activities { get; set; } = new();
 }
 
 public class DriverReportActivityDto
 {
+    public Guid DddFileId { get; set; }
+
+    public Guid? VehicleUseId { get; set; }
+
+    public string VehicleUseBusinessKey { get; set; } = string.Empty;
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;
 
+    public string VehicleRegistration { get; set; } = string.Empty;
+
     public long DurationSeconds { get; set; }
+
+    public int? StartOdometerKm { get; set; }
+
+    public int? EndOdometerKm { get; set; }
+
+    public int? DistanceKm { get; set; }
 }

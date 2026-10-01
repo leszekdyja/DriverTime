@@ -15,7 +15,7 @@ export async function getDddImports(): Promise<DddImport[]> {
     const response = await apiFetch("/api/ddd-files");
 
     if (!response.ok) {
-        throw new Error("Nie udalo sie pobrac listy importow DDD.");
+        throw new Error("Nie udało się pobrać listy importów DDD.");
     }
 
     return response.json() as Promise<DddImport[]>;
@@ -31,6 +31,6 @@ export async function deleteDddImport(id: string): Promise<void> {
     }
 
     if (!response.ok) {
-        throw new Error("Nie udalo sie usunac importu DDD.");
+        throw new Error("Nie udało się usunąć importu DDD.");
     }
 }

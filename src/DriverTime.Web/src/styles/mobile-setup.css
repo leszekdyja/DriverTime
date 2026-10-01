@@ -1,0 +1,100 @@
+.mobile-setup-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--color-surface-muted);
+}
+
+.mobile-setup-panel {
+    width: min(100%, 720px);
+    padding: 28px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-card);
+}
+
+.mobile-setup-eyebrow {
+    margin: 0 0 6px;
+    color: var(--color-primary);
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.mobile-setup-panel h1 {
+    margin: 0;
+    color: var(--color-heading);
+}
+
+.mobile-setup-lead,
+.mobile-setup-note {
+    color: var(--color-muted);
+}
+
+.mobile-setup-steps {
+    display: grid;
+    gap: 14px;
+    margin-top: 24px;
+}
+
+.mobile-setup-steps article {
+    display: grid;
+    grid-template-columns: 36px 1fr;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+}
+
+.mobile-setup-steps article > span {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: white;
+    font-weight: 800;
+}
+
+.mobile-setup-steps h2 {
+    margin: 0 0 6px;
+    font-size: 18px;
+}
+
+.mobile-setup-steps p {
+    margin: 0 0 14px;
+    color: var(--color-muted);
+}
+
+.mobile-setup-primary,
+.mobile-setup-secondary {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.mobile-setup-primary {
+    background: var(--color-primary);
+    color: white;
+}
+
+.mobile-setup-secondary {
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-heading);
+}
+
+.mobile-setup-error {
+    padding: 12px 14px;
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+}

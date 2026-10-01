@@ -31,10 +31,32 @@ public class AuthService : IAuthService
         CancellationToken cancellationToken = default)
     {
         var email = NormalizeEmail(request.Email);
-        var user = await UserQuery()
+        var userRecord = await _dbContext.Users
             .FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
 
-        if (user is null || !user.Active || !_passwordHasher.Verify(request.Password, user.PasswordHash))
+        if (userRecord is null)
+        {
+            return null;
+        }
+
+        var companyExists = await _dbContext.Companies
+            .AnyAsync(x => x.Id == userRecord.CompanyId, cancellationToken);
+        var roleExists = await _dbContext.Roles
+            .AnyAsync(x => x.Id == userRecord.RoleId, cancellationToken);
+        if (!companyExists || !roleExists)
+        {
+            return null;
+        }
+
+        var user = await UserQuery()
+            .FirstOrDefaultAsync(x => x.Id == userRecord.Id, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var passwordVerified = _passwordHasher.Verify(request.Password, user.PasswordHash);
+        if (!user.Active || !passwordVerified)
         {
             return null;
         }
@@ -91,6 +113,30 @@ public class AuthService : IAuthService
         if (!_currentUser.IsAuthenticated)
         {
             return null;
+        }
+
+        if (_currentUser.IsMobileDriver && _currentUser.DriverId != Guid.Empty)
+        {
+            var driver = await _dbContext.Drivers
+                .Include(x => x.Company)
+                .FirstOrDefaultAsync(x =>
+                    x.Id == _currentUser.DriverId
+                    && x.CompanyId == _currentUser.CompanyId,
+                    cancellationToken);
+
+            return driver is null
+                ? null
+                : new CurrentUserDto
+                {
+                    Id = driver.Id,
+                    CompanyId = driver.CompanyId,
+                    CompanyName = driver.Company?.Name ?? string.Empty,
+                    FirstName = driver.FirstName,
+                    LastName = driver.LastName,
+                    Email = $"driver-{driver.Id:N}@mobile.drivertime.local",
+                    Role = "MobileDriver",
+                    DriverId = driver.Id
+                };
         }
 
         var user = await UserQuery()

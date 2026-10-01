@@ -18,13 +18,45 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<DddFile> DddFiles => Set<DddFile>();
 
+    public DbSet<DddImportMonitoringEntry> DddImportMonitoringEntries =>
+        Set<DddImportMonitoringEntry>();
+
     public DbSet<DriverActivity> DriverActivities => Set<DriverActivity>();
 
     public DbSet<VehicleUse> VehicleUses => Set<VehicleUse>();
 
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+
     public DbSet<CountryEntry> CountryEntries => Set<CountryEntry>();
 
     public DbSet<Driver> Drivers => Set<Driver>();
+
+    public DbSet<Violation> Violations => Set<Violation>();
+
+    public DbSet<ComplianceRun> ComplianceRuns => Set<ComplianceRun>();
+
+    public DbSet<ComplianceRunViolation> ComplianceRunViolations =>
+        Set<ComplianceRunViolation>();
+
+    public DbSet<CardReadSession> CardReadSessions => Set<CardReadSession>();
+
+    public DbSet<PlanningDuty> PlanningDuties => Set<PlanningDuty>();
+
+    public DbSet<PlanningDutyLine> PlanningDutyLines => Set<PlanningDutyLine>();
+
+    public DbSet<PlanningDutyStop> PlanningDutyStops => Set<PlanningDutyStop>();
+
+    public DbSet<PlanningSchedule> PlanningSchedules => Set<PlanningSchedule>();
+
+    public DbSet<PlanningAssignment> PlanningAssignments => Set<PlanningAssignment>();
+
+    public DbSet<PlanningDriverAvailability> PlanningDriverAvailabilities => Set<PlanningDriverAvailability>();
+
+    public DbSet<PlanningDriverDutyRule> PlanningDriverDutyRules => Set<PlanningDriverDutyRule>();
+
+    public DbSet<DriverWorkEvidenceEntry> DriverWorkEvidenceEntries => Set<DriverWorkEvidenceEntry>();
+
+    public DbSet<MobileAppInvite> MobileAppInvites => Set<MobileAppInvite>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -100,9 +132,43 @@ public class DriverTimeDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<DddImportMonitoringEntry>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.CreatedAtUtc });
+            entity.HasIndex(x => x.UserId);
+
+            entity.Property(x => x.FileName)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.LastError)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.StoredFilePath)
+                .HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.DddImportMonitoringEntries)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<DriverActivity>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EndUtc, x.StartUtc, x.DddFileId });
         });
 
         modelBuilder.Entity<VehicleUse>(entity =>
@@ -110,9 +176,33 @@ public class DriverTimeDbContext : DbContext
             entity.HasKey(x => x.Id);
         });
 
+        modelBuilder.Entity<Vehicle>(entity =>
+        {
+            entity.ToTable("Vehicles");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.RegistrationNumber })
+                .IsUnique();
+
+            entity.Property(x => x.RegistrationNumber)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Vin)
+                .HasMaxLength(100);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.Vehicles)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<CountryEntry>(entity =>
         {
             entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.EntryType)
+                .HasMaxLength(20)
+                .HasDefaultValue("Unknown");
         });
 
         modelBuilder.Entity<Driver>(entity =>
@@ -132,9 +222,330 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.CardIssuingCountry)
                 .HasMaxLength(10);
 
+            entity.Property(x => x.IncludeInPlanning)
+                .HasDefaultValue(true);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)
                 .HasForeignKey(x => x.CompanyId);
         });
+
+        modelBuilder.Entity<Violation>(entity =>
+        {
+            entity.ToTable("violations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.DriverId);
+
+            entity.Property(x => x.MetadataJson)
+                .HasMaxLength(8000);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComplianceRun>(entity =>
+        {
+            entity.ToTable("compliance_runs");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.CreatedAtUtc });
+
+            entity.Property(x => x.Trigger)
+                .HasMaxLength(100);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Violations)
+                .WithOne(x => x.ComplianceRun)
+                .HasForeignKey(x => x.ComplianceRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComplianceRunViolation>(entity =>
+        {
+            entity.ToTable("compliance_run_violations");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => x.ComplianceRunId);
+
+            entity.Property(x => x.Code)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.RuleName)
+                .HasMaxLength(300);
+
+            entity.Property(x => x.Severity)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.MetadataJson)
+                .HasMaxLength(8000);
+        });
+
+
+        modelBuilder.Entity<PlanningDuty>(entity =>
+        {
+            entity.ToTable("PlanningDuties");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DutyNumber, x.ValidFrom });
+
+            entity.Property(x => x.DutyNumber).HasMaxLength(50);
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.VehicleRequirement).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.SourceFileName).HasMaxLength(500);
+            entity.Property(x => x.DistanceKm).HasPrecision(10, 2);
+            entity.Property(x => x.ActiveDaysMask).HasDefaultValue(31);
+            entity.Property(x => x.IncludeHolidays).HasDefaultValue(false);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.PlanningDuties)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Lines)
+                .WithOne(x => x.PlanningDuty)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Stops)
+                .WithOne(x => x.PlanningDuty)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningDutyLine>(entity =>
+        {
+            entity.ToTable("PlanningDutyLines");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.PlanningDutyId);
+
+            entity.Property(x => x.LineCode).HasMaxLength(50);
+            entity.Property(x => x.Variant).HasMaxLength(100);
+            entity.Property(x => x.DistanceKm).HasPrecision(10, 2);
+        });
+
+        modelBuilder.Entity<PlanningDutyStop>(entity =>
+        {
+            entity.ToTable("PlanningDutyStops");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PlanningDutyId, x.Sequence });
+
+            entity.Property(x => x.StopName).HasMaxLength(200);
+            entity.Property(x => x.TripGroup).HasMaxLength(100);
+            entity.Property(x => x.LineCode).HasMaxLength(50);
+            entity.Property(x => x.Km).HasPrecision(10, 2);
+        });
+
+        modelBuilder.Entity<PlanningSchedule>(entity =>
+        {
+            entity.ToTable("PlanningSchedules");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Year, x.Month });
+
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.PlanningSchedules)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.Assignments)
+                .WithOne(x => x.PlanningSchedule)
+                .HasForeignKey(x => x.PlanningScheduleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningAssignment>(entity =>
+        {
+            entity.ToTable("PlanningAssignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PlanningScheduleId, x.DriverId, x.Date }).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.Date });
+
+            entity.Property(x => x.AssignmentType)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.StartDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.EndDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.PlanningAssignments)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.PlanningDuty)
+                .WithMany(x => x.PlanningAssignments)
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PlanningDriverAvailability>(entity =>
+        {
+            entity.ToTable("PlanningDriverAvailabilities");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DateFrom, x.DateTo });
+            entity.HasIndex(x => new { x.DriverId, x.DateFrom, x.DateTo });
+
+            entity.Property(x => x.Type)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlanningDriverDutyRule>(entity =>
+        {
+            entity.ToTable("PlanningDriverDutyRules");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.DriverId);
+            entity.HasIndex(x => x.PlanningDutyId);
+            entity.HasIndex(x => x.Type);
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.PlanningDutyId, x.Type, x.ValidFrom, x.ValidTo }).IsUnique();
+
+            entity.Property(x => x.Type)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany()
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.PlanningDuty)
+                .WithMany()
+                .HasForeignKey(x => x.PlanningDutyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DriverWorkEvidenceEntry>(entity =>
+        {
+            entity.ToTable("DriverWorkEvidenceEntries");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.Date });
+            entity.HasIndex(x => new { x.DriverId, x.StartDateTime, x.EndDateTime });
+
+            entity.Property(x => x.ActivityType)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.Source)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+            entity.Property(x => x.StartDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.EndDateTime)
+                .HasColumnType("timestamp without time zone");
+            entity.Property(x => x.VehicleRegistration)
+                .HasMaxLength(50);
+            entity.Property(x => x.CountryCode)
+                .HasMaxLength(10);
+            entity.Property(x => x.DistanceKm)
+                .HasPrecision(10, 2);
+            entity.Property(x => x.Description)
+                .HasMaxLength(2000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.WorkEvidenceEntries)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MobileAppInvite>(entity =>
+        {
+            entity.ToTable("MobileAppInvites");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.CompanyId, x.DriverId, x.CreatedAtUtc });
+
+            entity.Property(x => x.TokenHash)
+                .HasMaxLength(128);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Driver)
+                .WithMany(x => x.MobileAppInvites)
+                .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<CardReadSession>(entity =>
+        {
+            entity.ToTable("CardReadSessions");
+            entity.HasKey(x => x.Id);
+
+            entity.HasIndex(x => new { x.CompanyId, x.StartedAtUtc });
+            entity.HasIndex(x => x.Status);
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(32);
+
+            entity.Property(x => x.ReaderName)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.DriverCardNumber)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(2000);
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(1000);
+
+            entity.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }
+
+
+
+
+
+
+
+

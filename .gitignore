@@ -41,6 +41,20 @@ node_modules/
 dist/
 build/
 coverage/
+*.exe
+
+# Android local/build artifacts
+.gradle/
+**/local.properties
+**/*.apk
+
+# =========================
+# Local Tkinter planning artifacts
+# =========================
+
+planowanie_sluzb_tkinter_*.py
+planowanie_sluzb_tkinter_*.spec
+planowanie_sluzb_tkinter_*.zip
 
 npm-debug.log*
 yarn-debug.log*
@@ -77,6 +91,7 @@ logs/
 
 tmp/
 temp/
+.codex-build/
 
 # =========================
 # Generated frontend files

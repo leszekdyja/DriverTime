@@ -49,7 +49,7 @@ export async function getDddImportDetails(
             throw new Error("Nie znaleziono wybranego importu DDD.");
         }
 
-        throw new Error("Nie udalo sie pobrac szczegolow importu DDD.");
+        throw new Error("Nie udało się pobrać szczegółów importu DDD.");
     }
 
     return response.json() as Promise<DddImportDetails>;

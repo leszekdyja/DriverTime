@@ -1,0 +1,51 @@
+warning: in the working copy of 'src/DriverTime.Application/Services/DddImportService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Application/Violations/DTOs/ViolationDto.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Domain/Compliance/ComplianceCountryEntry.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Domain/Entities/CountryEntry.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Compliance/ComplianceEngineService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Compliance/Rules/CountryEntryCompletenessRule.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Migrations/DriverTimeDb/DriverTimeDbContextModelSnapshot.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Persistence/DriverTimeDbContext.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/DddFileService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/DriverService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Infrastructure/Services/ViolationQueryService.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/components/DddDropzone.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/CardReaderPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/DashboardPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/ImportMonitoringPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/LandingPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/LoginPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/pages/ViolationsPage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/excelExportService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/pdfExportService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/services/violationsService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/styles/violations.css', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/DriverTime.Web/src/utils/complianceLabels.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/DriverTime.Infrastructure.Tests/Compliance/CountryEntryCompletenessRuleTests.cs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/DriverTime.Infrastructure.Tests/Violations/ViolationQueryServiceMappingTests.cs', LF will be replaced by CRLF the next time Git touches it
+ .../Services/DddImportService.cs                   |  35 [32m++[m
+ .../Violations/DTOs/ViolationDto.cs                |  77 [32m+++++[m
+ .../Compliance/ComplianceCountryEntry.cs           |   2 [32m+[m
+ src/DriverTime.Domain/Entities/CountryEntry.cs     |   4 [32m+[m[31m-[m
+ .../Compliance/ComplianceEngineService.cs          |   1 [32m+[m
+ .../Rules/CountryEntryCompletenessRule.cs          | 102 [32m+++++[m[31m-[m
+ .../DriverTimeDbContextModelSnapshot.cs            |   6 [32m+[m
+ .../Persistence/DriverTimeDbContext.cs             |   4 [32m+[m
+ .../Services/DddFileService.cs                     |  40 [32m++[m[31m-[m
+ .../Services/DriverService.cs                      |   2 [32m+[m[31m-[m
+ .../Services/ViolationQueryService.cs              | 356 [32m++++++++++++++++++++[m[31m-[m
+ src/DriverTime.Web/src/components/DddDropzone.tsx  |   2 [32m+[m
+ src/DriverTime.Web/src/pages/CardReaderPage.tsx    |   4 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/DashboardPage.tsx     |  28 [32m+[m[31m-[m
+ .../src/pages/ImportMonitoringPage.tsx             |  13 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/LandingPage.tsx       |   2 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/LoginPage.tsx         |   2 [32m+[m[31m-[m
+ src/DriverTime.Web/src/pages/ViolationsPage.tsx    | 109 [32m++++++[m[31m-[m
+ .../src/services/excelExportService.ts             |   6 [32m+[m[31m-[m
+ .../src/services/pdfExportService.ts               |   2 [32m+[m[31m-[m
+ .../src/services/violationsService.ts              |  43 [32m+++[m
+ src/DriverTime.Web/src/styles/violations.css       |  86 [32m+++++[m
+ src/DriverTime.Web/src/utils/complianceLabels.ts   |  65 [32m++[m[31m--[m
+ .../CountryEntryCompletenessRuleTests.cs           |  73 [32m++++[m[31m-[m
+ .../ViolationQueryServiceMappingTests.cs           |  49 [32m++[m[31m-[m
+ 25 files changed, 1021 insertions(+), 92 deletions(-)

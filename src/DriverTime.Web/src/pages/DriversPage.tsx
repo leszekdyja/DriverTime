@@ -1,4 +1,4 @@
-import {
+﻿import {
     useCallback,
     useDeferredValue,
     useEffect,
@@ -21,12 +21,23 @@ type DriverDto = {
     cardNumber: string;
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
+    includeInPlanning: boolean;
 };
 
 type CreateDriverDto = {
     firstName: string;
     lastName: string;
     cardNumber: string;
+    includeInPlanning: boolean;
+};
+
+type DriverMobileInviteDto = {
+    driverId: string;
+    driverFullName: string;
+    token: string;
+    apiBaseUrl: string;
+    inviteLink: string;
+    expiresAtUtc: string;
 };
 
 const driversApiUrl = `${API_URL}/api/drivers`;
@@ -38,6 +49,7 @@ export default function DriversPage() {
         firstName: "",
         lastName: "",
         cardNumber: "",
+        includeInPlanning: true,
     });
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +57,10 @@ export default function DriversPage() {
     const [isError, setIsError] = useState(false);
     const [search, setSearch] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
+    const [driverToDelete, setDriverToDelete] = useState<DriverDto | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isCreatingInviteFor, setIsCreatingInviteFor] = useState<string | null>(null);
+    const [mobileInvite, setMobileInvite] = useState<DriverMobileInviteDto | null>(null);
     const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     const filteredDrivers = useMemo(() => {
@@ -52,6 +68,7 @@ export default function DriversPage() {
 
         return drivers.filter((driver) =>
             driver.lastName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
+            || driver.firstName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
             || driver.cardNumber.toLocaleLowerCase("pl-PL").includes(deferredSearch),
         );
     }, [deferredSearch, drivers]);
@@ -70,13 +87,13 @@ export default function DriversPage() {
             const response = await apiFetch(driversApiUrl);
 
             if (!response.ok) {
-                throw new Error("Nie udalo sie pobrac kierowcow.");
+                throw new Error("Nie udało się pobrać kierowców.");
             }
 
             setDrivers((await response.json()) as DriverDto[]);
         } catch {
             setIsError(true);
-            setMessage("Blad podczas pobierania kierowcow.");
+            setMessage("błąd podczas pobierania kierowców.");
         } finally {
             setIsLoading(false);
         }
@@ -103,18 +120,125 @@ export default function DriversPage() {
             });
 
             if (!response.ok) {
-                throw new Error("Nie udalo sie dodac kierowcy.");
+                throw new Error("Nie udało się dodać kierowcy.");
             }
 
-            setForm({ firstName: "", lastName: "", cardNumber: "" });
+            setForm({ firstName: "", lastName: "", cardNumber: "", includeInPlanning: true });
             await loadDrivers();
-            setMessage("Kierowca zostal dodany.");
+            setMessage("Kierowca został dodany.");
         } catch {
             setIsError(true);
-            setMessage("Blad podczas dodawania kierowcy.");
+            setMessage("błąd podczas dodawania kierowcy.");
         } finally {
             setIsSaving(false);
         }
+    }
+
+    async function toggleDriverPlanning(driver: DriverDto, includeInPlanning: boolean) {
+        setMessage("");
+        setIsError(false);
+        setDrivers((current) => current.map((item) => item.id === driver.id ? { ...item, includeInPlanning } : item));
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driver.id}/planning`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ includeInPlanning }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Nie udało się zapisać ustawienia planowania.");
+            }
+
+            const saved = (await response.json()) as DriverDto;
+            setDrivers((current) => current.map((item) => item.id === saved.id ? saved : item));
+            setMessage("Ustawienie planowania kierowcy zostało zapisane.");
+        } catch (error) {
+            setDrivers((current) => current.map((item) => item.id === driver.id ? driver : item));
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się zapisać ustawienia planowania.");
+        }
+    }
+    async function deleteDriver() {
+        if (!driverToDelete) return;
+
+        setIsDeleting(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driverToDelete.id}`, {
+                method: "DELETE",
+            });
+
+            if (response.status === 404) {
+                throw new Error("Nie znaleziono kierowcy w Twojej firmie.");
+            }
+
+            if (!response.ok) {
+                throw new Error("Nie udało się usunąć kierowcy.");
+            }
+
+            setDriverToDelete(null);
+            await loadDrivers();
+            setMessage("Kierowca został usunięty wraz z importami, aktywnościami i naruszeniami.");
+        } catch (deleteError) {
+            setIsError(true);
+            setMessage(
+                deleteError instanceof Error
+                    ? deleteError.message
+                    : "Wystąpił błąd podczas usuwania kierowcy.",
+            );
+        } finally {
+            setIsDeleting(false);
+        }
+    }
+
+    async function createMobileInvite(driver: DriverDto) {
+        setMessage("");
+        setIsError(false);
+        setIsCreatingInviteFor(driver.id);
+
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driver.id}/mobile-invite`, {
+                method: "POST",
+            });
+
+            if (!response.ok) {
+                throw new Error("Nie udało się utworzyć linku do aplikacji.");
+            }
+
+            const invite = (await response.json()) as DriverMobileInviteDto;
+            setMobileInvite(invite);
+
+            if (navigator.clipboard) {
+                await navigator.clipboard.writeText(invite.inviteLink);
+                setMessage("Link do aplikacji został utworzony i skopiowany do schowka.");
+            } else {
+                setMessage("Link do aplikacji został utworzony.");
+            }
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się utworzyć linku do aplikacji.");
+        } finally {
+            setIsCreatingInviteFor(null);
+        }
+    }
+
+    async function shareMobileInvite() {
+        if (!mobileInvite) return;
+
+        const text = `DriverTime - konfiguracja aplikacji dla kierowcy ${mobileInvite.driverFullName}: ${mobileInvite.inviteLink}`;
+
+        if (navigator.share) {
+            await navigator.share({
+                title: "DriverTime - aplikacja kierowcy",
+                text,
+            });
+            return;
+        }
+
+        window.location.href = `mailto:?subject=${encodeURIComponent("DriverTime - aplikacja kierowcy")}&body=${encodeURIComponent(text)}`;
     }
 
     useEffect(() => {
@@ -134,15 +258,15 @@ export default function DriversPage() {
             <div className="drivers-heading">
                 <div>
                     <h2>Kierowcy</h2>
-                    <p>Zarzadzaj kierowcami i numerami kart kierowcow.</p>
+                    <p>zarządzaj kierowcami i numerami kart kierowców.</p>
                 </div>
-                <span className="drivers-count">{drivers.length} kierowcow</span>
+                <span className="drivers-count">{drivers.length} kierowców</span>
             </div>
 
             <div className="drivers-grid">
                 <form className="driver-form" onSubmit={addDriver}>
                     <div className="section-heading">
-                        <h3>Dodaj kierowce</h3>
+                        <h3>Dodaj kierowcę</h3>
                         <p>Wprowadz podstawowe dane nowego kierowcy.</p>
                     </div>
 
@@ -178,16 +302,27 @@ export default function DriversPage() {
                             }
                         />
                     </label>
+                    <label className="driver-planning-toggle">
+                        <input
+                            type="checkbox"
+                            checked={form.includeInPlanning}
+                            onChange={(event) => setForm({ ...form, includeInPlanning: event.target.checked })}
+                        />
+                        <span>
+                            Uwzględniaj w automatycznym planowaniu
+                            <small>Kierowca będzie uwzględniany przy automatycznym generowaniu grafików.</small>
+                        </span>
+                    </label>
 
                     <button type="submit" disabled={isSaving}>
-                        {isSaving ? "Zapisywanie..." : "Dodaj kierowce"}
+                        {isSaving ? "Zapisywanie..." : "Dodaj kierowcę"}
                     </button>
                 </form>
 
                 <section className="drivers-panel">
                     <div className="section-heading">
-                        <h3>Lista kierowcow</h3>
-                        <p>Aktualna baza kierowcow DriverTime.</p>
+                        <h3>Lista kierowców</h3>
+                        <p>Aktualna baza kierowców DriverTime.</p>
                     </div>
 
                     <div className="drivers-toolbar">
@@ -195,7 +330,7 @@ export default function DriversPage() {
                         <input
                             id="drivers-search"
                             type="search"
-                            placeholder="Nazwisko lub numer karty"
+                            placeholder="Nazwisko, imię lub numer karty"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                         />
@@ -214,17 +349,17 @@ export default function DriversPage() {
 
                     {isLoading ? (
                         drivers.length === 0 ? (
-                            <TableSkeleton rows={6} columns={6} />
+                            <TableSkeleton rows={6} columns={8} />
                         ) : null
                     ) : drivers.length === 0 ? (
                         <EmptyState
-                            title="Brak kierowcow"
-                            description="Dodaj kierowce recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
+                            title="Brak kierowców"
+                            description="Dodaj kierowcę recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
                         />
                     ) : filteredDrivers.length === 0 ? (
                         <EmptyState
                             title="Brak wynikow"
-                            description="Zmien nazwisko lub numer karty wpisany w wyszukiwarce."
+                            description="Zmień nazwisko lub numer karty wpisany w wyszukiwarce."
                         />
                     ) : null}
 
@@ -234,19 +369,21 @@ export default function DriversPage() {
                                 <table className="drivers-table">
                                 <thead>
                                     <tr>
-                                        <th>Imie</th>
                                         <th>Nazwisko</th>
+                                        <th>Imie</th>
                                         <th>Numer karty</th>
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
+                                        <th>Planowanie</th>
+                                        <th>Aplikacja</th>
                                         <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {visibleDrivers.map((driver) => (
                                         <tr key={driver.id}>
-                                            <td>{driver.firstName}</td>
                                             <td>{driver.lastName}</td>
+                                            <td>{driver.firstName}</td>
                                             <td>{driver.cardNumber}</td>
                                             <td>
                                                 {driver.cardExpiryDate
@@ -255,9 +392,38 @@ export default function DriversPage() {
                                             </td>
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
                                             <td>
+                                                <label className="driver-table-toggle">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={driver.includeInPlanning}
+                                                        onChange={(event) => void toggleDriverPlanning(driver, event.target.checked)}
+                                                    />
+                                                    <span>{driver.includeInPlanning ? "Tak" : "Nie"}</span>
+                                                </label>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className="driver-details-link"
+                                                    type="button"
+                                                    onClick={() => void createMobileInvite(driver)}
+                                                    disabled={isCreatingInviteFor === driver.id}
+                                                >
+                                                    {isCreatingInviteFor === driver.id ? "Tworzenie..." : "Wyślij link"}
+                                                </button>
+                                            </td>
+                                            <td>
+                                                <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
-                                                    Szczegoly
+                                                    Szczegóły
                                                 </Link>
+                                                    <button
+                                                        className="driver-delete-button"
+                                                        type="button"
+                                                        onClick={() => setDriverToDelete(driver)}
+                                                    >
+                                                        Usuń
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -274,6 +440,79 @@ export default function DriversPage() {
                     )}
                 </section>
             </div>
+
+            {driverToDelete && (
+                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => !isDeleting && setDriverToDelete(null)}>
+                    <section
+                        className="driver-delete-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="driver-delete-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h3 id="driver-delete-title">Usuń kierowcę</h3>
+                        <p>
+                            Czy na pewno chcesz usunąć kierowcę {driverToDelete.lastName} {driverToDelete.firstName}? Usunięte zostaną również importy, aktywności i naruszenia tego kierowcy.
+                        </p>
+                        <div className="driver-delete-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => setDriverToDelete(null)}
+                                disabled={isDeleting}
+                            >
+                                Anuluj
+                            </button>
+                            <button
+                                className="danger"
+                                type="button"
+                                onClick={() => void deleteDriver()}
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? "Usuwanie..." : "Usuń kierowcę"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
+            {mobileInvite && (
+                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => setMobileInvite(null)}>
+                    <section
+                        className="driver-delete-modal driver-mobile-invite-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="driver-mobile-invite-title"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <h3 id="driver-mobile-invite-title">Link do aplikacji kierowcy</h3>
+                        <p>
+                            Link zawiera jednorazową konfigurację aplikacji dla kierowcy {mobileInvite.driverFullName}.
+                            Wygasa {new Date(mobileInvite.expiresAtUtc).toLocaleString("pl-PL")}.
+                        </p>
+                        <label>
+                            Link konfiguracji
+                            <textarea readOnly value={mobileInvite.inviteLink} rows={4} />
+                        </label>
+                        <div className="driver-delete-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => void navigator.clipboard?.writeText(mobileInvite.inviteLink)}
+                            >
+                                Kopiuj
+                            </button>
+                            <button type="button" onClick={() => void shareMobileInvite()}>
+                                Wyślij
+                            </button>
+                            <button type="button" onClick={() => setMobileInvite(null)}>
+                                Zamknij
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 }
+
+
+
+

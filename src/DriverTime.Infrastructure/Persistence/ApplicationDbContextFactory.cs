@@ -3,16 +3,15 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace DriverTime.Infrastructure.Persistence;
 
-public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<ApplicationDbContext>
+public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<DriverTimeDbContext>
 {
-    public ApplicationDbContext CreateDbContext(string[] args)
+    public DriverTimeDbContext CreateDbContext(string[] args)
     {
-        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        var optionsBuilder = new DbContextOptionsBuilder<DriverTimeDbContext>();
 
         optionsBuilder.UseNpgsql(
-            "Host=localhost;Port=5433;Database=drivertime;Username=postgres;Password=postgres"
-        );
+            "Host=localhost;Port=5434;Database=drivertime;Username=drivertime;Password=postgres");
 
-        return new ApplicationDbContext(optionsBuilder.Options);
+        return new DriverTimeDbContext(optionsBuilder.Options);
     }
 }

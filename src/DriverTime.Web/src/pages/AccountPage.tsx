@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+﻿import { useEffect, useState, type FormEvent } from "react";
 
 import {
     changeAccountPassword,
@@ -17,8 +17,19 @@ const emptyProfile: AccountProfile = {
     companyName: "",
 };
 
+const roleLabels: Record<string, string> = {
+    Admin: "Administrator",
+    Dispatcher: "Dyspozytor",
+    Driver: "Kierowca",
+};
+
+function formatRole(role?: string) {
+    return role ? roleLabels[role] ?? role : "";
+}
+
 export default function AccountPage() {
     const [profile, setProfile] = useState<AccountProfile>(emptyProfile);
+    const [lastSavedEmail, setLastSavedEmail] = useState("");
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
@@ -32,9 +43,11 @@ export default function AccountPage() {
     useEffect(() => {
         async function loadProfile() {
             try {
-                setProfile(await getAccountProfile());
+                const loadedProfile = await getAccountProfile();
+                setProfile(loadedProfile);
+                setLastSavedEmail(loadedProfile.email.trim().toLowerCase());
             } catch (error) {
-                setLoadError(error instanceof Error ? error.message : "Nie udalo sie pobrac profilu.");
+                setLoadError(error instanceof Error ? error.message : "Nie udało się pobrać profilu.");
             } finally {
                 setIsLoading(false);
             }
@@ -65,14 +78,21 @@ export default function AccountPage() {
         setProfileMessage({ type: "", text: "" });
 
         try {
+            const emailChanged = normalized.email !== lastSavedEmail;
             const saved = await updateAccountProfile(normalized);
             setProfile(saved);
-            setProfileMessage({ type: "success", text: "Profil zostal zapisany." });
+            setLastSavedEmail(saved.email.trim().toLowerCase());
+            setProfileMessage({
+                type: "success",
+                text: emailChanged
+                    ? "Adres e-mail został zmieniony. Od następnego logowania używaj nowego adresu e-mail."
+                    : "Profil został zapisany.",
+            });
             window.dispatchEvent(new CustomEvent("drivertime:profile-updated", { detail: saved }));
         } catch (error) {
             setProfileMessage({
                 type: "error",
-                text: error instanceof Error ? error.message : "Nie udalo sie zapisac profilu.",
+                text: error instanceof Error ? error.message : "Nie udało się zapisać profilu.",
             });
         } finally {
             setIsSavingProfile(false);
@@ -83,12 +103,12 @@ export default function AccountPage() {
         event.preventDefault();
 
         if (newPassword.length < 8) {
-            setPasswordMessage({ type: "error", text: "Nowe haslo musi miec co najmniej 8 znakow." });
+            setPasswordMessage({ type: "error", text: "Nowe hasło musi miec co najmniej 8 znakow." });
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            setPasswordMessage({ type: "error", text: "Nowe hasla nie sa takie same." });
+            setPasswordMessage({ type: "error", text: "Nowe hasła nie są takie same." });
             return;
         }
 
@@ -100,11 +120,11 @@ export default function AccountPage() {
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
-            setPasswordMessage({ type: "success", text: "Haslo zostalo zmienione." });
+            setPasswordMessage({ type: "success", text: "hasło zostało zmienione." });
         } catch (error) {
             setPasswordMessage({
                 type: "error",
-                text: error instanceof Error ? error.message : "Nie udalo sie zmienic hasla.",
+                text: error instanceof Error ? error.message : "Nie udało się zmienić hasła.",
             });
         } finally {
             setIsChangingPassword(false);
@@ -128,14 +148,14 @@ export default function AccountPage() {
         <div className="account-page">
             <div className="account-heading">
                 <h2>Moje konto</h2>
-                <p>Zarzadzaj danymi profilu i haslem dostepu.</p>
+                <p>zarządzaj danymi profilu i hasłem dostępu.</p>
             </div>
 
             <div className="account-grid">
                 <form className="account-card" onSubmit={handleProfileSubmit}>
                     <div className="account-card-heading">
                         <h3>Dane profilu</h3>
-                        <p>{profile.companyName} / {profile.role}</p>
+                        <p>{profile.companyName} / {formatRole(profile.role)}</p>
                     </div>
 
                     <label>
@@ -160,27 +180,27 @@ export default function AccountPage() {
 
                 <form className="account-card" onSubmit={handlePasswordSubmit}>
                     <div className="account-card-heading">
-                        <h3>Zmiana hasla</h3>
-                        <p>Nowe haslo musi miec co najmniej 8 znakow.</p>
+                        <h3>Zmiana hasła</h3>
+                        <p>Nowe hasło musi miec co najmniej 8 znakow.</p>
                     </div>
 
                     <label>
-                        Aktualne haslo
+                        Aktualne hasło
                         <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required autoComplete="current-password" />
                     </label>
                     <label>
-                        Nowe haslo
+                        Nowe hasło
                         <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} maxLength={200} autoComplete="new-password" />
                     </label>
                     <label>
-                        Powtorz nowe haslo
+                        powtórz nowe hasło
                         <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={8} maxLength={200} autoComplete="new-password" />
                     </label>
 
                     {passwordMessage.text && <p className={`account-message ${passwordMessage.type}`} role={passwordMessage.type === "error" ? "alert" : "status"}>{passwordMessage.text}</p>}
 
                     <button type="submit" disabled={isChangingPassword}>
-                        {isChangingPassword ? "Zmienianie..." : "Zmien haslo"}
+                        {isChangingPassword ? "Zmienianie..." : "Zmień hasło"}
                     </button>
                 </form>
             </div>

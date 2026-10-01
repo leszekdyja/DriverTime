@@ -18,9 +18,11 @@ public class DashboardController : ControllerBase
 
     [HttpGet]
     public async Task<ActionResult<DashboardDto>> GetDashboard(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
         CancellationToken cancellationToken)
     {
-        var dashboard = await _dashboardService.GetDashboardAsync(cancellationToken);
+        var dashboard = await _dashboardService.GetDashboardAsync(from, to, cancellationToken);
         return Ok(dashboard);
     }
 
@@ -30,5 +32,13 @@ public class DashboardController : ControllerBase
     {
         var overview = await _dashboardService.GetRiskOverviewAsync(cancellationToken);
         return Ok(overview);
+    }
+
+    [HttpGet("compliance-runs")]
+    public async Task<ActionResult<ComplianceRunDashboardStatsDto>> GetComplianceRunStats(
+        CancellationToken cancellationToken)
+    {
+        var stats = await _dashboardService.GetComplianceRunStatsAsync(cancellationToken);
+        return Ok(stats);
     }
 }

@@ -7,7 +7,7 @@ export default function ProtectedRoute() {
     const location = useLocation();
 
     if (isLoading) {
-        return <div className="auth-loading">Ladowanie sesji...</div>;
+        return <div className="auth-loading">Ładowanie sesji...</div>;
     }
 
     if (!user) {

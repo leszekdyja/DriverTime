@@ -1,6 +1,16 @@
 import { API_URL } from "../config/api";
 import { clearAuthSession, getAuthToken } from "./apiClient";
 
+export class DddUploadError extends Error {
+    readonly status: number;
+
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = "DddUploadError";
+        this.status = status;
+    }
+}
+
 export type DddUploadResult = {
     importId: string;
     driverCreated: boolean;
@@ -50,23 +60,23 @@ export function uploadDddFile(
             }
 
             if (request.status < 200 || request.status >= 300) {
-                reject(new Error(getUploadErrorMessage(request.responseText)));
+                reject(new DddUploadError(getUploadErrorMessage(request.responseText), request.status));
                 return;
             }
 
             try {
                 resolve(JSON.parse(request.responseText) as DddUploadResult);
             } catch {
-                reject(new Error("Serwer zwrocil nieprawidlowa odpowiedz."));
+                reject(new Error("Serwer zwrócił nieprawidłową odpowiedź."));
             }
         });
 
         request.addEventListener("error", () => {
-            reject(new Error("Nie udalo sie polaczyc z serwerem."));
+            reject(new Error("Nie udało się połączyć z serwerem."));
         });
 
         request.addEventListener("abort", () => {
-            reject(new Error("Przesylanie pliku zostalo przerwane."));
+            reject(new Error("Przesyłanie pliku zostało przerwane."));
         });
 
         request.send(formData);
@@ -74,7 +84,7 @@ export function uploadDddFile(
 }
 
 function getUploadErrorMessage(responseText: string): string {
-    const fallbackMessage = "Nie udalo sie przeslac pliku DDD.";
+    const fallbackMessage = "Nie udało się przesłać pliku DDD.";
 
     if (!responseText.trim()) {
         return fallbackMessage;

@@ -1,4 +1,4 @@
-import {
+﻿import {
     useCallback,
     useEffect,
     useState,
@@ -48,7 +48,7 @@ export default function ImportsPage() {
             setImportsError(
                 loadError instanceof Error
                     ? loadError.message
-                    : "Wystapil blad podczas pobierania importow.",
+                    : "Wystąpił błąd podczas pobierania importów.",
             );
         } finally {
             setIsLoadingImports(false);
@@ -61,7 +61,7 @@ export default function ImportsPage() {
 
     async function handleDelete(dddImport: DddImport) {
         const confirmed = window.confirm(
-            `Czy na pewno usunac import "${dddImport.fileName}"? Powiazane aktywnosci, pojazdy i wpisy krajow zostana usuniete.`,
+            `Czy na pewno usunąć import "${dddImport.fileName}"? Powi?zane aktywności, pojazdy i wpisy krajów zostaną usunięte.`,
         );
 
         if (!confirmed) return;
@@ -73,13 +73,13 @@ export default function ImportsPage() {
         try {
             await deleteDddImport(dddImport.id);
             await loadImports();
-            setDeleteMessage(`Usunieto import "${dddImport.fileName}".`);
+            setDeleteMessage(`Usunięto import "${dddImport.fileName}".`);
             window.dispatchEvent(new Event("drivertime:data-changed"));
         } catch (deleteError) {
             setImportsError(
                 deleteError instanceof Error
                     ? deleteError.message
-                    : "Wystapil blad podczas usuwania importu.",
+                    : "Wystąpił błąd podczas usuwania importu.",
             );
         } finally {
             setDeletingImportId(null);
@@ -89,18 +89,18 @@ export default function ImportsPage() {
     return (
         <div className="imports-page">
             <h2>Importy DDD</h2>
-            <p>Przeslij pliki z kart kierowcow lub tachografow.</p>
+            <p>prześlij pliki z kart kierowców lub tachografów.</p>
 
             <DddDropzone onImportsChanged={loadImports} />
 
             <section className="imports-list">
                 <div className="imports-list-heading">
                     <div>
-                        <h3>Historia importow</h3>
-                        <p>Zaimportowane pliki DDD uporzadkowane od najnowszych.</p>
+                        <h3>Historia importów</h3>
+                        <p>Zaimportowane pliki DDD uporządkowane od najnowszych.</p>
                     </div>
                     {!isLoadingImports && !importsError && (
-                        <span>{imports.length} importow</span>
+                        <span>{imports.length} importów</span>
                     )}
                 </div>
 
@@ -120,8 +120,8 @@ export default function ImportsPage() {
 
                 {!isLoadingImports && !importsError && imports.length === 0 && (
                     <EmptyState
-                        title="Brak importow DDD"
-                        description="Przeciagnij pliki DDD do pola powyzej, aby rozpoczac analize danych kierowcow."
+                        title="Brak importów DDD"
+                        description="Przeciągnij pliki DDD do pola powyżej, aby rozpocząć analizę danych kierowców."
                     />
                 )}
 
@@ -134,7 +134,7 @@ export default function ImportsPage() {
                                     <th>Kierowca</th>
                                     <th>Numer karty</th>
                                     <th>Data importu</th>
-                                    <th>Aktywnosci</th>
+                                    <th>Aktywności</th>
                                     <th>Status kierowcy</th>
                                     <th>Akcje</th>
                                 </tr>
@@ -160,7 +160,7 @@ export default function ImportsPage() {
                                             <span className={`driver-import-status ${dddImport.driverStatus}`}>
                                                 {dddImport.driverStatus === "new"
                                                     ? "Nowy kierowca"
-                                                    : "Istniejacy kierowca"}
+                                                    : "Istniejący kierowca"}
                                             </span>
                                         </td>
                                         <td>
@@ -169,7 +169,7 @@ export default function ImportsPage() {
                                                     className="details-button"
                                                     to={`/imports/${dddImport.id}`}
                                                 >
-                                                    Szczegoly
+                                                    Szczegóły
                                                 </Link>
                                                 <button
                                                     className="delete-import-button"
@@ -179,7 +179,7 @@ export default function ImportsPage() {
                                                 >
                                                     {deletingImportId === dddImport.id
                                                         ? "Usuwanie..."
-                                                        : "Usun"}
+                                                        : "Usuń"}
                                                 </button>
                                             </div>
                                         </td>

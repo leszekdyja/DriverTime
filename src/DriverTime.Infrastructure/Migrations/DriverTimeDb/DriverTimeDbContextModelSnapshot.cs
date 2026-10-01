@@ -22,6 +22,67 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.CardReadSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DddFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DriverCardNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ErrorMessage")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("FailedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ReaderName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("CompanyId", "StartedAtUtc");
+
+                    b.ToTable("CardReadSessions", (string)null);
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -64,6 +125,103 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.ToTable("Companies");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.ComplianceRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("FinishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TimelineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ViolationsCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("CompanyId", "DriverId", "CreatedAtUtc");
+
+                    b.ToTable("compliance_runs", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.ComplianceRunViolation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActualMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("ComplianceRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("LimitMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<DateTime>("PeriodEndUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("PeriodStartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComplianceRunId");
+
+                    b.ToTable("compliance_run_violations", (string)null);
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.CountryEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -79,6 +237,13 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<DateTime>("EntryTimeUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EntryType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Unknown");
 
                     b.HasKey("Id");
 
@@ -139,6 +304,67 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.ToTable("DddFiles");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.DddImportMonitoringEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("FinishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime?>("LastRetryAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("StoredFilePath")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "CreatedAtUtc");
+
+                    b.ToTable("DddImportMonitoringEntries");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>
                 {
                     b.Property<Guid>("Id")
@@ -168,6 +394,11 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IncludeInPlanning")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("LastName")
                         .IsRequired()
@@ -215,7 +446,71 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.HasIndex("VehicleId");
 
+                    b.HasIndex("EndUtc", "StartUtc", "DddFileId");
+
                     b.ToTable("DriverActivities");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.DriverWorkEvidenceEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("DistanceKm")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistration")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "DriverId", "Date");
+
+                    b.HasIndex("DriverId", "StartDateTime", "EndDateTime");
+
+                    b.ToTable("DriverWorkEvidenceEntries", (string)null);
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
@@ -255,6 +550,47 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.ToTable("ImportFile");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.MobileAppInvite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "DriverId", "CreatedAtUtc");
+
+                    b.ToTable("MobileAppInvites", (string)null);
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -283,6 +619,366 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.HasIndex("CompanyId");
 
                     b.ToTable("Notification");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssignmentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("EndDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid?>("PlanningDutyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PlanningScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("PlanningDutyId");
+
+                    b.HasIndex("CompanyId", "Date");
+
+                    b.HasIndex("PlanningScheduleId", "DriverId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("PlanningAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverAvailability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("DateFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("DateTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "DateFrom", "DateTo");
+
+                    b.HasIndex("DriverId", "DateFrom", "DateTo");
+
+                    b.ToTable("PlanningDriverAvailabilities", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverDutyRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("PlanningDutyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("ValidTo")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("PlanningDutyId");
+
+                    b.HasIndex("Type");
+
+                    b.HasIndex("CompanyId", "DriverId", "PlanningDutyId", "Type", "ValidFrom", "ValidTo")
+                        .IsUnique();
+
+                    b.ToTable("PlanningDriverDutyRules", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDuty", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ActiveDaysMask")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(31);
+
+                    b.Property<int?>("BreakMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DistanceKm")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int?>("DrivingMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DutyNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<bool>("IncludeHolidays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("SourceFileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("TotalDurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("ValidFrom")
+                        .HasColumnType("date");
+
+                    b.Property<string>("VehicleRequirement")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("WorkMinutes")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "DutyNumber", "ValidFrom");
+
+                    b.ToTable("PlanningDuties", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDutyLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DistanceKm")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("LineCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("PlanningDutyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Variant")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanningDutyId");
+
+                    b.ToTable("PlanningDutyLines", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDutyStop", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly?>("ArrivalTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeOnly?>("DepartureTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<decimal?>("Km")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("LineCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("PlanningDutyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StopName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TripGroup")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanningDutyId", "Sequence");
+
+                    b.ToTable("PlanningDutyStops", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime?>("UpdatedUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Year", "Month");
+
+                    b.ToTable("PlanningSchedules", (string)null);
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Role", b =>
@@ -374,17 +1070,20 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("Vin")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CompanyId");
+                    b.HasIndex("CompanyId", "RegistrationNumber")
+                        .IsUnique();
 
-                    b.ToTable("Vehicle");
+                    b.ToTable("Vehicles", (string)null);
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.VehicleUse", b =>
@@ -396,12 +1095,21 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Property<Guid>("DddFileId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("DistanceKm")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("EndOdometerKm")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("EndUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RegistrationNumber")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("StartOdometerKm")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("StartUtc")
                         .HasColumnType("timestamp with time zone");
@@ -411,6 +1119,95 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.HasIndex("DddFileId");
 
                     b.ToTable("VehicleUses");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.Violation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CalculatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MetadataJson")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<string>("RegulationReference")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ViolationEnd")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ViolationStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ViolationType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DriverId");
+
+                    b.ToTable("violations", (string)null);
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.CardReadSession", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.ComplianceRun", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.ComplianceRunViolation", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.ComplianceRun", "ComplianceRun")
+                        .WithMany("Violations")
+                        .HasForeignKey("ComplianceRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ComplianceRun");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.CountryEntry", b =>
@@ -440,6 +1237,23 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("Company");
 
                     b.Navigation("Driver");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.DddImportMonitoringEntry", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany("DddImportMonitoringEntries")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("DriverTime.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>
@@ -472,6 +1286,25 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("DddFile");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.DriverWorkEvidenceEntry", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany("WorkEvidenceEntries")
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
                 {
                     b.HasOne("DriverTime.Domain.Entities.Company", "Company")
@@ -483,10 +1316,145 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("Company");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.MobileAppInvite", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany("MobileAppInvites")
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("DriverTime.Domain.Entities.Company", "Company")
                         .WithMany("Notifications")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningAssignment", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany("PlanningAssignments")
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.PlanningDuty", "PlanningDuty")
+                        .WithMany("PlanningAssignments")
+                        .HasForeignKey("PlanningDutyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("DriverTime.Domain.Entities.PlanningSchedule", "PlanningSchedule")
+                        .WithMany("Assignments")
+                        .HasForeignKey("PlanningScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Driver");
+
+                    b.Navigation("PlanningDuty");
+
+                    b.Navigation("PlanningSchedule");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverAvailability", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDriverDutyRule", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DriverTime.Domain.Entities.PlanningDuty", "PlanningDuty")
+                        .WithMany()
+                        .HasForeignKey("PlanningDutyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Driver");
+
+                    b.Navigation("PlanningDuty");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDuty", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany("PlanningDuties")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDutyLine", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.PlanningDuty", "PlanningDuty")
+                        .WithMany("Lines")
+                        .HasForeignKey("PlanningDutyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PlanningDuty");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDutyStop", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.PlanningDuty", "PlanningDuty")
+                        .WithMany("Stops")
+                        .HasForeignKey("PlanningDutyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PlanningDuty");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningSchedule", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Company", "Company")
+                        .WithMany("PlanningSchedules")
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -535,9 +1503,22 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Navigation("DddFile");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.Violation", b =>
+                {
+                    b.HasOne("DriverTime.Domain.Entities.Driver", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Driver");
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.Company", b =>
                 {
                     b.Navigation("DddFiles");
+
+                    b.Navigation("DddImportMonitoringEntries");
 
                     b.Navigation("Drivers");
 
@@ -545,9 +1526,18 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Navigation("Notifications");
 
+                    b.Navigation("PlanningDuties");
+
+                    b.Navigation("PlanningSchedules");
+
                     b.Navigation("Users");
 
                     b.Navigation("Vehicles");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.ComplianceRun", b =>
+                {
+                    b.Navigation("Violations");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.DddFile", b =>
@@ -562,11 +1552,31 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
             modelBuilder.Entity("DriverTime.Domain.Entities.Driver", b =>
                 {
                     b.Navigation("DddFiles");
+
+                    b.Navigation("MobileAppInvites");
+
+                    b.Navigation("PlanningAssignments");
+
+                    b.Navigation("WorkEvidenceEntries");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.ImportFile", b =>
                 {
                     b.Navigation("Activities");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningDuty", b =>
+                {
+                    b.Navigation("Lines");
+
+                    b.Navigation("PlanningAssignments");
+
+                    b.Navigation("Stops");
+                });
+
+            modelBuilder.Entity("DriverTime.Domain.Entities.PlanningSchedule", b =>
+                {
+                    b.Navigation("Assignments");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.Role", b =>

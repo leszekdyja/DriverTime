@@ -10,5 +10,7 @@ public class CountryEntry
 
     public string CountryCode { get; set; } = string.Empty;
 
+    public string EntryType { get; set; } = "Unknown";
+
     public DateTime EntryTimeUtc { get; set; }
 }

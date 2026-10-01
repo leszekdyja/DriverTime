@@ -92,7 +92,7 @@ export default function ImportDetailsPage() {
                 setError(
                     loadError instanceof Error
                         ? loadError.message
-                        : "Wystapil blad podczas pobierania szczegolow importu.",
+                        : "Wystąpił błąd podczas pobierania szczegółów importu.",
                 );
             } finally {
                 setIsLoading(false);
@@ -105,14 +105,14 @@ export default function ImportDetailsPage() {
     return (
         <div className="import-details-page">
             <Link className="back-link" to="/imports">
-                Powrot do importow
+                Powrót do importów
             </Link>
 
-            <h2>Szczegoly importu DDD</h2>
+            <h2>Szczegóły importu DDD</h2>
 
             {isLoading && (
                 <p className="status-message" role="status">
-                    Ladowanie szczegolow importu...
+                    Ładowanie szczegółów importu...
                 </p>
             )}
 
@@ -150,7 +150,7 @@ export default function ImportDetailsPage() {
                         </dl>
                     </section>
 
-                    <section className="activity-summary" aria-label="Podsumowanie aktywnosci">
+                    <section className="activity-summary" aria-label="Podsumowanie aktywności">
                         <ActivitySummaryCard
                             label="Suma jazdy"
                             seconds={activitySummary.driving}
@@ -170,9 +170,9 @@ export default function ImportDetailsPage() {
                     </section>
 
                     <DetailsTable
-                        title="Aktywnosci kierowcy"
+                        title="Aktywności kierowcy"
                         isEmpty={details.driverActivities.length === 0}
-                        headers={["Poczatek", "Koniec", "Aktywnosc", "Czas"]}
+                        headers={["Początek", "Koniec", "Aktywność", "Czas"]}
                     >
                         {details.driverActivities.map((activity, index) => (
                             <tr key={`${activity.start}-${index}`}>
@@ -192,7 +192,7 @@ export default function ImportDetailsPage() {
                     </DetailsTable>
 
                     <DetailsTable
-                        title="Wpisy krajow"
+                        title="Wpisy krajów"
                         isEmpty={details.countryEntries.length === 0}
                         headers={["Data", "Kod kraju", "Kraj"]}
                     >
@@ -206,9 +206,9 @@ export default function ImportDetailsPage() {
                     </DetailsTable>
 
                     <DetailsTable
-                        title="Uzycie pojazdow"
+                        title="Użycie pojazdów"
                         isEmpty={details.vehicleUses.length === 0}
-                        headers={["Pojazd", "Poczatek", "Koniec"]}
+                        headers={["Pojazd", "Początek", "Koniec"]}
                     >
                         {details.vehicleUses.map((vehicleUse, index) => (
                             <tr key={`${vehicleUse.start}-${index}`}>

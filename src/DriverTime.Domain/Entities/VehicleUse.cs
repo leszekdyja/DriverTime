@@ -13,4 +13,10 @@ public class VehicleUse
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }
+
+    public int? StartOdometerKm { get; set; }
+
+    public int? EndOdometerKm { get; set; }
+
+    public int? DistanceKm { get; set; }
 }
