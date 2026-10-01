@@ -13,7 +13,7 @@ namespace DriverTime.Infrastructure.Services;
 
 public class DashboardService : IDashboardService
 {
-    private const int DefaultDashboardRangeDays = 60;
+    private const int DefaultDashboardRangeDays = 14;
 
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
