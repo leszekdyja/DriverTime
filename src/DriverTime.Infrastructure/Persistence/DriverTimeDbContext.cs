@@ -227,6 +227,12 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.IncludeInPlanning)
                 .HasDefaultValue(true);
 
+            entity.Property(x => x.PlanningNoNightDuty).HasDefaultValue(false);
+            entity.Property(x => x.PlanningNoWeekends).HasDefaultValue(false);
+            entity.Property(x => x.PlanningNoSaturdays).HasDefaultValue(false);
+            entity.Property(x => x.PlanningNoHolidays).HasDefaultValue(false);
+            entity.Property(x => x.PlanningNoDaysOff).HasDefaultValue(false);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)
                 .HasForeignKey(x => x.CompanyId);

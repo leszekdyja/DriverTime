@@ -21,6 +21,11 @@ public static class PlanningCandidateRejectionReasonDescriptions
         PlanningCandidateRejectionReason.InsufficientWeeklyRest => "Kierowca nie zachowałby minimalnego odpoczynku tygodniowego.",
         PlanningCandidateRejectionReason.DriverDutyForbidden => "Kierowca ma zakaz tej służby.",
         PlanningCandidateRejectionReason.DriverPairSameShift => "Drugi kierowca z pary ma już służbę na tej samej zmianie.",
+        PlanningCandidateRejectionReason.DriverNightDutyBlocked => "Kierowca ma włączoną blokadę RN.",
+        PlanningCandidateRejectionReason.DriverWeekendBlocked => "Kierowca ma włączoną blokadę pracy w weekendy.",
+        PlanningCandidateRejectionReason.DriverSaturdayBlocked => "Kierowca ma włączoną blokadę pracy w soboty.",
+        PlanningCandidateRejectionReason.DriverHolidayBlocked => "Kierowca ma włączoną blokadę pracy w święta.",
+        PlanningCandidateRejectionReason.DriverDayOffBlocked => "Kierowca ma włączoną blokadę pracy w dni wolne.",
         _ => "Kierowca nie spełnia warunków kwalifikacji."
     };
 

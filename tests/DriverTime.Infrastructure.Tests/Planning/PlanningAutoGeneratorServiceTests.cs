@@ -135,6 +135,43 @@ public class PlanningAutoGeneratorServiceTests
     }
 
     [TestMethod]
+    public void Eligibility_NoNightDutyBlocksRnOnly()
+    {
+        var companyId = Guid.NewGuid();
+        var driver = CreateDriver(companyId, "Adam", "Nowak");
+        driver.PlanningNoNightDuty = true;
+        var date = new DateOnly(2026, 8, 3);
+
+        var rn = Evaluate(driver, CreateDuty(companyId, "RN", new TimeOnly(20, 0), new TimeOnly(7, 0)), date, Array.Empty<PlanningAssignment>());
+        var ordinary = Evaluate(driver, CreateDuty(companyId, "12", new TimeOnly(8, 0), new TimeOnly(16, 0)), date, Array.Empty<PlanningAssignment>());
+
+        CollectionAssert.Contains(rn.RejectionReasons, PlanningCandidateRejectionReason.DriverNightDutyBlocked);
+        CollectionAssert.DoesNotContain(ordinary.RejectionReasons, PlanningCandidateRejectionReason.DriverNightDutyBlocked);
+    }
+
+    [TestMethod]
+    public void Eligibility_DayBlocksRespectSaturdaySundayAndHoliday()
+    {
+        var companyId = Guid.NewGuid();
+        var driver = CreateDriver(companyId, "Adam", "Nowak");
+        driver.PlanningNoSaturdays = true;
+        driver.PlanningNoWeekends = true;
+        driver.PlanningNoHolidays = true;
+        driver.PlanningNoDaysOff = true;
+        var duty = CreateDuty(companyId, "12", new TimeOnly(8, 0), new TimeOnly(16, 0));
+
+        var saturday = Evaluate(driver, duty, new DateOnly(2026, 8, 1), Array.Empty<PlanningAssignment>());
+        var sunday = Evaluate(driver, duty, new DateOnly(2026, 8, 2), Array.Empty<PlanningAssignment>());
+        var holiday = Evaluate(driver, duty, new DateOnly(2026, 8, 15), Array.Empty<PlanningAssignment>());
+
+        CollectionAssert.Contains(saturday.RejectionReasons, PlanningCandidateRejectionReason.DriverSaturdayBlocked);
+        CollectionAssert.Contains(saturday.RejectionReasons, PlanningCandidateRejectionReason.DriverWeekendBlocked);
+        CollectionAssert.Contains(sunday.RejectionReasons, PlanningCandidateRejectionReason.DriverWeekendBlocked);
+        CollectionAssert.Contains(holiday.RejectionReasons, PlanningCandidateRejectionReason.DriverHolidayBlocked);
+        CollectionAssert.Contains(holiday.RejectionReasons, PlanningCandidateRejectionReason.DriverDayOffBlocked);
+    }
+
+    [TestMethod]
     public void Eligibility_SeventhConsecutiveWorkDayIsBlocked()
     {
         var companyId = Guid.NewGuid();

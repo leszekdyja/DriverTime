@@ -70,6 +70,11 @@ public class DriverService : IDriverService
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
                 IncludeInPlanning = x.IncludeInPlanning,
+                PlanningNoNightDuty = x.PlanningNoNightDuty,
+                PlanningNoWeekends = x.PlanningNoWeekends,
+                PlanningNoSaturdays = x.PlanningNoSaturdays,
+                PlanningNoHolidays = x.PlanningNoHolidays,
+                PlanningNoDaysOff = x.PlanningNoDaysOff,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .ToListAsync();
@@ -94,6 +99,11 @@ public class DriverService : IDriverService
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
                 IncludeInPlanning = x.IncludeInPlanning,
+                PlanningNoNightDuty = x.PlanningNoNightDuty,
+                PlanningNoWeekends = x.PlanningNoWeekends,
+                PlanningNoSaturdays = x.PlanningNoSaturdays,
+                PlanningNoHolidays = x.PlanningNoHolidays,
+                PlanningNoDaysOff = x.PlanningNoDaysOff,
                 CreatedAtUtc = x.CreatedAtUtc
             })
             .FirstOrDefaultAsync();
@@ -341,6 +351,11 @@ public class DriverService : IDriverService
         }
 
         driver.IncludeInPlanning = dto.IncludeInPlanning;
+        driver.PlanningNoNightDuty = dto.PlanningNoNightDuty;
+        driver.PlanningNoWeekends = dto.PlanningNoWeekends;
+        driver.PlanningNoSaturdays = dto.PlanningNoSaturdays;
+        driver.PlanningNoHolidays = dto.PlanningNoHolidays;
+        driver.PlanningNoDaysOff = dto.PlanningNoDaysOff;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new DriverDto
@@ -352,6 +367,11 @@ public class DriverService : IDriverService
             CardExpiryDate = driver.CardExpiryDate,
             CardIssuingCountry = driver.CardIssuingCountry,
             IncludeInPlanning = driver.IncludeInPlanning,
+            PlanningNoNightDuty = driver.PlanningNoNightDuty,
+            PlanningNoWeekends = driver.PlanningNoWeekends,
+            PlanningNoSaturdays = driver.PlanningNoSaturdays,
+            PlanningNoHolidays = driver.PlanningNoHolidays,
+            PlanningNoDaysOff = driver.PlanningNoDaysOff,
             CreatedAtUtc = driver.CreatedAtUtc
         };
     }

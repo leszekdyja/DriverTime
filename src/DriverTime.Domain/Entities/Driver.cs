@@ -20,6 +20,16 @@ public class Driver
 
     public bool IncludeInPlanning { get; set; } = true;
 
+    public bool PlanningNoNightDuty { get; set; }
+
+    public bool PlanningNoWeekends { get; set; }
+
+    public bool PlanningNoSaturdays { get; set; }
+
+    public bool PlanningNoHolidays { get; set; }
+
+    public bool PlanningNoDaysOff { get; set; }
+
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
 
     public ICollection<PlanningAssignment> PlanningAssignments { get; set; } = new List<PlanningAssignment>();

@@ -126,6 +126,11 @@ public class DriverMobileAppInviteService : IDriverMobileAppInviteService
             CardExpiryDate = driver.CardExpiryDate,
             CardIssuingCountry = driver.CardIssuingCountry,
             IncludeInPlanning = driver.IncludeInPlanning,
+            PlanningNoNightDuty = driver.PlanningNoNightDuty,
+            PlanningNoWeekends = driver.PlanningNoWeekends,
+            PlanningNoSaturdays = driver.PlanningNoSaturdays,
+            PlanningNoHolidays = driver.PlanningNoHolidays,
+            PlanningNoDaysOff = driver.PlanningNoDaysOff,
             CreatedAtUtc = driver.CreatedAtUtc
         };
 

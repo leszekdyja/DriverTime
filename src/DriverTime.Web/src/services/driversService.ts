@@ -8,7 +8,14 @@ export type Driver = {
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
     includeInPlanning: boolean;
+    planningNoNightDuty: boolean;
+    planningNoWeekends: boolean;
+    planningNoSaturdays: boolean;
+    planningNoHolidays: boolean;
+    planningNoDaysOff: boolean;
 };
+
+export type DriverPlanningSettings = Pick<Driver, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">;
 
 export async function getDrivers(): Promise<Driver[]> {
     const response = await apiFetch("/api/drivers");
@@ -20,11 +27,11 @@ export async function getDrivers(): Promise<Driver[]> {
     return response.json() as Promise<Driver[]>;
 }
 
-export async function updateDriverPlanning(id: string, includeInPlanning: boolean): Promise<Driver> {
+export async function updateDriverPlanning(id: string, settings: DriverPlanningSettings): Promise<Driver> {
     const response = await apiFetch(`/api/drivers/${id}/planning`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ includeInPlanning }),
+        body: JSON.stringify(settings),
     });
 
     if (!response.ok) {

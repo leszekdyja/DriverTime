@@ -69,6 +69,8 @@ public class PlanningEligibilityChecker
             evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverDutyForbidden);
         }
 
+        AddDriverPlanningBlockRejections(evaluation, driver, duty, date);
+
         var workloadBefore = PlanningWorkloadCalculator.WorkloadSummary(
             driver.Id,
             driverAssignments,
@@ -225,6 +227,28 @@ public class PlanningEligibilityChecker
                 evaluation.RejectionReasons.Add(reason);
             }
         }
+    }
+
+    private static void AddDriverPlanningBlockRejections(
+        PlanningCandidateEvaluation evaluation,
+        Driver driver,
+        PlanningDuty duty,
+        DateOnly date)
+    {
+        var isSaturday = date.DayOfWeek == DayOfWeek.Saturday;
+        var isSunday = date.DayOfWeek == DayOfWeek.Sunday;
+        var isHoliday = new PolishPublicHolidayProvider().GetHolidays(date.Year).Any(x => x.Date == date);
+
+        if (driver.PlanningNoNightDuty && string.Equals(duty.DutyNumber?.Trim(), "RN", StringComparison.OrdinalIgnoreCase))
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverNightDutyBlocked);
+        if (driver.PlanningNoWeekends && (isSaturday || isSunday))
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverWeekendBlocked);
+        if (driver.PlanningNoSaturdays && isSaturday)
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverSaturdayBlocked);
+        if (driver.PlanningNoHolidays && isHoliday)
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverHolidayBlocked);
+        if (driver.PlanningNoDaysOff && (isSaturday || isSunday || isHoliday))
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverDayOffBlocked);
     }
 
     private sealed record ExistingPlanningInterval(PlanningAssignment Assignment, PlanningWorkInterval? Interval);
