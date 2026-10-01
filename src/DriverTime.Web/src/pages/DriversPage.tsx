@@ -22,6 +22,11 @@ type DriverDto = {
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
     includeInPlanning: boolean;
+    planningNoNightDuty: boolean;
+    planningNoWeekends: boolean;
+    planningNoSaturdays: boolean;
+    planningNoHolidays: boolean;
+    planningNoDaysOff: boolean;
 };
 
 type CreateDriverDto = {
@@ -134,16 +139,24 @@ export default function DriversPage() {
         }
     }
 
-    async function toggleDriverPlanning(driver: DriverDto, includeInPlanning: boolean) {
+    async function updateDriverPlanningSettings(driver: DriverDto, changes: Partial<Pick<DriverDto, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">>) {
         setMessage("");
         setIsError(false);
-        setDrivers((current) => current.map((item) => item.id === driver.id ? { ...item, includeInPlanning } : item));
+        const updated = { ...driver, ...changes };
+        setDrivers((current) => current.map((item) => item.id === driver.id ? updated : item));
 
         try {
             const response = await apiFetch(`${driversApiUrl}/${driver.id}/planning`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ includeInPlanning }),
+                body: JSON.stringify({
+                    includeInPlanning: updated.includeInPlanning,
+                    planningNoNightDuty: updated.planningNoNightDuty,
+                    planningNoWeekends: updated.planningNoWeekends,
+                    planningNoSaturdays: updated.planningNoSaturdays,
+                    planningNoHolidays: updated.planningNoHolidays,
+                    planningNoDaysOff: updated.planningNoDaysOff,
+                }),
             });
 
             if (!response.ok) {
@@ -375,6 +388,7 @@ export default function DriversPage() {
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
                                         <th>Planowanie</th>
+                                        <th>Blokady planowania</th>
                                         <th>Aplikacja</th>
                                         <th></th>
                                     </tr>
@@ -396,10 +410,19 @@ export default function DriversPage() {
                                                     <input
                                                         type="checkbox"
                                                         checked={driver.includeInPlanning}
-                                                        onChange={(event) => void toggleDriverPlanning(driver, event.target.checked)}
+                                                        onChange={(event) => void updateDriverPlanningSettings(driver, { includeInPlanning: event.target.checked })}
                                                     />
                                                     <span>{driver.includeInPlanning ? "Tak" : "Nie"}</span>
                                                 </label>
+                                            </td>
+                                            <td>
+                                                <div className="driver-row-actions">
+                                                    <label><input type="checkbox" checked={driver.planningNoNightDuty} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoNightDuty: event.target.checked })} /> Nie RN</label>
+                                                    <label><input type="checkbox" checked={driver.planningNoWeekends} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoWeekends: event.target.checked })} /> Bez weekendów</label>
+                                                    <label><input type="checkbox" checked={driver.planningNoSaturdays} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoSaturdays: event.target.checked })} /> Bez sobót</label>
+                                                    <label><input type="checkbox" checked={driver.planningNoHolidays} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoHolidays: event.target.checked })} /> Bez świąt</label>
+                                                    <label><input type="checkbox" checked={driver.planningNoDaysOff} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoDaysOff: event.target.checked })} /> Bez dni wolnych</label>
+                                                </div>
                                             </td>
                                             <td>
                                                 <button
