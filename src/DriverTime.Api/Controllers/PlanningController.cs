@@ -13,20 +13,36 @@ public class PlanningController : ControllerBase
     private readonly IPlanningDriverDutyRuleService _driverDutyRuleService;
     private readonly IPlanningManualAssignmentService _manualAssignmentService;
     private readonly IPlanningDriverPairService _driverPairService;
+    private readonly IPlanningDutyBlockService _dutyBlockService;
 
     public PlanningController(
         IPlanningAutoGeneratorService autoGeneratorService,
         IPlanningDriverAvailabilityService driverAvailabilityService,
         IPlanningDriverDutyRuleService driverDutyRuleService,
         IPlanningManualAssignmentService manualAssignmentService,
-        IPlanningDriverPairService driverPairService)
+        IPlanningDriverPairService driverPairService,
+        IPlanningDutyBlockService dutyBlockService)
     {
         _autoGeneratorService = autoGeneratorService;
         _driverAvailabilityService = driverAvailabilityService;
         _driverDutyRuleService = driverDutyRuleService;
         _manualAssignmentService = manualAssignmentService;
         _driverPairService = driverPairService;
+        _dutyBlockService = dutyBlockService;
     }
+
+    [HttpGet("duty-blocks")]
+    public async Task<ActionResult<List<PlanningDutyBlockDto>>> GetDutyBlocks(CancellationToken cancellationToken) => Ok(await _dutyBlockService.GetAsync(cancellationToken));
+
+    [HttpPost("duty-blocks")]
+    public async Task<ActionResult<PlanningDutyBlockDto>> CreateDutyBlock([FromBody] PlanningDutyBlockRequestDto request, CancellationToken cancellationToken)
+    {
+        try { return Ok(await _dutyBlockService.CreateAsync(request, cancellationToken)); }
+        catch (PlanningDutyValidationException ex) { return BadRequest(new { errors = ex.Errors }); }
+    }
+
+    [HttpDelete("duty-blocks/{id:guid}")]
+    public async Task<IActionResult> DeleteDutyBlock(Guid id, CancellationToken cancellationToken) => await _dutyBlockService.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
 
     [HttpGet("driver-pairs")]
     public async Task<ActionResult<List<PlanningDriverPairDto>>> GetDriverPairs(CancellationToken cancellationToken) =>
