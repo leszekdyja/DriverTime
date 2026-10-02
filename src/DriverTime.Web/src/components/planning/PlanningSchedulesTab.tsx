@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { getDrivers, type Driver } from "../../services/driversService";
 import { getPlanningDuties, updatePlanningDutyActiveDays, type PlanningDuty } from "../../services/planningDutiesService";
+import { exportPlanningSchedulePdf } from "../../services/pdfExportService";
 import {
     autoGeneratePlanning,
     previewAutoGeneratePlanning,
@@ -126,6 +127,7 @@ export default function PlanningSchedulesTab() {
     const [isSavingRule, setIsSavingRule] = useState(false);
     const [isSavingPair, setIsSavingPair] = useState(false);
     const [isSavingDutyBlock, setIsSavingDutyBlock] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
     const [validation, setValidation] = useState<PlanningScheduleValidation | null>(null);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
@@ -319,6 +321,13 @@ export default function PlanningSchedulesTab() {
         finally { setIsGenerating(false); }
     }
     async function checkScheduleValidation() { if (!selectedSchedule) return; setIsValidating(true); setMessage(""); setIsError(false); try { setValidation(await validateSchedule(selectedSchedule.id)); setMessage("Walidacja grafiku została wykonana."); } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się sprawdzić grafiku."); } finally { setIsValidating(false); } }
+    async function exportSchedulePdf() {
+        if (!selectedSchedule) return;
+        setIsExportingPdf(true); setMessage(""); setIsError(false);
+        try { await exportPlanningSchedulePdf({ scheduleName: selectedSchedule.name, grid }); setMessage("Grafik został wyeksportowany do PDF."); }
+        catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Nie udało się wyeksportować grafiku do PDF."); }
+        finally { setIsExportingPdf(false); }
+    }
 
     useEffect(() => { void loadInitialData(); }, []);
 
@@ -337,7 +346,7 @@ export default function PlanningSchedulesTab() {
                         <label>Nazwa<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label><label>Rok<input type="number" min="2000" max="2100" value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} required /></label><label>Miesiąc<input type="number" min="1" max="12" value={form.month} onChange={(event) => setForm({ ...form, month: event.target.value })} required /></label><label>Uwagi<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
                         <div className="driver-row-actions"><button type="submit" className="planning-primary-button" disabled={isSaving}>{isSaving ? "Zapisywanie..." : "Zapisz grafik"}</button>{selectedSchedule ? <button type="button" className="driver-delete-button" onClick={() => void removeSchedule(selectedSchedule.id)}>Usuń grafik</button> : null}</div>
                     </form>
-                    <div className="planning-month-primary"><div className="planning-validation-header"><div><h4>Plan miesięczny</h4><p>{selectedSchedule ? selectedSchedule.name : "Brak zapisanego grafiku dla tego miesiąca. Kliknij komórkę, aby utworzyć pierwszy wpis."}</p></div><div className="driver-row-actions"><button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating || !selectedSchedule}>{isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}</button><button className="planning-secondary-button" type="button" onClick={() => void previewAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Podgląd generowania"}</button><button className="planning-primary-button" type="button" onClick={() => void generateAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Generuj i zapisz"}</button></div></div><PlanningGenerationSummary result={lastGenerationResult} /><PlanningMonthlyGrid grid={grid} onCellClick={openEditor} /></div>
+                    <div className="planning-month-primary"><div className="planning-validation-header"><div><h4>Plan miesięczny</h4><p>{selectedSchedule ? selectedSchedule.name : "Brak zapisanego grafiku dla tego miesiąca. Kliknij komórkę, aby utworzyć pierwszy wpis."}</p></div><div className="driver-row-actions"><button className="planning-secondary-button" type="button" onClick={() => void exportSchedulePdf()} disabled={isExportingPdf || !selectedSchedule}>{isExportingPdf ? "Tworzenie PDF..." : "Eksport PDF"}</button><button className="planning-secondary-button" type="button" onClick={() => void checkScheduleValidation()} disabled={isValidating || !selectedSchedule}>{isValidating ? "Sprawdzanie..." : "Sprawdź grafik"}</button><button className="planning-secondary-button" type="button" onClick={() => void previewAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Podgląd generowania"}</button><button className="planning-primary-button" type="button" onClick={() => void generateAutomatically()} disabled={isGenerating}>{isGenerating ? "Przetwarzanie..." : "Generuj i zapisz"}</button></div></div><PlanningGenerationSummary result={lastGenerationResult} /><PlanningMonthlyGrid grid={grid} onCellClick={openEditor} /></div>
                     <div className="planning-compact-info">
                         <span>Do planowania wybrano <strong>{planningEnabledDriversCount}</strong> z <strong>{drivers.length}</strong> kierowców.</span>
                         <Link className="planning-secondary-button" to="/drivers">Zarządzaj w zakładce Kierowcy</Link>
