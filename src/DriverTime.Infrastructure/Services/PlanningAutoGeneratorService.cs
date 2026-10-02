@@ -324,8 +324,14 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             request.DateTo,
             options,
             companyId,
-            now);
+            now,
+            TimeSpan.FromSeconds(20),
+            cancellationToken);
         ApplySwapRescueResult(swapRescue, generatedAssignments, result, _dbContext);
+        if (swapRescue.TimedOut)
+        {
+            result.Warnings.Add("Mechanizm ratunkowy zakończył przeszukiwanie po 20 sekundach, aby generator zwrócił wynik bez przekroczenia limitu serwera. Nierozwiązane służby pozostały na liście braków.");
+        }
         result.GeneratedCount += swapRescue.Plans.Sum(x => x.AddedAssignments.Count) - swapRescue.Plans.Sum(x => x.RemovedAssignments.Count);
 
         RecordTiming("Mechanizmy ratunkowe", rescueStopwatch.ElapsedMilliseconds);
