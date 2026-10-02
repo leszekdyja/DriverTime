@@ -279,6 +279,17 @@ export type PlanningDriverPair = {
     notes: string | null;
 };
 export type PlanningDriverPairPayload = Omit<PlanningDriverPair, "id" | "firstDriverName" | "secondDriverName">;
+export type PlanningDutyBlock = {
+    id: string;
+    firstDutyId: string;
+    firstDutyNumber: string;
+    secondDutyId: string;
+    secondDutyNumber: string;
+    requiredVehicleType: string | null;
+    notes: string | null;
+    isActive: boolean;
+};
+export type PlanningDutyBlockPayload = Omit<PlanningDutyBlock, "id" | "firstDutyNumber" | "secondDutyNumber">;
 export type PlanningSchedule = PlanningScheduleListItem & {
     assignments: PlanningAssignment[];
 };
@@ -521,4 +532,19 @@ export async function createPlanningDriverPair(payload: PlanningDriverPairPayloa
 export async function deletePlanningDriverPair(id: string): Promise<void> {
     const response = await apiFetch(`/api/planning/driver-pairs/${id}`, { method: "DELETE" });
     if (!response.ok) throw new Error(response.status === 404 ? "Nie znaleziono pary kierowców." : "Nie udało się usunąć pary kierowców.");
+}
+
+export async function getPlanningDutyBlocks(): Promise<PlanningDutyBlock[]> {
+    const response = await apiFetch("/api/planning/duty-blocks");
+    return readJson<PlanningDutyBlock[]>(response, "Nie udało się pobrać blokad służb.");
+}
+
+export async function createPlanningDutyBlock(payload: PlanningDutyBlockPayload): Promise<PlanningDutyBlock> {
+    const response = await apiFetch("/api/planning/duty-blocks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return readJson<PlanningDutyBlock>(response, "Nie udało się zapisać blokady służb.");
+}
+
+export async function deletePlanningDutyBlock(id: string): Promise<void> {
+    const response = await apiFetch(`/api/planning/duty-blocks/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(response.status === 404 ? "Nie znaleziono blokady służb." : "Nie udało się usunąć blokady służb.");
 }

@@ -56,6 +56,8 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<PlanningDriverPair> PlanningDriverPairs => Set<PlanningDriverPair>();
 
+    public DbSet<PlanningDutyBlock> PlanningDutyBlocks => Set<PlanningDutyBlock>();
+
     public DbSet<DriverWorkEvidenceEntry> DriverWorkEvidenceEntries => Set<DriverWorkEvidenceEntry>();
 
     public DbSet<MobileAppInvite> MobileAppInvites => Set<MobileAppInvite>();
@@ -472,6 +474,19 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.FirstDriver).WithMany().HasForeignKey(x => x.FirstDriverId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.SecondDriver).WithMany().HasForeignKey(x => x.SecondDriverId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PlanningDutyBlock>(entity =>
+        {
+            entity.ToTable("PlanningDutyBlocks");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => new { x.CompanyId, x.FirstDutyId, x.SecondDutyId }).IsUnique();
+            entity.Property(x => x.RequiredVehicleType).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.FirstDuty).WithMany().HasForeignKey(x => x.FirstDutyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SecondDuty).WithMany().HasForeignKey(x => x.SecondDutyId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DriverWorkEvidenceEntry>(entity =>

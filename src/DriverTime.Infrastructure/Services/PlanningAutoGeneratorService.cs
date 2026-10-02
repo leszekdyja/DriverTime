@@ -161,6 +161,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 && x.DateFrom <= contextDateTo
                 && x.DateTo >= contextDateFrom)
             .ToListAsync(cancellationToken);
+        var dutyBlocks = await _dbContext.PlanningDutyBlocks.AsNoTracking()
+            .Where(x => x.CompanyId == companyId && x.IsActive)
+            .ToListAsync(cancellationToken);
 
         RecordTiming("Pobranie danych", dataStopwatch.ElapsedMilliseconds);
 
@@ -193,6 +196,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
 
         var evaluationStopwatch = Stopwatch.StartNew();
         var evaluatedCandidateCount = 0;
+        var atomicBlockUnassignedKeys = new HashSet<(Guid DutyId, DateOnly Date)>();
 
         var holidayDates = monthlyCalendars
             .SelectMany(x => x.Holidays)
@@ -203,7 +207,56 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         {
             var schedule = schedules[(date.Year, date.Month)];
             var dutiesForDate = duties.Where(duty => PlanningDutyDayAvailability.IsActiveOn(duty, date, holidayDates.Contains(date))).ToList();
-            foreach (var duty in dutiesForDate)
+            var dutiesById = dutiesForDate.ToDictionary(x => x.Id);
+            var blockedDutyIds = new HashSet<Guid>();
+
+            foreach (var block in dutyBlocks.Where(x => dutiesById.ContainsKey(x.FirstDutyId) && dutiesById.ContainsKey(x.SecondDutyId)))
+            {
+                var firstDuty = dutiesById[block.FirstDutyId];
+                var secondDuty = dutiesById[block.SecondDutyId];
+                blockedDutyIds.Add(firstDuty.Id);
+                blockedDutyIds.Add(secondDuty.Id);
+                var candidates = new List<(PlanningCandidateEvaluation First, PlanningCandidateEvaluation Second)>();
+
+                foreach (var pair in options.DriverPairs)
+                {
+                    foreach (var orientation in new[] { (pair.FirstDriverId, pair.SecondDriverId), (pair.SecondDriverId, pair.FirstDriverId) })
+                    {
+                        var firstEvaluation = _candidateEvaluator.EvaluateCandidates(drivers.Where(x => x.Id == orientation.Item1).ToList(), firstDuty, date, assignmentsByDriver, availabilitiesByDriver, request.DateFrom, request.DateTo, options, _calendarService).SingleOrDefault();
+                        var secondEvaluation = _candidateEvaluator.EvaluateCandidates(drivers.Where(x => x.Id == orientation.Item2).ToList(), secondDuty, date, assignmentsByDriver, availabilitiesByDriver, request.DateFrom, request.DateTo, options, _calendarService).SingleOrDefault();
+                        if (firstEvaluation is not null && secondEvaluation is not null && firstEvaluation.IsEligible && secondEvaluation.IsEligible)
+                            candidates.Add((firstEvaluation, secondEvaluation));
+                    }
+                }
+
+                evaluatedCandidateCount += options.DriverPairs.Count * 4;
+                var selectedBlock = candidates.OrderBy(x => x.First.Score + x.Second.Score).ThenBy(x => x.First.DriverId).FirstOrDefault();
+                if (selectedBlock == default
+                    || !PlanningWorkInterval.TryCreate(date, firstDuty, out var firstInterval)
+                    || !PlanningWorkInterval.TryCreate(date, secondDuty, out var secondInterval))
+                {
+                    result.UnassignedDuties.Add(CreateUnassignedDuty(firstDuty, date, Array.Empty<PlanningCandidateEvaluation>()));
+                    result.UnassignedDuties.Add(CreateUnassignedDuty(secondDuty, date, Array.Empty<PlanningCandidateEvaluation>()));
+                    atomicBlockUnassignedKeys.Add((firstDuty.Id, date));
+                    atomicBlockUnassignedKeys.Add((secondDuty.Id, date));
+                    result.Warnings.Add($"Blokada służb {firstDuty.DutyNumber} + {secondDuty.DutyNumber} nie została obsadzona w dniu {date:yyyy-MM-dd}; nie zapisano częściowej obsady.");
+                    continue;
+                }
+
+                foreach (var item in new[] { (Duty: firstDuty, Evaluation: selectedBlock.First, Interval: firstInterval), (Duty: secondDuty, Evaluation: selectedBlock.Second, Interval: secondInterval) })
+                {
+                    var work = PlanningWorkloadCalculator.ResolveDutyWorkMinutes(item.Duty, date, item.Interval);
+                    var assignment = new PlanningAssignment { Id = Guid.NewGuid(), CompanyId = companyId, PlanningScheduleId = schedule.Id, DriverId = item.Evaluation.DriverId, PlanningDutyId = item.Duty.Id, PlanningDuty = item.Duty, Date = date, StartDateTime = item.Interval.Start, EndDateTime = item.Interval.End, Status = PlanningAssignmentStatus.Generated, AssignmentType = PlanningAssignmentType.Duty, Notes = $"Wygenerowano automatycznie w blokadzie służb {firstDuty.DutyNumber} + {secondDuty.DutyNumber}.", CreatedAt = now, CreatedUtc = now };
+                    _dbContext.PlanningAssignments.Add(assignment);
+                    assignmentContext.Add(assignment);
+                    AddAssignmentToIndex(assignmentsByDriver, assignment);
+                    generatedAssignments.Add(assignment);
+                    result.GeneratedCount++;
+                    if (!string.IsNullOrWhiteSpace(work.Warning)) generationWarnings.Add(work.Warning);
+                }
+            }
+
+            foreach (var duty in dutiesForDate.Where(x => !blockedDutyIds.Contains(x.Id)))
             {
                 var evaluations = _candidateEvaluator.EvaluateCandidates(
                     drivers,
@@ -266,7 +319,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             schedules,
             assignmentContext,
             availabilities,
-            result.UnassignedDuties,
+            result.UnassignedDuties.Where(x => !atomicBlockUnassignedKeys.Contains((x.DutyId, x.Date))).ToList(),
             request.DateFrom,
             request.DateTo,
             options,
