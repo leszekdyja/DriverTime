@@ -2,6 +2,7 @@
 
 import type { ReportActivity, ReportDriver } from "./reportsService";
 import type { DriverViolation } from "./violationsService";
+import type { PlanningMonthlyGridModel } from "../components/planning/buildPlanningMonthlyGrid";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
 
@@ -20,6 +21,11 @@ type ReportPdfOptions = {
 };
 
 const PDF_FONT_NAME = "NotoSans";
+
+type PlanningSchedulePdfOptions = {
+    scheduleName: string;
+    grid: PlanningMonthlyGridModel;
+};
 
 const severityLabels: Record<string, string> = {
     low: "Niski",
@@ -193,6 +199,55 @@ export async function exportReportPdf(options: ReportPdfOptions) {
     });
 
     document.save("drivertime-raport-aktywnosci.pdf");
+}
+
+export async function exportPlanningSchedulePdf(options: PlanningSchedulePdfOptions) {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+    ]);
+
+    const document = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    await registerPdfFonts(document);
+    const monthLabel = new Intl.DateTimeFormat("pl-PL", { month: "long", year: "numeric" })
+        .format(new Date(options.grid.year, options.grid.month - 1, 1));
+    const dayChunks = Array.from({ length: Math.ceil(options.grid.days.length / 16) }, (_, index) =>
+        options.grid.days.slice(index * 16, index * 16 + 16));
+
+    dayChunks.forEach((days, chunkIndex) => {
+        if (chunkIndex > 0) document.addPage();
+        const dayIndexes = days.map((day) => options.grid.days.findIndex((candidate) => candidate.date === day.date));
+        autoTable(document, {
+            startY: 34,
+            margin: { top: 34, right: 8, bottom: 12, left: 8 },
+            head: [
+                ["Kierowca", ...days.map((day) => String(day.day))],
+                ["", ...days.map((day) => day.weekday)],
+            ],
+            body: options.grid.rows.map((row) => [
+                row.driverName,
+                ...dayIndexes.map((dayIndex) => row.cells[dayIndex]?.label || "-"),
+            ]),
+            styles: { font: PDF_FONT_NAME, fontSize: 7, cellPadding: 1.2, halign: "center", valign: "middle" },
+            headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: "bold" },
+            alternateRowStyles: { fillColor: [241, 245, 249] },
+            columnStyles: { 0: { cellWidth: 48, halign: "left", fontStyle: "bold" } },
+            didDrawPage: () => addHeader(document, options.scheduleName, `${monthLabel} · dni ${days[0].day}-${days[days.length - 1].day}`),
+        });
+    });
+
+    const pageCount = document.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+        document.setPage(page);
+        document.setFont(PDF_FONT_NAME, "normal");
+        document.setFontSize(7);
+        document.setTextColor(71, 85, 105);
+        document.text("Kody: RN – nocna · R/R2 – rezerwa · W/WG – wolne · UW – urlop · CH – chorobowe · ND – niedostępny", 8, 205);
+        document.text(`Strona ${page}/${pageCount}`, 289, 205, { align: "right" });
+    }
+
+    const safeName = options.scheduleName.trim().replace(/[^a-zA-Z0-9ąćęłńóśźżĄĆĘŁŃÓŚŹŻ_-]+/g, "-").replace(/^-+|-+$/g, "") || "grafik";
+    document.save(`drivertime-${safeName}-${options.grid.year}-${String(options.grid.month).padStart(2, "0")}.pdf`);
 }
 
 export async function exportViolationsPdf(violations: DriverViolation[]) {
