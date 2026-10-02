@@ -10,6 +10,9 @@ public class PlanningAssignmentSwapPlanner
 
     private readonly PlanningEligibilityChecker _eligibilityChecker;
     private readonly PlanningWorkingTimeCalendarService _calendarService;
+    private System.Diagnostics.Stopwatch? _rescueStopwatch;
+    private TimeSpan _rescueTimeLimit;
+    private CancellationToken _cancellationToken;
 
     public PlanningAssignmentSwapPlanner(
         PlanningEligibilityChecker eligibilityChecker,
@@ -30,14 +33,24 @@ public class PlanningAssignmentSwapPlanner
         DateOnly dateTo,
         PlanningGenerationOptions options,
         Guid companyId,
-        DateTime now)
+        DateTime now,
+        TimeSpan? timeLimit = null,
+        CancellationToken cancellationToken = default)
     {
         var result = new PlanningSwapRescueResult();
+        _rescueStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        _rescueTimeLimit = timeLimit ?? TimeSpan.FromSeconds(20);
+        _cancellationToken = cancellationToken;
         var dutiesById = duties.ToDictionary(x => x.Id);
         var driversById = drivers.ToDictionary(x => x.Id);
 
         foreach (var unassigned in unassignedDuties.ToList())
         {
+            if (ShouldStop())
+            {
+                result.TimedOut = true;
+                break;
+            }
             if (!dutiesById.TryGetValue(unassigned.DutyId, out var missingDuty))
             {
                 continue;
@@ -107,6 +120,7 @@ public class PlanningAssignmentSwapPlanner
     {
         foreach (var source in RemovableTechnicalAssignments(assignmentContext, date).OrderBy(TechnicalPriority).ThenBy(x => x.DriverId))
         {
+            if (ShouldStop()) return null;
             if (!driversById.TryGetValue(source.DriverId, out var driver))
             {
                 continue;
@@ -148,6 +162,7 @@ public class PlanningAssignmentSwapPlanner
 
         foreach (var source in candidates)
         {
+            if (ShouldStop()) return null;
             if (!driversById.TryGetValue(source.DriverId, out var sourceDriver))
             {
                 continue;
@@ -199,6 +214,7 @@ public class PlanningAssignmentSwapPlanner
         var date = displacedAssignment.Date;
         foreach (var receiver in CandidateReceivers(assignmentContext, date, plan).Where(x => !visitedDrivers.Contains(x.DriverId)))
         {
+            if (ShouldStop()) return false;
             if (!driversById.TryGetValue(receiver.DriverId, out var receiverDriver))
             {
                 continue;
@@ -229,6 +245,12 @@ public class PlanningAssignmentSwapPlanner
         }
 
         return false;
+    }
+
+    private bool ShouldStop()
+    {
+        _cancellationToken.ThrowIfCancellationRequested();
+        return _rescueStopwatch is not null && _rescueStopwatch.Elapsed >= _rescueTimeLimit;
     }
 
     private IEnumerable<PlanningAssignment> CandidateReceivers(
@@ -416,6 +438,8 @@ public class PlanningAssignmentSwapPlanner
 
 public class PlanningSwapRescueResult
 {
+    public bool TimedOut { get; set; }
+
     public List<PlanningSwapPlan> Plans { get; } = new();
 
     public HashSet<(Guid DutyId, DateOnly Date)> ResolvedUnassignedDutyIds { get; } = new();
