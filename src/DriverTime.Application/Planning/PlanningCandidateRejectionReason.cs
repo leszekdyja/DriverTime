@@ -23,5 +23,6 @@ public enum PlanningCandidateRejectionReason
     DriverWeekendBlocked,
     DriverSaturdayBlocked,
     DriverHolidayBlocked,
-    DriverDayOffBlocked
+    DriverDayOffBlocked,
+    DutyFixedToOtherDriver
 }

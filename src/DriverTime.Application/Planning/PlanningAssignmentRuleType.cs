@@ -3,5 +3,6 @@
 public enum PlanningAssignmentRuleType
 {
     Forbidden,
-    Preferred
+    Preferred,
+    Fixed
 }

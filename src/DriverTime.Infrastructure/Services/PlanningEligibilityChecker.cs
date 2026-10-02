@@ -66,7 +66,9 @@ public class PlanningEligibilityChecker
         evaluation.ConstraintMatches.AddRange(constraintEvaluation.Matches);
         if (constraintEvaluation.IsForbidden)
         {
-            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.DriverDutyForbidden);
+            evaluation.RejectionReasons.Add(constraintEvaluation.Matches.Any(x => x.StartsWith("Stałe przypisanie:", StringComparison.Ordinal))
+                ? PlanningCandidateRejectionReason.DutyFixedToOtherDriver
+                : PlanningCandidateRejectionReason.DriverDutyForbidden);
         }
 
         AddDriverPlanningBlockRejections(evaluation, driver, duty, date);

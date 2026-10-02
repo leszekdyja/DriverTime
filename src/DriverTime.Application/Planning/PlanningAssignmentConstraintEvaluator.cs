@@ -5,6 +5,7 @@ namespace DriverTime.Application.Planning;
 public static class PlanningAssignmentConstraintEvaluator
 {
     public const decimal PreferredDutyScore = -900m;
+    public const decimal FixedDutyScore = -100000m;
 
     public static PlanningAssignmentConstraintEvaluation Evaluate(
         Guid companyId,
@@ -15,13 +16,20 @@ public static class PlanningAssignmentConstraintEvaluator
     {
         var result = new PlanningAssignmentConstraintEvaluation();
         var dutyNumber = NormalizeDutyNumber(duty.DutyNumber);
+        var applicableRules = rules
+            .Where(rule => MatchesCompany(rule, companyId) && MatchesDate(rule, date) && MatchesDuty(rule, duty, dutyNumber))
+            .ToList();
+        var fixedRules = applicableRules.Where(rule => rule.Type == PlanningAssignmentRuleType.Fixed).ToList();
 
-        foreach (var rule in rules)
+        if (fixedRules.Count > 0 && fixedRules.All(rule => rule.DriverId != driver.Id))
         {
-            if (!MatchesCompany(rule, companyId)
-                || rule.DriverId != driver.Id
-                || !MatchesDate(rule, date)
-                || !MatchesDuty(rule, duty, dutyNumber))
+            result.IsForbidden = true;
+            result.Matches.Add($"Stałe przypisanie: {duty.DutyNumber} ma innego kierowcę");
+        }
+
+        foreach (var rule in applicableRules)
+        {
+            if (rule.DriverId != driver.Id)
             {
                 continue;
             }
@@ -30,6 +38,14 @@ public static class PlanningAssignmentConstraintEvaluator
             if (rule.Type == PlanningAssignmentRuleType.Forbidden)
             {
                 result.IsForbidden = true;
+                result.Matches.Add(label);
+                continue;
+            }
+
+            if (rule.Type == PlanningAssignmentRuleType.Fixed)
+            {
+                result.IsPreferred = true;
+                result.PreferenceScore += FixedDutyScore;
                 result.Matches.Add(label);
                 continue;
             }
@@ -66,7 +82,12 @@ public static class PlanningAssignmentConstraintEvaluator
 
     private static string BuildMatchLabel(PlanningAssignmentRule rule, PlanningDuty duty)
     {
-        var kind = rule.Type == PlanningAssignmentRuleType.Forbidden ? "Zakaz" : "Preferencja";
+        var kind = rule.Type switch
+        {
+            PlanningAssignmentRuleType.Forbidden => "Zakaz",
+            PlanningAssignmentRuleType.Fixed => "Stałe przypisanie",
+            _ => "Preferencja"
+        };
         var code = !string.IsNullOrWhiteSpace(duty.DutyNumber) ? duty.DutyNumber : duty.Id.ToString();
         return string.IsNullOrWhiteSpace(rule.Note)
             ? $"{kind}: {code}"
