@@ -318,6 +318,7 @@ export default function DriverDetailsPage() {
                     details.cardNumber,
                     timelineActivityRange.from,
                     timelineActivityRange.to,
+                    details.id,
                 ));
             } catch (loadError) {
                 setTimelineError(
@@ -331,7 +332,7 @@ export default function DriverDetailsPage() {
         }
 
         void loadTimelineActivities();
-    }, [details?.cardNumber, timelineActivityRange]);
+    }, [details?.cardNumber, details?.id, timelineActivityRange]);
     const timelineDays = useMemo(
         () => buildTimelineDays(timelineActivities, timelineRangeDays),
         [timelineActivities, timelineRangeDays],

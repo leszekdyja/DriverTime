@@ -305,8 +305,7 @@ public class DddFileService : IDddFileService
                 "Nie udalo sie odczytac numeru karty kierowcy z pliku DDD.");
         }
 
-        var driver = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
-            x.CompanyId == companyId && x.CardNumber == cardNumber);
+        var driver = await ResolveDriverAsync(companyId, cardNumber, parseResult.Driver);
         var driverCreated = driver is null;
 
         if (driver is null)
@@ -317,6 +316,7 @@ public class DddFileService : IDddFileService
         else
         {
             UpdateMissingDriverData(driver, parseResult.Driver);
+            AdoptNewerDriverCard(driver, parseResult.Driver, cardNumber);
         }
 
         var dddFile = new DddFile
@@ -607,6 +607,97 @@ public class DddFileService : IDddFileService
             CardExpiryDate = ParseDate(parsedDriver.CardExpiryDate),
             CardIssuingCountry = parsedDriver.CardIssuingCountry.Trim()
         };
+    }
+
+    private async Task<Driver?> ResolveDriverAsync(
+        Guid companyId,
+        string cardNumber,
+        ParsedDriverDto parsedDriver)
+    {
+        var directMatch = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
+            x.CompanyId == companyId && x.CardNumber == cardNumber);
+        if (directMatch is not null)
+        {
+            return directMatch;
+        }
+
+        var historicalMatch = await _dbContext.DddFiles
+            .Where(x => x.CompanyId == companyId && x.DriverCardNumber == cardNumber && x.DriverId != null)
+            .Select(x => x.Driver)
+            .FirstOrDefaultAsync();
+        if (historicalMatch is not null)
+        {
+            return historicalMatch;
+        }
+
+        var cardIdentity = GetCardIdentity(cardNumber);
+        if (cardIdentity is not null)
+        {
+            var identityDriverIds = await _dbContext.Drivers
+                .Where(x => x.CompanyId == companyId && x.CardNumber.StartsWith(cardIdentity))
+                .Select(x => x.Id)
+                .Concat(_dbContext.DddFiles
+                    .Where(x => x.CompanyId == companyId
+                        && x.DriverId != null
+                        && x.DriverCardNumber.StartsWith(cardIdentity))
+                    .Select(x => x.DriverId!.Value))
+                .Distinct()
+                .ToListAsync();
+            if (identityDriverIds.Count == 1)
+            {
+                return await _dbContext.Drivers.SingleAsync(x => x.Id == identityDriverIds[0]);
+            }
+        }
+
+        var companyDrivers = await _dbContext.Drivers
+            .Where(x => x.CompanyId == companyId)
+            .ToListAsync();
+        var personMatches = companyDrivers
+            .Where(x => IsSameDriverPerson(x, parsedDriver))
+            .ToList();
+        return personMatches.Count == 1 ? personMatches[0] : null;
+    }
+
+    internal static bool IsSameDriverPerson(Driver driver, ParsedDriverDto parsedDriver)
+    {
+        var parsedCountry = NormalizeIdentityText(parsedDriver.CardIssuingCountry);
+        return parsedCountry.Length > 0
+            && NormalizeIdentityText(driver.FirstName) == NormalizeIdentityText(parsedDriver.FirstName)
+            && NormalizeIdentityText(driver.LastName) == NormalizeIdentityText(parsedDriver.LastName)
+            && NormalizeIdentityText(driver.CardIssuingCountry) == parsedCountry;
+    }
+
+    internal static string? GetCardIdentity(string cardNumber)
+    {
+        var normalized = NormalizeCardNumber(cardNumber);
+        return normalized.Length >= 14 ? normalized[..14] : null;
+    }
+
+    private static string NormalizeIdentityText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var decomposed = value.Trim()
+            .Replace('ł', 'l')
+            .Replace('Ł', 'L')
+            .Normalize(System.Text.NormalizationForm.FormD);
+        return string.Concat(decomposed
+            .Where(x => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(x) != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Where(char.IsLetterOrDigit))
+            .ToUpperInvariant();
+    }
+
+    private static void AdoptNewerDriverCard(Driver driver, ParsedDriverDto parsedDriver, string cardNumber)
+    {
+        var parsedExpiry = ParseDate(parsedDriver.CardExpiryDate);
+        if (driver.CardNumber == cardNumber) return;
+        if (driver.CardExpiryDate.HasValue && (!parsedExpiry.HasValue || parsedExpiry.Value <= driver.CardExpiryDate.Value)) return;
+
+        driver.CardNumber = cardNumber;
+        driver.CardExpiryDate = parsedExpiry;
+        if (!string.IsNullOrWhiteSpace(parsedDriver.CardIssuingCountry))
+        {
+            driver.CardIssuingCountry = parsedDriver.CardIssuingCountry.Trim();
+        }
     }
 
     private static async Task<string> CalculateHashAsync(string filePath)

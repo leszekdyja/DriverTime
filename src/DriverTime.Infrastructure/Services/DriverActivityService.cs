@@ -22,14 +22,19 @@ public class DriverActivityService : IDriverActivityService
     public async Task<List<DriverActivityDto>> GetActivitiesAsync(
         DateTime? from,
         DateTime? to,
-        string? driverCardNumber)
+        string? driverCardNumber,
+        Guid? driverId = null)
     {
         var query = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
             .AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(driverCardNumber))
+        if (driverId.HasValue)
+        {
+            query = query.Where(x => x.DddFile.DriverId == driverId.Value);
+        }
+        else if (!string.IsNullOrWhiteSpace(driverCardNumber))
         {
             query = query.Where(
                 x => x.DddFile.DriverCardNumber == driverCardNumber);
