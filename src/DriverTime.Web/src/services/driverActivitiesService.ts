@@ -22,6 +22,7 @@ export async function getDriverActivitiesByCard(
     driverCardNumber: string,
     from?: string,
     to?: string,
+    driverId?: string,
 ): Promise<DriverActivity[]> {
     const parameters = new URLSearchParams();
     const safeDriverCardNumber = driverCardNumber.trim();
@@ -31,6 +32,9 @@ export async function getDriverActivitiesByCard(
     }
 
     parameters.set("driverCardNumber", safeDriverCardNumber);
+    if (driverId) {
+        parameters.set("driverId", driverId);
+    }
 
     if (from) {
         parameters.set("from", from);

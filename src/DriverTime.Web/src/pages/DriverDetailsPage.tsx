@@ -36,7 +36,8 @@ const dayFormatter = new Intl.DateTimeFormat("pl-PL", {
     timeZone: "UTC",
 });
 
-const tachographDefaultDays = 7;
+const driverTimelineRangeOptions = [7, 28, 56, 90] as const;
+type DriverTimelineRangeDays = typeof driverTimelineRangeOptions[number];
 
 
 
@@ -110,7 +111,7 @@ function addDays(date: Date, days: number) {
 }
 
 
-function buildTimelineActivityRange(activities: { startUtc: string; endUtc: string }[]) {
+function buildTimelineActivityRange(activities: { startUtc: string; endUtc: string }[], rangeDays: DriverTimelineRangeDays) {
     const validRanges = activities
         .map((activity) => ({
             start: new Date(activity.startUtc),
@@ -129,7 +130,7 @@ function buildTimelineActivityRange(activities: { startUtc: string; endUtc: stri
     const lastEnd = new Date(Math.max(...validRanges.map((activity) => activity.end.getTime())));
     const lastVisibleDay = getUtcDayStart(new Date(lastEnd.getTime() - 1));
     const rangeEnd = addDays(lastVisibleDay, 1);
-    const rangeStart = addDays(rangeEnd, -tachographDefaultDays);
+    const rangeStart = addDays(rangeEnd, -rangeDays);
 
     return {
         from: rangeStart.toISOString(),
@@ -199,7 +200,7 @@ function DailyRestViolationDetails({ violation }: { violation: DriverViolation }
     );
 }
 
-function buildTimelineDays(activities: TimelineSourceActivity[]): TimelineDay[] {
+function buildTimelineDays(activities: TimelineSourceActivity[], rangeDays: DriverTimelineRangeDays): TimelineDay[] {
     const validRanges = activities
         .map((activity) => ({
             start: new Date(activity.startUtc),
@@ -217,9 +218,9 @@ function buildTimelineDays(activities: TimelineSourceActivity[]): TimelineDay[] 
 
     const lastEnd = new Date(Math.max(...validRanges.map((activity) => activity.end.getTime())));
     const lastVisibleDay = getUtcDayStart(new Date(lastEnd.getTime() - 1));
-    const firstVisibleDay = addDays(lastVisibleDay, -(tachographDefaultDays - 1));
+    const firstVisibleDay = addDays(lastVisibleDay, -(rangeDays - 1));
 
-    return Array.from({ length: tachographDefaultDays }, (_, index) => {
+    return Array.from({ length: rangeDays }, (_, index) => {
         const dayStart = addDays(firstVisibleDay, index);
 
         return {
@@ -240,6 +241,7 @@ export default function DriverDetailsPage() {
     const [timelineActivities, setTimelineActivities] = useState<TimelineSourceActivity[]>([]);
     const [isTimelineLoading, setIsTimelineLoading] = useState(true);
     const [timelineError, setTimelineError] = useState("");
+    const [timelineRangeDays, setTimelineRangeDays] = useState<DriverTimelineRangeDays>(7);
     const [isGeneratingComplianceReport, setIsGeneratingComplianceReport] = useState(false);
     const [isRecalculatingDriver, setIsRecalculatingDriver] = useState(false);
     const [recalculateDriverMessage, setRecalculateDriverMessage] = useState("");
@@ -296,8 +298,8 @@ export default function DriverDetailsPage() {
     }, [details, id]);
 
     const timelineActivityRange = useMemo(
-        () => details ? buildTimelineActivityRange(details.recentActivities) : null,
-        [details],
+        () => details ? buildTimelineActivityRange(details.recentActivities, timelineRangeDays) : null,
+        [details, timelineRangeDays],
     );
 
     useEffect(() => {
@@ -316,6 +318,7 @@ export default function DriverDetailsPage() {
                     details.cardNumber,
                     timelineActivityRange.from,
                     timelineActivityRange.to,
+                    details.id,
                 ));
             } catch (loadError) {
                 setTimelineError(
@@ -329,10 +332,10 @@ export default function DriverDetailsPage() {
         }
 
         void loadTimelineActivities();
-    }, [details?.cardNumber, timelineActivityRange]);
+    }, [details?.cardNumber, details?.id, timelineActivityRange]);
     const timelineDays = useMemo(
-        () => buildTimelineDays(timelineActivities),
-        [timelineActivities],
+        () => buildTimelineDays(timelineActivities, timelineRangeDays),
+        [timelineActivities, timelineRangeDays],
     );
 
     function handleTimelineViolationClick(violationId: string) {
@@ -452,7 +455,19 @@ export default function DriverDetailsPage() {
                         <div className="daily-activity-heading">
                             <div>
                                 <h3>Wykres tachografowy</h3>
-                                <p>Ostatnie 7 dni aktywności w widoku 00:00-24:00, z godzinową skalą i analizą segmentów.</p>
+                                <p>Ostatnie {timelineRangeDays} dni aktywności w widoku 00:00-24:00, z godzinową skalą i analizą segmentów.</p>
+                            </div>
+                            <div className="timeline-range-control" aria-label="Zakres osi czasu kierowcy">
+                                {driverTimelineRangeOptions.map((option) => (
+                                    <button
+                                        className={option === timelineRangeDays ? "active" : undefined}
+                                        key={option}
+                                        type="button"
+                                        onClick={() => setTimelineRangeDays(option)}
+                                    >
+                                        {option} dni
+                                    </button>
+                                ))}
                             </div>
                         </div>
 

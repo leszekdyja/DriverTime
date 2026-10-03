@@ -179,6 +179,31 @@ public class DddFileServiceImportValidationTests
     }
 
     [TestMethod]
+    public void CardIdentity_UsesStableFirstFourteenCharacters()
+    {
+        Assert.AreEqual("PL123456789012", DddFileService.GetCardIdentity(" pl12345678901234 "));
+        Assert.IsNull(DddFileService.GetCardIdentity("CARD-123"));
+    }
+
+    [TestMethod]
+    public void SameDriverPerson_IgnoresCaseWhitespaceAndDiacritics()
+    {
+        var driver = new Driver { FirstName = "Łukasz", LastName = " Żółć ", CardIssuingCountry = "PL" };
+        var parsed = new ParsedDriverDto { FirstName = "lukasz", LastName = "zolc", CardIssuingCountry = "pl" };
+
+        Assert.IsTrue(DddFileService.IsSameDriverPerson(driver, parsed));
+    }
+
+    [TestMethod]
+    public void SameDriverPerson_RequiresMatchingIssuingCountry()
+    {
+        var driver = new Driver { FirstName = "Jan", LastName = "Kowalski", CardIssuingCountry = "PL" };
+        var parsed = new ParsedDriverDto { FirstName = "Jan", LastName = "Kowalski", CardIssuingCountry = "DE" };
+
+        Assert.IsFalse(DddFileService.IsSameDriverPerson(driver, parsed));
+    }
+
+    [TestMethod]
     public void ApplyExistingDriverAfterConcurrentInsert_ReusesExistingDriverForImport()
     {
         var existingDriver = new Driver
