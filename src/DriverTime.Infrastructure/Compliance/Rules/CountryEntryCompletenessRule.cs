@@ -6,6 +6,9 @@ namespace DriverTime.Infrastructure.Compliance.Rules;
 
 public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
 {
+    private static readonly TimeZoneInfo PolishTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "Central European Standard Time" : "Europe/Warsaw");
+
     private const string MissingStartCountryCode = "MISSING_START_COUNTRY";
     private const string MissingEndCountryCode = "MISSING_END_COUNTRY";
     private const string InvalidCountryCode = "INVALID_COUNTRY_CODE";
@@ -148,7 +151,7 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
         result.Violations.Add(CreateViolation(
             code: MissingStartCountryCode,
             ruleName: "Brak kraju rozpoczęcia",
-            description: $"Dla okresu pracy zakończonego {endEntry.EntryTimeUtc:yyyy-MM-dd HH:mm} UTC brakuje wiarygodnego wpisu kraju rozpoczęcia.",
+            description: $"Dla okresu pracy zakończonego {FormatPolishLocalTime(endEntry.EntryTimeUtc)} brakuje wiarygodnego wpisu kraju rozpoczęcia.",
             day: day,
             entryTimeUtc: endEntry.EntryTimeUtc,
             countryCode: endEntry.CountryCode,
@@ -169,11 +172,21 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
         result.Violations.Add(CreateViolation(
             code: MissingEndCountryCode,
             ruleName: "Brak kraju zakończenia",
-            description: $"Dla okresu pracy rozpoczętego {startEntry.EntryTimeUtc:yyyy-MM-dd HH:mm} UTC brakuje wiarygodnego wpisu kraju zakończenia.",
+            description: $"Dla okresu pracy rozpoczętego {FormatPolishLocalTime(startEntry.EntryTimeUtc)} brakuje wiarygodnego wpisu kraju zakończenia.",
             day: day,
             entryTimeUtc: startEntry.EntryTimeUtc,
             countryCode: startEntry.CountryCode,
             entryType: StartEntryType));
+    }
+
+    private static string FormatPolishLocalTime(DateTime utcDateTime)
+    {
+        var normalizedUtc = utcDateTime.Kind == DateTimeKind.Utc
+            ? utcDateTime
+            : DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(normalizedUtc, PolishTimeZone);
+
+        return $"{localTime:yyyy-MM-dd HH:mm} czasu polskiego";
     }
 
     private static ComplianceViolationCandidate CreateViolation(

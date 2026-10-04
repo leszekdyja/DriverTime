@@ -4,7 +4,6 @@
     useEffect,
     useMemo,
     useState,
-    type FormEvent,
 } from "react";
 import { Link } from "react-router-dom";
 
@@ -29,13 +28,6 @@ type DriverDto = {
     planningNoDaysOff: boolean;
 };
 
-type CreateDriverDto = {
-    firstName: string;
-    lastName: string;
-    cardNumber: string;
-    includeInPlanning: boolean;
-};
-
 type DriverMobileInviteDto = {
     driverId: string;
     driverFullName: string;
@@ -50,14 +42,7 @@ const pageSize = 8;
 
 export default function DriversPage() {
     const [drivers, setDrivers] = useState<DriverDto[]>([]);
-    const [form, setForm] = useState<CreateDriverDto>({
-        firstName: "",
-        lastName: "",
-        cardNumber: "",
-        includeInPlanning: true,
-    });
     const [isLoading, setIsLoading] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
     const [search, setSearch] = useState("");
@@ -103,41 +88,6 @@ export default function DriversPage() {
             setIsLoading(false);
         }
     }, []);
-
-    async function addDriver(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        setMessage("");
-        setIsError(false);
-
-        if (!form.firstName || !form.lastName || !form.cardNumber) {
-            setIsError(true);
-            setMessage("Uzupelnij wszystkie pola.");
-            return;
-        }
-
-        setIsSaving(true);
-
-        try {
-            const response = await apiFetch(driversApiUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(form),
-            });
-
-            if (!response.ok) {
-                throw new Error("Nie udało się dodać kierowcy.");
-            }
-
-            setForm({ firstName: "", lastName: "", cardNumber: "", includeInPlanning: true });
-            await loadDrivers();
-            setMessage("Kierowca został dodany.");
-        } catch {
-            setIsError(true);
-            setMessage("błąd podczas dodawania kierowcy.");
-        } finally {
-            setIsSaving(false);
-        }
-    }
 
     async function updateDriverPlanningSettings(driver: DriverDto, changes: Partial<Pick<DriverDto, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">>) {
         setMessage("");
@@ -271,68 +221,12 @@ export default function DriversPage() {
             <div className="drivers-heading">
                 <div>
                     <h2>Kierowcy</h2>
-                    <p>zarządzaj kierowcami i numerami kart kierowców.</p>
+                    <p>Kierowcy utworzeni automatycznie z kart DDD lub dodani w ewidencji.</p>
                 </div>
                 <span className="drivers-count">{drivers.length} kierowców</span>
             </div>
 
-            <div className="drivers-grid">
-                <form className="driver-form" onSubmit={addDriver}>
-                    <div className="section-heading">
-                        <h3>Dodaj kierowcę</h3>
-                        <p>Wprowadz podstawowe dane nowego kierowcy.</p>
-                    </div>
-
-                    <label>
-                        Imie
-                        <input
-                            type="text"
-                            value={form.firstName}
-                            onChange={(event) =>
-                                setForm({ ...form, firstName: event.target.value })
-                            }
-                        />
-                    </label>
-
-                    <label>
-                        Nazwisko
-                        <input
-                            type="text"
-                            value={form.lastName}
-                            onChange={(event) =>
-                                setForm({ ...form, lastName: event.target.value })
-                            }
-                        />
-                    </label>
-
-                    <label>
-                        Numer karty kierowcy
-                        <input
-                            type="text"
-                            value={form.cardNumber}
-                            onChange={(event) =>
-                                setForm({ ...form, cardNumber: event.target.value })
-                            }
-                        />
-                    </label>
-                    <label className="driver-planning-toggle">
-                        <input
-                            type="checkbox"
-                            checked={form.includeInPlanning}
-                            onChange={(event) => setForm({ ...form, includeInPlanning: event.target.checked })}
-                        />
-                        <span>
-                            Uwzględniaj w automatycznym planowaniu
-                            <small>Kierowca będzie uwzględniany przy automatycznym generowaniu grafików.</small>
-                        </span>
-                    </label>
-
-                    <button type="submit" disabled={isSaving}>
-                        {isSaving ? "Zapisywanie..." : "Dodaj kierowcę"}
-                    </button>
-                </form>
-
-                <section className="drivers-panel">
+            <section className="drivers-panel">
                     <div className="section-heading">
                         <h3>Lista kierowców</h3>
                         <p>Aktualna baza kierowców DriverTime.</p>
@@ -367,7 +261,7 @@ export default function DriversPage() {
                     ) : drivers.length === 0 ? (
                         <EmptyState
                             title="Brak kierowców"
-                            description="Dodaj kierowcę recznie lub zaimportuj plik DDD, aby utworzyc go automatycznie."
+                            description="Dodaj kierowcę w zakładce Ewidencja lub zaimportuj plik DDD, aby utworzyć go automatycznie."
                         />
                     ) : filteredDrivers.length === 0 ? (
                         <EmptyState
@@ -461,8 +355,7 @@ export default function DriversPage() {
                             />
                         </div>
                     )}
-                </section>
-            </div>
+            </section>
 
             {driverToDelete && (
                 <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => !isDeleting && setDriverToDelete(null)}>

@@ -17,6 +17,13 @@ export type Driver = {
 
 export type DriverPlanningSettings = Pick<Driver, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">;
 
+export type CreateDriverRequest = {
+    firstName: string;
+    lastName: string;
+    cardNumber: string;
+    includeInPlanning: boolean;
+};
+
 export async function getDrivers(): Promise<Driver[]> {
     const response = await apiFetch("/api/drivers");
 
@@ -25,6 +32,20 @@ export async function getDrivers(): Promise<Driver[]> {
     }
 
     return response.json() as Promise<Driver[]>;
+}
+
+export async function createDriver(request: CreateDriverRequest): Promise<Driver> {
+    const response = await apiFetch("/api/drivers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+        throw new Error("Nie udało się dodać kierowcy.");
+    }
+
+    return response.json() as Promise<Driver>;
 }
 
 export async function updateDriverPlanning(id: string, settings: DriverPlanningSettings): Promise<Driver> {
