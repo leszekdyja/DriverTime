@@ -22,6 +22,7 @@ public class DriverActivitiesController : ControllerBase
         [FromQuery] string? driverCardNumber,
         [FromQuery] Guid? driverId,
         [FromQuery] Guid? operatingCompanyId,
+        [FromQuery] Guid[]? driverIds,
         [FromQuery] DateOnly? localFrom,
         [FromQuery] DateOnly? localTo)
     {
@@ -36,7 +37,7 @@ public class DriverActivitiesController : ControllerBase
         }
 
         var result = await _driverActivityService
-            .GetActivitiesAsync(from, to, driverCardNumber, driverId, operatingCompanyId);
+            .GetActivitiesAsync(from, to, driverCardNumber, driverId, operatingCompanyId, driverIds);
 
         return Ok(result);
     }

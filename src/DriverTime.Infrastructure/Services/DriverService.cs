@@ -53,6 +53,11 @@ public class DriverService : IDriverService
         var query = _dbContext.Drivers
             .Where(x => x.CompanyId == _currentUser.CompanyId);
 
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            query = query.Where(x => x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
+        }
+
         if (_currentUser.IsMobileDriver)
         {
             query = query.Where(x => x.Id == _currentUser.DriverId);
@@ -91,7 +96,8 @@ public class DriverService : IDriverService
 
         var driver = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => new DriverDetailsDto
             {
                 Id = x.Id,
@@ -314,6 +320,7 @@ public class DriverService : IDriverService
         {
             Id = Guid.NewGuid(),
             CompanyId = _currentUser.CompanyId,
+            OperatingCompanyId = _currentUser.OperatingCompanyId,
             FirstName = dto.FirstName,
             LastName = dto.LastName,
             CardNumber = dto.CardNumber,
@@ -347,7 +354,8 @@ public class DriverService : IDriverService
         var driver = await _dbContext.Drivers
             .Include(x => x.OperatingCompany)
             .FirstOrDefaultAsync(
-                x => x.Id == id && x.CompanyId == _currentUser.CompanyId,
+                x => x.Id == id && x.CompanyId == _currentUser.CompanyId
+                    && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value),
                 cancellationToken);
 
         if (driver is null)
@@ -389,8 +397,13 @@ public class DriverService : IDriverService
         CancellationToken cancellationToken = default)
     {
         var driver = await _dbContext.Drivers
-            .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
         if (driver is null) return null;
+
+        if (_currentUser.OperatingCompanyId.HasValue
+            && dto.OperatingCompanyId != _currentUser.OperatingCompanyId)
+            throw new InvalidOperationException("Konto firmy nie może przenosić kierowców do innej firmy.");
 
         OperatingCompany? operatingCompany = null;
         if (dto.OperatingCompanyId.HasValue)
@@ -432,7 +445,8 @@ public class DriverService : IDriverService
         var driverExists = await _dbContext.Drivers
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == id && x.CompanyId == companyId,
+                x => x.Id == id && x.CompanyId == companyId
+                    && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value),
                 cancellationToken);
 
         if (!driverExists)

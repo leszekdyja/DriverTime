@@ -19,6 +19,7 @@ public class ReportsController : ControllerBase
         Guid driverId,
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
+        [FromQuery] Guid[]? driverIds,
         CancellationToken cancellationToken)
     {
         if (from > to)
@@ -65,6 +66,7 @@ public class ReportsController : ControllerBase
         Guid operatingCompanyId,
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
+        [FromQuery] Guid[]? driverIds,
         CancellationToken cancellationToken)
     {
         if (from > to)
@@ -73,7 +75,7 @@ public class ReportsController : ControllerBase
         }
 
         var export = await _reportExportService.ExportCompanyPdfAsync(
-            operatingCompanyId, from, to, cancellationToken);
+            operatingCompanyId, from, to, driverIds, cancellationToken);
 
         return export is null
             ? NotFound(new { message = "Nie znaleziono firmy lub przypisanych kierowców." })

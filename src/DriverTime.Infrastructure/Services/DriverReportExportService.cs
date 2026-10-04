@@ -68,11 +68,13 @@ public class DriverReportExportService : IDriverReportExportService
         Guid operatingCompanyId,
         DateOnly from,
         DateOnly to,
+        IReadOnlyCollection<Guid>? driverIds = null,
         CancellationToken cancellationToken = default)
     {
         var operatingCompany = await _dbContext.OperatingCompanies
             .AsNoTracking()
-            .Where(x => x.Id == operatingCompanyId && x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Id == operatingCompanyId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.Id == _currentUser.OperatingCompanyId.Value))
             .Select(x => new
             {
                 x.Name,
@@ -85,8 +87,17 @@ public class DriverReportExportService : IDriverReportExportService
             return null;
         }
 
+        var selectedDriverIds = driverIds is { Count: > 0 }
+            ? operatingCompany.DriverIds.Where(driverIds.Contains).ToList()
+            : operatingCompany.DriverIds;
+
+        if (selectedDriverIds.Count == 0)
+        {
+            return null;
+        }
+
         var reports = new List<DriverReportDto>();
-        foreach (var driverId in operatingCompany.DriverIds)
+        foreach (var driverId in selectedDriverIds)
         {
             var report = await GetReportAsync(driverId, from, to, cancellationToken);
             if (report is not null)
@@ -114,7 +125,8 @@ public class DriverReportExportService : IDriverReportExportService
     {
         var driver = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => new { x.Id, x.FirstName, x.LastName, x.CardNumber, OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : string.Empty })
             .FirstOrDefaultAsync(cancellationToken);
 

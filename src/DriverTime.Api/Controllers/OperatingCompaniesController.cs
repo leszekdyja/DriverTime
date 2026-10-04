@@ -19,7 +19,7 @@ public class OperatingCompaniesController : ControllerBase
         Ok(await _service.GetAllAsync(cancellationToken));
 
     [HttpPost]
-    public async Task<ActionResult<OperatingCompanyDto>> Create(SaveOperatingCompanyDto request, CancellationToken cancellationToken)
+    public async Task<ActionResult<OperatingCompanyDto>> Create(CreateOperatingCompanyDto request, CancellationToken cancellationToken)
     {
         try
         {

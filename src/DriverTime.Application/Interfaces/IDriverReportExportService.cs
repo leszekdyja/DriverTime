@@ -20,5 +20,6 @@ public interface IDriverReportExportService
         Guid operatingCompanyId,
         DateOnly from,
         DateOnly to,
+        IReadOnlyCollection<Guid>? driverIds = null,
         CancellationToken cancellationToken = default);
 }

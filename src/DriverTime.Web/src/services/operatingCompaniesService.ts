@@ -6,10 +6,18 @@ export type OperatingCompany = {
     taxNumber: string;
     active: boolean;
     driversCount: number;
+    accountEmail: string | null;
     createdAtUtc: string;
 };
 
 export type SaveOperatingCompanyRequest = Pick<OperatingCompany, "name" | "taxNumber" | "active">;
+export type CreateOperatingCompanyRequest = SaveOperatingCompanyRequest & {
+    createLoginAccount: boolean;
+    accountFirstName: string;
+    accountLastName: string;
+    accountEmail: string;
+    accountPassword: string;
+};
 
 async function parseError(response: Response, fallback: string) {
     const body = await response.json().catch(() => null) as { message?: string } | null;
@@ -22,7 +30,7 @@ export async function getOperatingCompanies(): Promise<OperatingCompany[]> {
     return response.json() as Promise<OperatingCompany[]>;
 }
 
-export async function createOperatingCompany(request: SaveOperatingCompanyRequest): Promise<OperatingCompany> {
+export async function createOperatingCompany(request: CreateOperatingCompanyRequest): Promise<OperatingCompany> {
     const response = await apiFetch("/api/operating-companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

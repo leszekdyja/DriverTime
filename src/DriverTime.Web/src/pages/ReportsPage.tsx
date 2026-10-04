@@ -139,6 +139,7 @@ export default function ReportsPage() {
     const [reportScope, setReportScope] = useState<"driver" | "company">("driver");
     const [selectedDriverId, setSelectedDriverId] = useState("");
     const [selectedCompanyId, setSelectedCompanyId] = useState("");
+    const [selectedCompanyDriverIds, setSelectedCompanyDriverIds] = useState<string[]>([]);
     const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
     const [dateTo, setDateTo] = useState(defaultDateRange.to);
     const [isLoading, setIsLoading] = useState(true);
@@ -163,7 +164,17 @@ export default function ReportsPage() {
                     setActivities([]);
                     return;
                 }
-                loadedActivities = await getCompanyReportActivities(selectedCompanyId, from, to);
+                if (selectedCompanyDriverIds.length === 0) {
+                    setError("Wybierz co najmniej jednego kierowcę do raportu firmy.");
+                    setActivities([]);
+                    return;
+                }
+                loadedActivities = await getCompanyReportActivities(
+                    selectedCompanyId,
+                    from,
+                    to,
+                    selectedCompanyDriverIds,
+                );
             } else {
                 const driver = drivers.find((item) => item.id === driverId);
                 if (!driver) {
@@ -222,6 +233,10 @@ export default function ReportsPage() {
         () => companies.find((item) => item.id === selectedCompanyId),
         [selectedCompanyId, companies],
     );
+    const companyDrivers = useMemo(
+        () => drivers.filter((driver) => driver.operatingCompanyId === selectedCompanyId),
+        [drivers, selectedCompanyId],
+    );
 
     const dateRangeLabel = useMemo(() => {
         if (!dateFrom && !dateTo) return "Pełny dostępny zakres danych";
@@ -276,6 +291,11 @@ export default function ReportsPage() {
 
         if (reportScope === "driver" ? !selectedDriverId : !selectedCompanyId) {
             setError(reportScope === "driver" ? "Wybierz kierowcę przed wygenerowaniem raportu." : "Wybierz firmę przed wygenerowaniem raportu.");
+            return;
+        }
+
+        if (reportScope === "company" && selectedCompanyDriverIds.length === 0) {
+            setError("Wybierz co najmniej jednego kierowcę do raportu firmy.");
             return;
         }
 
@@ -344,7 +364,12 @@ export default function ReportsPage() {
 
         try {
             if (reportScope === "company") {
-                await downloadCompanyReport(selectedCompanyId, dateFrom, dateTo);
+                await downloadCompanyReport(
+                    selectedCompanyId,
+                    dateFrom,
+                    dateTo,
+                    selectedCompanyDriverIds,
+                );
             } else {
                 await downloadDriverReport(selectedDriverId, dateFrom, dateTo, "pdf");
             }
@@ -403,7 +428,7 @@ export default function ReportsPage() {
                     <dl>
                         <div>
                             <dt>{reportScope === "driver" ? "Numer karty" : "Kierowcy"}</dt>
-                            <dd>{reportScope === "driver" ? selectedDriver?.cardNumber || "Nie wybrano" : selectedCompany ? `${selectedCompany.driversCount} przypisanych` : "Nie wybrano"}</dd>
+                            <dd>{reportScope === "driver" ? selectedDriver?.cardNumber || "Nie wybrano" : selectedCompany ? `${selectedCompanyDriverIds.length} z ${companyDrivers.length} wybranych` : "Nie wybrano"}</dd>
                         </div>
                         <div>
                             <dt>Zakres dat</dt>
@@ -439,7 +464,12 @@ export default function ReportsPage() {
                 ) : (
                     <label>
                         Firma
-                        <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)}>
+                        <select value={selectedCompanyId} onChange={(event) => {
+                            const companyId = event.target.value;
+                            setSelectedCompanyId(companyId);
+                            setSelectedCompanyDriverIds(drivers.filter(driver => driver.operatingCompanyId === companyId).map(driver => driver.id));
+                            setActivities([]);
+                        }}>
                             <option value="">Wybierz firmę</option>
                             {companies.map((company) => <option key={company.id} value={company.id}>{company.name} ({company.driversCount})</option>)}
                         </select>
@@ -468,6 +498,41 @@ export default function ReportsPage() {
                     {isLoading ? "Ładowanie..." : "Generuj raport"}
                 </button>
             </form>
+
+            {reportScope === "company" && selectedCompanyId && (
+                <section className="reports-driver-selection" aria-labelledby="company-driver-selection-title">
+                    <div className="reports-driver-selection-heading">
+                        <div>
+                            <span>Kierowcy w raporcie</span>
+                            <strong id="company-driver-selection-title">Wybierz kierowców firmy {selectedCompany?.name}</strong>
+                        </div>
+                        <div>
+                            <button type="button" onClick={() => setSelectedCompanyDriverIds(companyDrivers.map(driver => driver.id))}>Zaznacz wszystkich</button>
+                            <button type="button" onClick={() => setSelectedCompanyDriverIds([])}>Wyczyść</button>
+                        </div>
+                    </div>
+                    {companyDrivers.length === 0 ? (
+                        <p>Ta firma nie ma przypisanych kierowców.</p>
+                    ) : (
+                        <div className="reports-driver-options">
+                            {companyDrivers.map((driver) => (
+                                <label key={driver.id}>
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedCompanyDriverIds.includes(driver.id)}
+                                        onChange={(event) => setSelectedCompanyDriverIds(current => event.target.checked
+                                            ? [...current, driver.id]
+                                            : current.filter(id => id !== driver.id))}
+                                    />
+                                    <span>{formatDriverNameOrFallback(driver.firstName, driver.lastName)}</span>
+                                    <small>{driver.cardNumber || "Brak numeru karty"}</small>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                    <small>Wybrano {selectedCompanyDriverIds.length} z {companyDrivers.length} kierowców.</small>
+                </section>
+            )}
 
             {error && (
                 <div className="reports-error" role="alert">
@@ -514,6 +579,7 @@ export default function ReportsPage() {
                             onClick={() => void handlePdfExport()}
                             disabled={
                                 (reportScope === "driver" ? !selectedDriverId : !selectedCompanyId)
+                                || (reportScope === "company" && selectedCompanyDriverIds.length === 0)
                                 || !dateFrom
                                 || !dateTo
                                 || isGeneratingPdf

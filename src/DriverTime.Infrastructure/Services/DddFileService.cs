@@ -306,6 +306,11 @@ public class DddFileService : IDddFileService
         }
 
         var driver = await ResolveDriverAsync(companyId, cardNumber, parseResult.Driver);
+        if (driver is not null && _currentUser.OperatingCompanyId.HasValue
+            && driver.OperatingCompanyId != _currentUser.OperatingCompanyId)
+        {
+            throw new InvalidOperationException("Ta karta kierowcy jest przypisana do innej firmy.");
+        }
         var driverCreated = driver is null;
 
         if (driver is null)
@@ -601,6 +606,7 @@ public class DddFileService : IDddFileService
         {
             Id = Guid.NewGuid(),
             CompanyId = companyId,
+            OperatingCompanyId = _currentUser.OperatingCompanyId,
             CardNumber = cardNumber,
             FirstName = parsedDriver.FirstName.Trim(),
             LastName = parsedDriver.LastName.Trim(),

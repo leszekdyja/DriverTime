@@ -24,17 +24,31 @@ public class DriverActivityService : IDriverActivityService
         DateTime? to,
         string? driverCardNumber,
         Guid? driverId = null,
-        Guid? operatingCompanyId = null)
+        Guid? operatingCompanyId = null,
+        IReadOnlyCollection<Guid>? driverIds = null)
     {
         var query = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
             .AsQueryable();
 
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            query = query.Where(x => x.DddFile.Driver != null
+                && x.DddFile.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
+            operatingCompanyId = _currentUser.OperatingCompanyId;
+        }
+
         if (operatingCompanyId.HasValue)
         {
             query = query.Where(x => x.DddFile.Driver != null
                 && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value);
+
+            if (driverIds is { Count: > 0 })
+            {
+                query = query.Where(x => x.DddFile.DriverId.HasValue
+                    && driverIds.Contains(x.DddFile.DriverId.Value));
+            }
         }
         else if (driverId.HasValue)
         {
