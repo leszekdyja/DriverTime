@@ -200,6 +200,47 @@ public class CountryEntryCompletenessRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithWorkPeriodCrossingMidnight_PairsStartAndEndAcrossCalendarDays()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-05-14T22:00:00Z", "2026-05-15T02:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "PL", "2026-05-14T21:45:00Z", "Start"),
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-15T02:15:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithGenuineMissingStart_UsesEndEntryTimeInsteadOfMidnight()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-05-15T01:00:00Z", "2026-05-15T02:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "DE", "2026-05-15T02:15:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("MISSING_START_COUNTRY", result.Violations[0].Code);
+        Assert.AreEqual(DateTime.Parse("2026-05-15T02:15:00Z").ToUniversalTime(), result.Violations[0].PeriodStartUtc);
+    }
+
+    [TestMethod]
     public void CountryEntryModel_EntryTypeDefault_IsUnknown()
     {
         var options = new DbContextOptionsBuilder<DriverTimeDbContext>()
