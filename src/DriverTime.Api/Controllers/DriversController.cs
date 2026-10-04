@@ -106,6 +106,23 @@ public class DriversController : ControllerBase
         return driver is null ? NotFound() : Ok(driver);
     }
 
+    [HttpPatch("{id:guid}/operating-company")]
+    public async Task<ActionResult<DriverDto>> UpdateOperatingCompany(
+        Guid id,
+        [FromBody] UpdateDriverOperatingCompanyDto dto,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var driver = await _driverService.UpdateOperatingCompanyAsync(id, dto, cancellationToken);
+            return driver is null ? NotFound() : Ok(driver);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{id:guid}/mobile-invite")]
     public async Task<ActionResult<DriverMobileAppInviteDto>> CreateMobileInvite(
         Guid id,

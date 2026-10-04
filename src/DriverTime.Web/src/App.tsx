@@ -20,6 +20,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import MobileSetupPage from "./pages/MobileSetupPage";
 import PlanningPage from "./pages/PlanningPage";
+import OperatingCompaniesPage from "./pages/OperatingCompaniesPage";
 import ReportsPage from "./pages/ReportsPage";
 import VehicleDetailsPage from "./pages/VehicleDetailsPage";
 import VehiclesPage from "./pages/VehiclesPage";
@@ -43,6 +44,7 @@ export default function App() {
                                 <Route path="import-monitoring" element={<ImportMonitoringPage />} />
                                 <Route path="imports/:id" element={<ImportDetailsPage />} />
                                 <Route path="drivers" element={<DriversPage />} />
+                                <Route path="companies" element={<OperatingCompaniesPage />} />
                                 <Route path="drivers/:id" element={<DriverDetailsPage />} />
                                 <Route path="card-reader" element={<CardReaderPage />} />
                                 <Route path="downloads" element={<DownloadsPage />} />

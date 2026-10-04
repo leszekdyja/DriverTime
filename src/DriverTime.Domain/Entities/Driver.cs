@@ -8,6 +8,10 @@ public class Driver
 
     public Company Company { get; set; } = null!;
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public OperatingCompany? OperatingCompany { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
 
     public string LastName { get; set; } = string.Empty;

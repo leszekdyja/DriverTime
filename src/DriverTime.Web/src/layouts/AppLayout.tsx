@@ -9,6 +9,7 @@ const navigationItems = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
     { to: "/alerts", label: "Alerty", icon: "alerts" },
     { to: "/drivers", label: "Kierowcy", icon: "drivers" },
+    { to: "/companies", label: "Firmy", icon: "company" },
     { to: "/card-reader", label: "Odczyt karty", icon: "cardReader" },
     { to: "/vehicles", label: "Pojazdy", icon: "vehicles" },
     { to: "/planning", label: "Planowanie", icon: "planning" },

@@ -7,6 +7,8 @@ export type Driver = {
     cardNumber: string;
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
+    operatingCompanyId: string | null;
+    operatingCompanyName: string | null;
     includeInPlanning: boolean;
     planningNoNightDuty: boolean;
     planningNoWeekends: boolean;
@@ -59,5 +61,15 @@ export async function updateDriverPlanning(id: string, settings: DriverPlanningS
         throw new Error("Nie udało się zapisać ustawienia planowania kierowcy.");
     }
 
+    return response.json() as Promise<Driver>;
+}
+
+export async function updateDriverOperatingCompany(id: string, operatingCompanyId: string | null): Promise<Driver> {
+    const response = await apiFetch(`/api/drivers/${id}/operating-company`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatingCompanyId }),
+    });
+    if (!response.ok) throw new Error("Nie udało się przypisać kierowcy do firmy.");
     return response.json() as Promise<Driver>;
 }
