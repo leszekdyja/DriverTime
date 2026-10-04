@@ -123,12 +123,13 @@ public class AlertsController : ControllerBase
 
         if (_currentUser.OperatingCompanyId.HasValue)
         {
-            var visibleDriverIds = await _dbContext.Drivers
+            var visibleDriverIds = (await _dbContext.Drivers
                 .AsNoTracking()
                 .Where(x => x.CompanyId == _currentUser.CompanyId
                     && x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
                 .Select(x => x.Id)
-                .ToHashSetAsync(cancellationToken);
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
             drivers = drivers.Where(x => visibleDriverIds.Contains(x.DriverId)).ToList();
         }
 
