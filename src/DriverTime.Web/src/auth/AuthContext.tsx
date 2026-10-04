@@ -42,9 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         function updateCompany(event: Event) {
             const detail = (event as CustomEvent<{ name?: string }>).detail;
-            if (!detail?.name) return;
+            const name = detail?.name;
+            if (!name) return;
             setUser((current) => current
-                ? { ...current, companyName: detail.name ?? current.companyName }
+                ? current.operatingCompanyId
+                    ? { ...current, operatingCompanyName: name }
+                    : { ...current, companyName: name }
                 : current);
         }
 

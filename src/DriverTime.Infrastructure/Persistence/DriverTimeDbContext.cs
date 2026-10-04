@@ -187,6 +187,9 @@ public class DriverTimeDbContext : DbContext
             entity.HasIndex(x => new { x.CompanyId, x.Name }).IsUnique();
             entity.Property(x => x.Name).HasMaxLength(200);
             entity.Property(x => x.TaxNumber).HasMaxLength(50);
+            entity.Property(x => x.Address).HasMaxLength(500);
+            entity.Property(x => x.Email).HasMaxLength(320);
+            entity.Property(x => x.Phone).HasMaxLength(50);
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.OperatingCompanies)
                 .HasForeignKey(x => x.CompanyId)
