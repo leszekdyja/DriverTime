@@ -8,6 +8,10 @@ public class PlanningDuty : BaseEntity
 
     public Company? Company { get; set; }
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public OperatingCompany? OperatingCompany { get; set; }
+
     public string DutyNumber { get; set; } = string.Empty;
 
     public string Name { get; set; } = string.Empty;

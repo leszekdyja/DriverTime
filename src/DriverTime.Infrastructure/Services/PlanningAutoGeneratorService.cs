@@ -105,7 +105,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .ToListAsync(cancellationToken);
 
         var allDuties = await _dbContext.PlanningDuties
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .OrderBy(x => x.DutyNumber)
             .ThenBy(x => x.Name)
             .ToListAsync(cancellationToken);
@@ -173,7 +175,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 && x.DateTo >= contextDateFrom)
             .ToListAsync(cancellationToken);
         var dutyBlocks = await _dbContext.PlanningDutyBlocks.AsNoTracking()
-            .Where(x => x.CompanyId == companyId && x.IsActive)
+            .Where(x => x.CompanyId == companyId && x.IsActive
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .ToListAsync(cancellationToken);
 
         RecordTiming("Pobranie danych", dataStopwatch.ElapsedMilliseconds);
@@ -1057,7 +1061,10 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         var monthNumbers = months.Select(x => x.Month).Distinct().ToList();
 
         var existing = await _dbContext.PlanningSchedules
-            .Where(x => x.CompanyId == companyId && years.Contains(x.Year) && monthNumbers.Contains(x.Month))
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
+                && years.Contains(x.Year) && monthNumbers.Contains(x.Month))
             .ToListAsync(cancellationToken);
 
         var result = new Dictionary<(int Year, int Month), PlanningSchedule>();
@@ -1073,6 +1080,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                 {
                     Id = Guid.NewGuid(),
                     CompanyId = companyId,
+                    OperatingCompanyId = _currentUser.OperatingCompanyId,
                     Name = $"{AutoSchedulePrefix} {month.Year}-{month.Month:00}",
                     Year = month.Year,
                     Month = month.Month,

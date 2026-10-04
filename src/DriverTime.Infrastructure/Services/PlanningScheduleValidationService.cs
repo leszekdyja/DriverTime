@@ -32,7 +32,9 @@ public class PlanningScheduleValidationService : IPlanningScheduleValidationServ
                 .ThenInclude(x => x.Driver)
             .Include(x => x.Assignments)
                 .ThenInclude(x => x.PlanningDuty)
-            .Where(x => x.Id == scheduleId && x.CompanyId == companyId)
+            .Where(x => x.Id == scheduleId && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         return schedule is null ? null : Validate(schedule);

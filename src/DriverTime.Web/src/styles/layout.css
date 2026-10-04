@@ -16,6 +16,25 @@
         linear-gradient(180deg, #0f172a 0%, #111827 100%);
     color: #e2e8f0;
     box-shadow: 8px 0 30px rgb(15 23 42 / 10%);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 45%) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgb(148 163 184 / 45%);
+    background-clip: padding-box;
 }
 
 .brand {
@@ -329,6 +348,7 @@
         height: 68px;
         flex-direction: row;
         padding: 8px 10px;
+        overflow-y: hidden;
     }
 
     .brand,

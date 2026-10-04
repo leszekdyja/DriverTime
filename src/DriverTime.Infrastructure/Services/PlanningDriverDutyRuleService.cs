@@ -174,7 +174,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
             throw new PlanningDutyValidationException(new[] { "Kierowca nie należy do bieżącej firmy." });
         }
 
-        var dutyExists = await _dbContext.PlanningDuties.AnyAsync(x => x.Id == dutyId && x.CompanyId == companyId, cancellationToken);
+        var dutyExists = await _dbContext.PlanningDuties.AnyAsync(x => x.Id == dutyId && x.CompanyId == companyId
+            && (!_currentUser.OperatingCompanyId.HasValue
+                || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
         if (!dutyExists)
         {
             throw new PlanningDutyValidationException(new[] { "Służba nie należy do bieżącej firmy." });

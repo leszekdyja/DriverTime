@@ -38,6 +38,7 @@ public class ViolationsController : ControllerBase
 
         var violations = await _violationQueryService.GetAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             driverId,
             fromDate,
             toDate,
@@ -60,6 +61,7 @@ public class ViolationsController : ControllerBase
 
         var violation = await _violationQueryService.GetByIdAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             id,
             cancellationToken);
 

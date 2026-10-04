@@ -6,6 +6,8 @@ public class PlanningDutyBlock : BaseEntity
 {
     public Guid CompanyId { get; set; }
     public Company Company { get; set; } = null!;
+    public Guid? OperatingCompanyId { get; set; }
+    public OperatingCompany? OperatingCompany { get; set; }
     public Guid FirstDutyId { get; set; }
     public PlanningDuty FirstDuty { get; set; } = null!;
     public Guid SecondDutyId { get; set; }

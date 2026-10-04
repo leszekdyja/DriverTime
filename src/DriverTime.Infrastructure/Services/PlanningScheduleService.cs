@@ -29,7 +29,9 @@ public class PlanningScheduleService : IPlanningScheduleService
 
         return await _dbContext.PlanningSchedules
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .OrderByDescending(x => x.Year)
             .ThenByDescending(x => x.Month)
             .ThenBy(x => x.Name)
@@ -68,6 +70,7 @@ public class PlanningScheduleService : IPlanningScheduleService
         {
             Id = Guid.NewGuid(),
             CompanyId = _currentUser.CompanyId,
+            OperatingCompanyId = _currentUser.OperatingCompanyId,
             Name = request.Name.Trim(),
             Year = request.Year,
             Month = request.Month,
@@ -129,7 +132,9 @@ public class PlanningScheduleService : IPlanningScheduleService
 
         var companyId = _currentUser.CompanyId;
         var schedule = await _dbContext.PlanningSchedules
-            .Where(x => x.Id == scheduleId && x.CompanyId == companyId)
+            .Where(x => x.Id == scheduleId && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (schedule is null)
@@ -153,7 +158,9 @@ public class PlanningScheduleService : IPlanningScheduleService
         {
             duty = await _dbContext.PlanningDuties
                 .Include(x => x.Lines)
-                .Where(x => x.Id == request.PlanningDutyId.Value && x.CompanyId == companyId)
+                .Where(x => x.Id == request.PlanningDutyId.Value && x.CompanyId == companyId
+                    && (!_currentUser.OperatingCompanyId.HasValue
+                        || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (duty is null)
@@ -400,7 +407,9 @@ public class PlanningScheduleService : IPlanningScheduleService
                 || a.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 .ThenInclude(x => x.PlanningDuty)
                     .ThenInclude(x => x!.Lines)
-            .Where(x => x.Id == id && x.CompanyId == companyId);
+            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => !_currentUser.OperatingCompanyId.HasValue
+                || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
     }
 
     private static PlanningScheduleListItemDto ToListDto(PlanningSchedule schedule) => new()
