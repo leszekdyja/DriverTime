@@ -238,6 +238,8 @@ public class CountryEntryCompletenessRuleTests
         Assert.AreEqual(1, result.Violations.Count);
         Assert.AreEqual("MISSING_START_COUNTRY", result.Violations[0].Code);
         Assert.AreEqual(DateTime.Parse("2026-05-15T02:15:00Z").ToUniversalTime(), result.Violations[0].PeriodStartUtc);
+        StringAssert.Contains(result.Violations[0].Description, "2026-05-15 04:15 czasu polskiego");
+        Assert.IsFalse(result.Violations[0].Description.Contains("UTC", StringComparison.Ordinal));
     }
 
     [TestMethod]
