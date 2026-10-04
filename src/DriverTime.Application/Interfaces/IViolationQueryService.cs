@@ -6,6 +6,7 @@ public interface IViolationQueryService
 {
     Task<IReadOnlyList<ViolationDto>> GetAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         Guid? driverId,
         DateTime? fromDate,
         DateTime? toDate,
@@ -15,6 +16,7 @@ public interface IViolationQueryService
 
     Task<ViolationDto?> GetByIdAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         Guid id,
         CancellationToken cancellationToken = default);
 }

@@ -151,7 +151,9 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
     {
         IQueryable<PlanningDuty> query = _dbContext.PlanningDuties
             .Include(x => x.Lines)
-            .Where(x => x.CompanyId == companyId);
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value));
 
         if (request.DutyId.HasValue)
         {
@@ -177,7 +179,10 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
         CancellationToken cancellationToken)
     {
         var schedule = await _dbContext.PlanningSchedules
-            .Where(x => x.CompanyId == companyId && x.Year == date.Year && x.Month == date.Month)
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
+                && x.Year == date.Year && x.Month == date.Month)
             .OrderBy(x => x.Name)
             .FirstOrDefaultAsync(cancellationToken);
         if (schedule is not null)
@@ -190,6 +195,7 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
         {
             Id = Guid.NewGuid(),
             CompanyId = companyId,
+            OperatingCompanyId = _currentUser.OperatingCompanyId,
             Name = $"Plan ręczny {date.Year}-{date.Month:00}",
             Year = date.Year,
             Month = date.Month,

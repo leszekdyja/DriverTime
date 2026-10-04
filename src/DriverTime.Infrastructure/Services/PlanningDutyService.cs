@@ -38,7 +38,9 @@ public class PlanningDutyService : IPlanningDutyService
         return await _dbContext.PlanningDuties
             .AsNoTracking()
             .Include(x => x.Lines)
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .OrderByDescending(x => x.ValidFrom)
             .ThenBy(x => x.DutyNumber)
             .Select(x => ToListDto(x))
@@ -65,6 +67,7 @@ public class PlanningDutyService : IPlanningDutyService
         {
             Id = Guid.NewGuid(),
             CompanyId = _currentUser.CompanyId,
+            OperatingCompanyId = _currentUser.OperatingCompanyId,
             DutyNumber = request.DutyNumber.Trim(),
             Name = request.Name.Trim(),
             CreatedAtUtc = now,
@@ -154,10 +157,13 @@ public class PlanningDutyService : IPlanningDutyService
         var existingDuties = await _dbContext.PlanningDuties
             .Include(x => x.Lines)
             .Include(x => x.Stops)
-            .Where(x => x.CompanyId == companyId && dutyNumbers.Contains(x.DutyNumber))
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
+                && dutyNumbers.Contains(x.DutyNumber))
             .ToListAsync(cancellationToken);
 
-        var result = ConfirmImportForCompany(existingDuties, request, companyId, now);
+        var result = ConfirmImportForCompany(existingDuties, request, companyId, now, _currentUser.OperatingCompanyId);
 
         foreach (var duty in existingDuties.Where(x => _dbContext.Entry(x).State == EntityState.Detached))
         {
@@ -173,7 +179,8 @@ public class PlanningDutyService : IPlanningDutyService
         IList<PlanningDuty> existingDuties,
         PlanningDutyPdfImportConfirmRequestDto request,
         Guid companyId,
-        DateTime now)
+        DateTime now,
+        Guid? operatingCompanyId = null)
     {
         ValidateConfirmRequest(request);
 
@@ -193,6 +200,7 @@ public class PlanningDutyService : IPlanningDutyService
             if (matchingDuty is null)
             {
                 var created = CreateDutyFromConfirmItem(item, request.SourceFileName, companyId, now);
+                created.OperatingCompanyId = operatingCompanyId;
                 existingDuties.Add(created);
                 result.CreatedCount++;
                 result.Items.Add(CreateResultItem(item, "Created", "Dodano nową służbę."));
@@ -280,7 +288,9 @@ public class PlanningDutyService : IPlanningDutyService
         return _dbContext.PlanningDuties
             .Include(x => x.Lines)
             .Include(x => x.Stops)
-            .Where(x => x.Id == id && x.CompanyId == companyId);
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value));
     }
 
     private static void ApplyRequest(

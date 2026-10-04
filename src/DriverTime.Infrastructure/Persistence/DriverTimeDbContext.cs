@@ -352,6 +352,12 @@ public class DriverTimeDbContext : DbContext
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasIndex(x => x.OperatingCompanyId);
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany()
+                .HasForeignKey(x => x.OperatingCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasMany(x => x.Lines)
                 .WithOne(x => x.PlanningDuty)
                 .HasForeignKey(x => x.PlanningDutyId)
@@ -399,6 +405,12 @@ public class DriverTimeDbContext : DbContext
                 .WithMany(x => x.PlanningSchedules)
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => x.OperatingCompanyId);
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany()
+                .HasForeignKey(x => x.OperatingCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(x => x.Assignments)
                 .WithOne(x => x.PlanningSchedule)
@@ -507,10 +519,12 @@ public class DriverTimeDbContext : DbContext
             entity.ToTable("PlanningDutyBlocks");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.CompanyId);
+            entity.HasIndex(x => x.OperatingCompanyId);
             entity.HasIndex(x => new { x.CompanyId, x.FirstDutyId, x.SecondDutyId }).IsUnique();
             entity.Property(x => x.RequiredVehicleType).HasMaxLength(200);
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OperatingCompany).WithMany().HasForeignKey(x => x.OperatingCompanyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.FirstDuty).WithMany().HasForeignKey(x => x.FirstDutyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.SecondDuty).WithMany().HasForeignKey(x => x.SecondDutyId).OnDelete(DeleteBehavior.Restrict);
         });

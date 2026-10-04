@@ -25,6 +25,7 @@ public class ViolationQueryService : IViolationQueryService
 
     public async Task<IReadOnlyList<ViolationDto>> GetAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         Guid? driverId,
         DateTime? fromDate,
         DateTime? toDate,
@@ -32,7 +33,7 @@ public class ViolationQueryService : IViolationQueryService
         string? type,
         CancellationToken cancellationToken = default)
     {
-        var query = BuildCompanyQuery(companyId);
+        var query = BuildCompanyQuery(companyId, operatingCompanyId);
         var hasCustomRange = fromDate.HasValue || toDate.HasValue;
 
         if (!hasCustomRange)
@@ -95,10 +96,11 @@ public class ViolationQueryService : IViolationQueryService
 
     public async Task<ViolationDto?> GetByIdAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var violation = await BuildCompanyQuery(companyId)
+        var violation = await BuildCompanyQuery(companyId, operatingCompanyId)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         return violation is null
@@ -106,12 +108,19 @@ public class ViolationQueryService : IViolationQueryService
             : await MapWithRuleAnalysisAsync(companyId, violation, cancellationToken);
     }
 
-    private IQueryable<Violation> BuildCompanyQuery(Guid companyId)
+    private IQueryable<Violation> BuildCompanyQuery(Guid companyId, Guid? operatingCompanyId)
     {
-        return _dbContext.Violations
+        var query = _dbContext.Violations
             .AsNoTracking()
             .Include(x => x.Driver)
             .Where(x => x.Driver != null && x.Driver.CompanyId == companyId);
+
+        if (operatingCompanyId.HasValue)
+        {
+            query = query.Where(x => x.Driver!.OperatingCompanyId == operatingCompanyId.Value);
+        }
+
+        return query;
     }
 
     private async Task<IReadOnlyList<ViolationDto>> MapWithRuleAnalysisAsync(

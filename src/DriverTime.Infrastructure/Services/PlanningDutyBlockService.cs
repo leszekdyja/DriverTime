@@ -19,15 +19,18 @@ public class PlanningDutyBlockService(DriverTimeDbContext dbContext, ICurrentUse
         if (request.FirstDutyId == Guid.Empty || request.SecondDutyId == Guid.Empty) errors.Add("Wybierz obie służby.");
         if (request.FirstDutyId == request.SecondDutyId) errors.Add("Blokada musi łączyć dwie różne służby.");
         var ids = new[] { request.FirstDutyId, request.SecondDutyId }.Distinct().ToList();
-        if (await dbContext.PlanningDuties.CountAsync(x => x.CompanyId == currentUser.CompanyId && ids.Contains(x.Id), cancellationToken) != ids.Count) errors.Add("Służba nie należy do bieżącej firmy.");
+        if (await dbContext.PlanningDuties.CountAsync(x => x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == currentUser.OperatingCompanyId.Value)
+            && ids.Contains(x.Id), cancellationToken) != ids.Count) errors.Add("Służba nie należy do bieżącej firmy.");
         if (await dbContext.PlanningDutyBlocks.AnyAsync(x => x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == currentUser.OperatingCompanyId.Value)
             && (x.FirstDutyId == request.FirstDutyId || x.SecondDutyId == request.FirstDutyId
                 || x.FirstDutyId == request.SecondDutyId || x.SecondDutyId == request.SecondDutyId), cancellationToken))
         {
             errors.Add("Jedna z wybranych służb należy już do innej blokady.");
         }
         if (errors.Count > 0) throw new PlanningDutyValidationException(errors);
-        var entity = new PlanningDutyBlock { Id = Guid.NewGuid(), CompanyId = currentUser.CompanyId, FirstDutyId = request.FirstDutyId, SecondDutyId = request.SecondDutyId, RequiredVehicleType = Normalize(request.RequiredVehicleType), Notes = Normalize(request.Notes), IsActive = request.IsActive };
+        var entity = new PlanningDutyBlock { Id = Guid.NewGuid(), CompanyId = currentUser.CompanyId, OperatingCompanyId = currentUser.OperatingCompanyId, FirstDutyId = request.FirstDutyId, SecondDutyId = request.SecondDutyId, RequiredVehicleType = Normalize(request.RequiredVehicleType), Notes = Normalize(request.Notes), IsActive = request.IsActive };
         dbContext.PlanningDutyBlocks.Add(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
         return await Query().Where(x => x.Id == entity.Id).Select(x => Map(x)).SingleAsync(cancellationToken);
@@ -35,14 +38,16 @@ public class PlanningDutyBlockService(DriverTimeDbContext dbContext, ICurrentUse
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var entity = await dbContext.PlanningDutyBlocks.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId, cancellationToken);
+        var entity = await dbContext.PlanningDutyBlocks.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == currentUser.OperatingCompanyId.Value), cancellationToken);
         if (entity is null) return false;
         dbContext.PlanningDutyBlocks.Remove(entity);
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    private IQueryable<PlanningDutyBlock> Query() => dbContext.PlanningDutyBlocks.AsNoTracking().Include(x => x.FirstDuty).Include(x => x.SecondDuty).Where(x => x.CompanyId == currentUser.CompanyId);
+    private IQueryable<PlanningDutyBlock> Query() => dbContext.PlanningDutyBlocks.AsNoTracking().Include(x => x.FirstDuty).Include(x => x.SecondDuty).Where(x => x.CompanyId == currentUser.CompanyId
+        && (!currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == currentUser.OperatingCompanyId.Value));
     private static PlanningDutyBlockDto Map(PlanningDutyBlock x) => new() { Id = x.Id, FirstDutyId = x.FirstDutyId, FirstDutyNumber = x.FirstDuty.DutyNumber, SecondDutyId = x.SecondDutyId, SecondDutyNumber = x.SecondDuty.DutyNumber, RequiredVehicleType = x.RequiredVehicleType, Notes = x.Notes, IsActive = x.IsActive };
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
