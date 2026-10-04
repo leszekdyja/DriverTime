@@ -33,6 +33,38 @@
     border-radius: 8px;
 }
 
+.work-evidence-driver-form {
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(220px, 1.3fr) auto auto;
+    gap: 14px;
+    align-items: end;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.work-evidence-driver-form .section-heading {
+    grid-column: 1 / -1;
+}
+
+.work-evidence-driver-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+}
+
+.work-evidence-driver-form input[type="text"] {
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--color-surface-muted);
+    color: var(--text);
+}
+
 .work-evidence-controls label,
 .work-evidence-form label {
     display: flex;
@@ -189,6 +221,10 @@
 }
 
 @media (max-width: 1000px) {
+    .work-evidence-driver-form {
+        grid-template-columns: 1fr;
+    }
+
     .work-evidence-layout {
         grid-template-columns: 1fr;
     }

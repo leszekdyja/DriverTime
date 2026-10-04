@@ -95,13 +95,15 @@ export function buildPlanningMonthlyGrid(
         assignmentsByDriverAndDate.set(`${assignment.driverId}|${assignment.date}`, assignment);
     }
 
-    const sortedDrivers = [...drivers].sort((left, right) => {
-        const byLastName = (left.lastName ?? "").localeCompare(right.lastName ?? "", "pl");
-        if (byLastName !== 0) return byLastName;
-        const byFirstName = (left.firstName ?? "").localeCompare(right.firstName ?? "", "pl");
-        if (byFirstName !== 0) return byFirstName;
-        return (left.cardNumber ?? "").localeCompare(right.cardNumber ?? "", "pl");
-    });
+    const sortedDrivers = drivers
+        .filter((driver) => driver.includeInPlanning !== false)
+        .sort((left, right) => {
+            const byLastName = (left.lastName ?? "").localeCompare(right.lastName ?? "", "pl");
+            if (byLastName !== 0) return byLastName;
+            const byFirstName = (left.firstName ?? "").localeCompare(right.firstName ?? "", "pl");
+            if (byFirstName !== 0) return byFirstName;
+            return (left.cardNumber ?? "").localeCompare(right.cardNumber ?? "", "pl");
+        });
 
     return {
         year,

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
-import { getDrivers, type Driver } from "../services/driversService";
+import {
+    createDriver,
+    getDrivers,
+    type CreateDriverRequest,
+    type Driver,
+} from "../services/driversService";
 import {
     createWorkEvidenceEntry,
     deleteWorkEvidenceEntry,
@@ -50,6 +55,13 @@ export default function WorkEvidencePage() {
     const [isSaving, setIsSaving] = useState(false);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
+    const [isAddingDriver, setIsAddingDriver] = useState(false);
+    const [driverForm, setDriverForm] = useState<CreateDriverRequest>({
+        firstName: "",
+        lastName: "",
+        cardNumber: "",
+        includeInPlanning: true,
+    });
 
     const selectedDriver = useMemo(
         () => drivers.find((driver) => driver.id === selectedDriverId) ?? null,
@@ -148,6 +160,39 @@ export default function WorkEvidencePage() {
         }
     }
 
+    async function submitDriver(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        if (!driverForm.firstName.trim() || !driverForm.lastName.trim() || !driverForm.cardNumber.trim()) {
+            setIsError(true);
+            setMessage("Uzupełnij imię, nazwisko i numer karty kierowcy.");
+            return;
+        }
+
+        setIsAddingDriver(true);
+        setMessage("");
+        setIsError(false);
+
+        try {
+            const created = await createDriver({
+                ...driverForm,
+                firstName: driverForm.firstName.trim(),
+                lastName: driverForm.lastName.trim(),
+                cardNumber: driverForm.cardNumber.trim(),
+            });
+            const refreshedDrivers = await getDrivers();
+            setDrivers(refreshedDrivers);
+            setSelectedDriverId(created.id);
+            setDriverForm({ firstName: "", lastName: "", cardNumber: "", includeInPlanning: true });
+            setMessage("Kierowca został dodany do ewidencji.");
+        } catch (error) {
+            setIsError(true);
+            setMessage(error instanceof Error ? error.message : "Nie udało się dodać kierowcy.");
+        } finally {
+            setIsAddingDriver(false);
+        }
+    }
+
     async function removeEntry(entry: WorkEvidenceEntry) {
         if (!window.confirm("Usunąć wpis ewidencji?")) {
             return;
@@ -192,6 +237,32 @@ export default function WorkEvidencePage() {
                     Drukuj raport
                 </button>
             </div>
+
+            <form className="work-evidence-driver-form" onSubmit={submitDriver}>
+                <div className="section-heading">
+                    <h3>Dodaj kierowcę</h3>
+                    <p>Ręczne dodawanie kierowców jest dostępne wyłącznie w ewidencji.</p>
+                </div>
+                <label>
+                    Imię
+                    <input type="text" value={driverForm.firstName} onChange={(event) => setDriverForm((current) => ({ ...current, firstName: event.target.value }))} />
+                </label>
+                <label>
+                    Nazwisko
+                    <input type="text" value={driverForm.lastName} onChange={(event) => setDriverForm((current) => ({ ...current, lastName: event.target.value }))} />
+                </label>
+                <label>
+                    Numer karty kierowcy
+                    <input type="text" value={driverForm.cardNumber} onChange={(event) => setDriverForm((current) => ({ ...current, cardNumber: event.target.value }))} />
+                </label>
+                <label className="work-evidence-checkbox">
+                    <input type="checkbox" checked={driverForm.includeInPlanning} onChange={(event) => setDriverForm((current) => ({ ...current, includeInPlanning: event.target.checked }))} />
+                    Uwzględniaj w automatycznym planowaniu
+                </label>
+                <button type="submit" disabled={isAddingDriver}>
+                    {isAddingDriver ? "Dodawanie..." : "Dodaj kierowcę"}
+                </button>
+            </form>
 
             <section className="work-evidence-controls">
                 <label>
