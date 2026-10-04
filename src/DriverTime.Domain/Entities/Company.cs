@@ -20,6 +20,8 @@ public class Company : BaseEntity
 
     public ICollection<Driver> Drivers { get; set; } = new List<Driver>();
 
+    public ICollection<OperatingCompany> OperatingCompanies { get; set; } = new List<OperatingCompany>();
+
     public ICollection<DddFile> DddFiles { get; set; } = new List<DddFile>();
 
     public ICollection<DddImportMonitoringEntry> DddImportMonitoringEntries { get; set; }

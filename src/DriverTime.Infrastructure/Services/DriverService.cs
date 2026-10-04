@@ -69,6 +69,8 @@ public class DriverService : IDriverService
                 CardNumber = x.CardNumber,
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
+                OperatingCompanyId = x.OperatingCompanyId,
+                OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : null,
                 IncludeInPlanning = x.IncludeInPlanning,
                 PlanningNoNightDuty = x.PlanningNoNightDuty,
                 PlanningNoWeekends = x.PlanningNoWeekends,
@@ -98,6 +100,8 @@ public class DriverService : IDriverService
                 CardNumber = x.CardNumber,
                 CardExpiryDate = x.CardExpiryDate,
                 CardIssuingCountry = x.CardIssuingCountry,
+                OperatingCompanyId = x.OperatingCompanyId,
+                OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : null,
                 IncludeInPlanning = x.IncludeInPlanning,
                 PlanningNoNightDuty = x.PlanningNoNightDuty,
                 PlanningNoWeekends = x.PlanningNoWeekends,
@@ -341,6 +345,7 @@ public class DriverService : IDriverService
         CancellationToken cancellationToken = default)
     {
         var driver = await _dbContext.Drivers
+            .Include(x => x.OperatingCompany)
             .FirstOrDefaultAsync(
                 x => x.Id == id && x.CompanyId == _currentUser.CompanyId,
                 cancellationToken);
@@ -366,6 +371,50 @@ public class DriverService : IDriverService
             CardNumber = driver.CardNumber,
             CardExpiryDate = driver.CardExpiryDate,
             CardIssuingCountry = driver.CardIssuingCountry,
+            OperatingCompanyId = driver.OperatingCompanyId,
+            OperatingCompanyName = driver.OperatingCompany?.Name,
+            IncludeInPlanning = driver.IncludeInPlanning,
+            PlanningNoNightDuty = driver.PlanningNoNightDuty,
+            PlanningNoWeekends = driver.PlanningNoWeekends,
+            PlanningNoSaturdays = driver.PlanningNoSaturdays,
+            PlanningNoHolidays = driver.PlanningNoHolidays,
+            PlanningNoDaysOff = driver.PlanningNoDaysOff,
+            CreatedAtUtc = driver.CreatedAtUtc
+        };
+    }
+
+    public async Task<DriverDto?> UpdateOperatingCompanyAsync(
+        Guid id,
+        UpdateDriverOperatingCompanyDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var driver = await _dbContext.Drivers
+            .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+        if (driver is null) return null;
+
+        OperatingCompany? operatingCompany = null;
+        if (dto.OperatingCompanyId.HasValue)
+        {
+            operatingCompany = await _dbContext.OperatingCompanies
+                .FirstOrDefaultAsync(
+                    x => x.Id == dto.OperatingCompanyId.Value && x.CompanyId == _currentUser.CompanyId,
+                    cancellationToken);
+            if (operatingCompany is null) throw new ArgumentException("Wybrana firma nie istnieje.");
+        }
+
+        driver.OperatingCompanyId = operatingCompany?.Id;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new DriverDto
+        {
+            Id = driver.Id,
+            FirstName = driver.FirstName,
+            LastName = driver.LastName,
+            CardNumber = driver.CardNumber,
+            CardExpiryDate = driver.CardExpiryDate,
+            CardIssuingCountry = driver.CardIssuingCountry,
+            OperatingCompanyId = driver.OperatingCompanyId,
+            OperatingCompanyName = operatingCompany?.Name,
             IncludeInPlanning = driver.IncludeInPlanning,
             PlanningNoNightDuty = driver.PlanningNoNightDuty,
             PlanningNoWeekends = driver.PlanningNoWeekends,

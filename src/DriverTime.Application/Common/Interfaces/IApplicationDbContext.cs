@@ -7,6 +7,8 @@ public interface IApplicationDbContext
 {
     DbSet<Company> Companies { get; }
 
+    DbSet<OperatingCompany> OperatingCompanies { get; }
+
     DbSet<User> Users { get; }
 
     DbSet<Role> Roles { get; }

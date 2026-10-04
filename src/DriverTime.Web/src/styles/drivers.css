@@ -355,3 +355,18 @@
     resize: vertical;
     word-break: break-all;
 }
+.company-form {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) minmax(180px, 1fr) auto auto;
+    gap: 16px;
+    align-items: end;
+}
+
+.company-form label:not(.driver-table-toggle) {
+    display: grid;
+    gap: 7px;
+}
+
+@media (max-width: 900px) {
+    .company-form { grid-template-columns: 1fr; }
+}

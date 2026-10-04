@@ -14,6 +14,10 @@ public class DriverDto
 
     public string CardIssuingCountry { get; set; } = string.Empty;
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public string? OperatingCompanyName { get; set; }
+
     public bool IncludeInPlanning { get; set; }
 
     public bool PlanningNoNightDuty { get; set; }

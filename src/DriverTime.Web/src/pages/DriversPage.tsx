@@ -11,6 +11,7 @@ import Pagination from "../components/Pagination";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import { API_URL } from "../config/api";
 import { apiFetch } from "../services/apiClient";
+import { getOperatingCompanies, type OperatingCompany } from "../services/operatingCompaniesService";
 import "../styles/drivers.css";
 
 type DriverDto = {
@@ -20,6 +21,8 @@ type DriverDto = {
     cardNumber: string;
     cardExpiryDate: string | null;
     cardIssuingCountry: string;
+    operatingCompanyId: string | null;
+    operatingCompanyName: string | null;
     includeInPlanning: boolean;
     planningNoNightDuty: boolean;
     planningNoWeekends: boolean;
@@ -42,6 +45,7 @@ const pageSize = 8;
 
 export default function DriversPage() {
     const [drivers, setDrivers] = useState<DriverDto[]>([]);
+    const [companies, setCompanies] = useState<OperatingCompany[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState("");
     const [isError, setIsError] = useState(false);
@@ -59,7 +63,8 @@ export default function DriversPage() {
         return drivers.filter((driver) =>
             driver.lastName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
             || driver.firstName.toLocaleLowerCase("pl-PL").includes(deferredSearch)
-            || driver.cardNumber.toLocaleLowerCase("pl-PL").includes(deferredSearch),
+            || driver.cardNumber.toLocaleLowerCase("pl-PL").includes(deferredSearch)
+            || driver.operatingCompanyName?.toLocaleLowerCase("pl-PL").includes(deferredSearch),
         );
     }, [deferredSearch, drivers]);
 
@@ -74,13 +79,17 @@ export default function DriversPage() {
         setMessage("");
 
         try {
-            const response = await apiFetch(driversApiUrl);
+            const [response, loadedCompanies] = await Promise.all([
+                apiFetch(driversApiUrl),
+                getOperatingCompanies(),
+            ]);
 
             if (!response.ok) {
                 throw new Error("Nie udało się pobrać kierowców.");
             }
 
             setDrivers((await response.json()) as DriverDto[]);
+            setCompanies(loadedCompanies);
         } catch {
             setIsError(true);
             setMessage("błąd podczas pobierania kierowców.");
@@ -88,6 +97,24 @@ export default function DriversPage() {
             setIsLoading(false);
         }
     }, []);
+
+    async function assignCompany(driver: DriverDto, operatingCompanyId: string | null) {
+        setMessage(""); setIsError(false);
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${driver.id}/operating-company`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ operatingCompanyId }),
+            });
+            if (!response.ok) throw new Error("Nie udało się przypisać kierowcy do firmy.");
+            const saved = await response.json() as DriverDto;
+            setDrivers(current => current.map(item => item.id === saved.id ? saved : item));
+            setMessage(operatingCompanyId ? "Kierowca został przypisany do firmy." : "Usunięto przypisanie kierowcy do firmy.");
+        } catch (assignError) {
+            setIsError(true);
+            setMessage(assignError instanceof Error ? assignError.message : "Nie udało się przypisać kierowcy do firmy.");
+        }
+    }
 
     async function updateDriverPlanningSettings(driver: DriverDto, changes: Partial<Pick<DriverDto, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">>) {
         setMessage("");
@@ -237,7 +264,7 @@ export default function DriversPage() {
                         <input
                             id="drivers-search"
                             type="search"
-                            placeholder="Nazwisko, imię lub numer karty"
+                            placeholder="Nazwisko, imię, numer karty lub firma"
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                         />
@@ -281,6 +308,7 @@ export default function DriversPage() {
                                         <th>Numer karty</th>
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
+                                        <th>Firma</th>
                                         <th>Planowanie</th>
                                         <th>Blokady planowania</th>
                                         <th>Aplikacja</th>
@@ -299,6 +327,12 @@ export default function DriversPage() {
                                                     : "Brak danych"}
                                             </td>
                                             <td>{driver.cardIssuingCountry || "Brak danych"}</td>
+                                            <td>
+                                                <select value={driver.operatingCompanyId ?? ""} onChange={event => void assignCompany(driver, event.target.value || null)}>
+                                                    <option value="">Bez przypisania</option>
+                                                    {companies.filter(company => company.active || company.id === driver.operatingCompanyId).map(company => <option key={company.id} value={company.id}>{company.name}{company.active ? "" : " (nieaktywna)"}</option>)}
+                                                </select>
+                                            </td>
                                             <td>
                                                 <label className="driver-table-toggle">
                                                     <input

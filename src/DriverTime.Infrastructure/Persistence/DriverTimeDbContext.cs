@@ -12,6 +12,8 @@ public class DriverTimeDbContext : DbContext
 
     public DbSet<Company> Companies => Set<Company>();
 
+    public DbSet<OperatingCompany> OperatingCompanies => Set<OperatingCompany>();
+
     public DbSet<User> Users => Set<User>();
 
     public DbSet<Role> Roles => Set<Role>();
@@ -175,6 +177,18 @@ public class DriverTimeDbContext : DbContext
             entity.HasIndex(x => new { x.EndUtc, x.StartUtc, x.DddFileId });
         });
 
+        modelBuilder.Entity<OperatingCompany>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.Name }).IsUnique();
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.TaxNumber).HasMaxLength(50);
+            entity.HasOne(x => x.Company)
+                .WithMany(x => x.OperatingCompanies)
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<VehicleUse>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -238,6 +252,11 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.Drivers)
                 .HasForeignKey(x => x.CompanyId);
+
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany(x => x.Drivers)
+                .HasForeignKey(x => x.OperatingCompanyId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Violation>(entity =>
