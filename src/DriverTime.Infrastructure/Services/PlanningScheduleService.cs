@@ -33,7 +33,18 @@ public class PlanningScheduleService : IPlanningScheduleService
             .OrderByDescending(x => x.Year)
             .ThenByDescending(x => x.Month)
             .ThenBy(x => x.Name)
-            .Select(x => ToListDto(x))
+            .Select(x => new PlanningScheduleListItemDto
+            {
+                Id = x.Id,
+                Name = x.Name,
+                Year = x.Year,
+                Month = x.Month,
+                Notes = x.Notes,
+                CreatedUtc = x.CreatedUtc,
+                UpdatedUtc = x.UpdatedUtc,
+                AssignmentsCount = x.Assignments.Count(a => !_currentUser.OperatingCompanyId.HasValue
+                    || a.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
+            })
             .ToListAsync(cancellationToken);
     }
 
@@ -127,7 +138,9 @@ public class PlanningScheduleService : IPlanningScheduleService
         }
 
         var driver = await _dbContext.Drivers
-            .Where(x => x.Id == request.DriverId && x.CompanyId == companyId)
+            .Where(x => x.Id == request.DriverId && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (driver is null)
@@ -205,7 +218,9 @@ public class PlanningScheduleService : IPlanningScheduleService
                 x.Id == assignmentId
                 && x.PlanningScheduleId == scheduleId
                 && x.CompanyId == companyId
-                && x.PlanningSchedule.CompanyId == companyId)
+                && x.PlanningSchedule.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (assignment is null)
@@ -378,9 +393,11 @@ public class PlanningScheduleService : IPlanningScheduleService
         var companyId = _currentUser.CompanyId;
 
         return _dbContext.PlanningSchedules
-            .Include(x => x.Assignments)
+            .Include(x => x.Assignments.Where(a => !_currentUser.OperatingCompanyId.HasValue
+                || a.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 .ThenInclude(x => x.Driver)
-            .Include(x => x.Assignments)
+            .Include(x => x.Assignments.Where(a => !_currentUser.OperatingCompanyId.HasValue
+                || a.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 .ThenInclude(x => x.PlanningDuty)
                     .ThenInclude(x => x!.Lines)
             .Where(x => x.Id == id && x.CompanyId == companyId);

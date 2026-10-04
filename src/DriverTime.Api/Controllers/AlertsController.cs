@@ -45,7 +45,10 @@ public class AlertsController : ControllerBase
 
         alerts.AddRange(await BuildComplianceAlertsAsync(cancellationToken));
         alerts.AddRange(await BuildDriverDownloadAlertsAsync(cancellationToken));
-        alerts.AddRange(await BuildVehicleDownloadAlertsAsync(cancellationToken));
+        if (!_currentUser.OperatingCompanyId.HasValue)
+        {
+            alerts.AddRange(await BuildVehicleDownloadAlertsAsync(cancellationToken));
+        }
         alerts.AddRange(await BuildImportAlertsAsync(cancellationToken));
 
         return Ok(alerts
@@ -63,6 +66,8 @@ public class AlertsController : ControllerBase
             .Where(x =>
                 x.Driver != null
                 && x.Driver.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
                 && (x.Severity.ToLower() == "critical"
                     || x.Severity.ToLower() == "high"
                     || x.Severity.ToLower() == "severe"
@@ -115,6 +120,17 @@ public class AlertsController : ControllerBase
         var drivers = await _downloadScheduleService.GetDriverDownloadsAsync(
             _currentUser.CompanyId,
             cancellationToken);
+
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            var visibleDriverIds = await _dbContext.Drivers
+                .AsNoTracking()
+                .Where(x => x.CompanyId == _currentUser.CompanyId
+                    && x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
+                .Select(x => x.Id)
+                .ToHashSetAsync(cancellationToken);
+            drivers = drivers.Where(x => visibleDriverIds.Contains(x.DriverId)).ToList();
+        }
 
         return drivers
             .Where(x => x.Status is DownloadStatus.Overdue or DownloadStatus.Warning)
@@ -193,6 +209,7 @@ public class AlertsController : ControllerBase
             .AsNoTracking()
             .Where(x =>
                 x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.UserId == _currentUser.UserId)
                 && x.Status == DddImportMonitoringStatus.Failed)
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(100)
