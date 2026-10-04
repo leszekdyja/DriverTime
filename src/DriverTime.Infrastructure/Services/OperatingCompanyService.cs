@@ -82,6 +82,7 @@ public class OperatingCompanyService : IOperatingCompanyService
                 RoleId = dispatcherRole.Id,
                 Active = true
             });
+            company.Email = email;
         }
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(company);

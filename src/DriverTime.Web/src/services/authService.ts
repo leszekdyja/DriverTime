@@ -5,6 +5,8 @@ export type CurrentUser = {
     id: string;
     companyId: string;
     companyName: string;
+    operatingCompanyId?: string | null;
+    operatingCompanyName?: string | null;
     firstName: string;
     lastName: string;
     email: string;

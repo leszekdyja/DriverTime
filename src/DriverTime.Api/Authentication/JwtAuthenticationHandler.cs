@@ -96,6 +96,15 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
             claims.Add(new Claim("driver_id", driverId.GetString() ?? string.Empty));
         }
 
+        if (payload.TryGetProperty("operating_company_id", out var operatingCompanyId))
+        {
+            var value = operatingCompanyId.GetString();
+            if (Guid.TryParse(value, out _))
+            {
+                claims.Add(new Claim("operating_company_id", value!));
+            }
+        }
+
         return new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
     }
 

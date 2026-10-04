@@ -170,7 +170,9 @@ public class DddFileService : IDddFileService
     public async Task<IReadOnlyList<DddFileDto>> GetAllAsync()
     {
         return await _dbContext.DddFiles
-            .Where(x => x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)))
             .OrderByDescending(x => x.UploadedAtUtc)
             .Select(x => new DddFileDto
             {
@@ -194,7 +196,9 @@ public class DddFileService : IDddFileService
             .Include(x => x.CountryEntries)
             .Include(x => x.VehicleUses)
             .FirstOrDefaultAsync(x =>
-                x.Id == id && x.CompanyId == _currentUser.CompanyId);
+                x.Id == id && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)));
 
         if (dddFile is null)
         {
@@ -250,7 +254,9 @@ public class DddFileService : IDddFileService
         var exists = await _dbContext.DddFiles
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == id && x.CompanyId == _currentUser.CompanyId,
+                x => x.Id == id && x.CompanyId == _currentUser.CompanyId
+                    && (!_currentUser.OperatingCompanyId.HasValue
+                        || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)),
                 cancellationToken);
 
         if (!exists)
