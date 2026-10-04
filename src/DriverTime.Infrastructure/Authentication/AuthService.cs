@@ -152,6 +152,8 @@ public class AuthService : IAuthService
             Id = user.Id,
             CompanyId = user.CompanyId,
             CompanyName = user.Company?.Name ?? string.Empty,
+            OperatingCompanyId = user.OperatingCompanyId,
+            OperatingCompanyName = user.OperatingCompany?.Name,
             FirstName = user.FirstName,
             LastName = user.LastName,
             Email = user.Email,
@@ -163,6 +165,7 @@ public class AuthService : IAuthService
     {
         return _dbContext.Users
             .Include(x => x.Company)
+            .Include(x => x.OperatingCompany)
             .Include(x => x.Role);
     }
 

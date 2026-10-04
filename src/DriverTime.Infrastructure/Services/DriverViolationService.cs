@@ -53,7 +53,8 @@ public class DriverViolationService : IDriverViolationService
         var driverExists = await _dbContext.Drivers
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId,
+                x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId
+                    && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value),
                 cancellationToken);
 
         if (!driverExists)
@@ -71,10 +72,15 @@ public class DriverViolationService : IDriverViolationService
 
     private IQueryable<DriverActivity> GetActivitiesQuery()
     {
-        return _dbContext.DriverActivities
+        var query = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
-            .Include(x => x.DddFile);
+            .Include(x => x.DddFile)
+            .AsQueryable();
+        if (_currentUser.OperatingCompanyId.HasValue)
+            query = query.Where(x => x.DddFile.Driver != null
+                && x.DddFile.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
+        return query;
     }
 
     private static IReadOnlyList<DriverViolationDto> CalculateViolations(

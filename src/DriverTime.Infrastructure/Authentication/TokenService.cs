@@ -29,6 +29,11 @@ public class TokenService : ITokenService
             ["token_type"] = "user"
         };
 
+        if (user.OperatingCompanyId.HasValue)
+        {
+            payload["operating_company_id"] = user.OperatingCompanyId.Value.ToString();
+        }
+
         return CreateToken(payload, expiresAtUtc, MapUser(user));
     }
 
@@ -97,6 +102,8 @@ public class TokenService : ITokenService
             Id = user.Id,
             CompanyId = user.CompanyId,
             CompanyName = user.Company?.Name ?? string.Empty,
+            OperatingCompanyId = user.OperatingCompanyId,
+            OperatingCompanyName = user.OperatingCompany?.Name,
             FirstName = user.FirstName,
             LastName = user.LastName,
             Email = user.Email,

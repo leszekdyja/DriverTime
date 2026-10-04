@@ -16,6 +16,15 @@ public class CurrentUserService : ICurrentUserService
 
     public Guid CompanyId => GetGuidClaim("company_id");
 
+    public Guid? OperatingCompanyId
+    {
+        get
+        {
+            var value = _httpContextAccessor.HttpContext?.User.FindFirstValue("operating_company_id");
+            return Guid.TryParse(value, out var id) ? id : null;
+        }
+    }
+
     public Guid DriverId => GetGuidClaim("driver_id");
 
     public bool IsMobileDriver =>

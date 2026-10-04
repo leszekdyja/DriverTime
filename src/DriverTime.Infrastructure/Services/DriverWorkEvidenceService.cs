@@ -35,7 +35,8 @@ public class DriverWorkEvidenceService : IDriverWorkEvidenceService
 
         var driver = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => new
             {
                 x.Id,

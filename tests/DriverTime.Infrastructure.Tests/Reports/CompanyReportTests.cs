@@ -53,6 +53,27 @@ public class CompanyReportTests
         Assert.AreEqual("Jan", result[0].DriverFirstName);
     }
 
+    [TestMethod]
+    public async Task Activities_FilterBySelectedDrivers_ReturnsOnlySelectionFromCompany()
+    {
+        var tenantId = Guid.NewGuid();
+        var operatingCompanyId = Guid.NewGuid();
+        await using var db = CreateDbContext();
+        var selectedDriver = CreateDriver(tenantId, operatingCompanyId, "Jan");
+        var omittedDriver = CreateDriver(tenantId, operatingCompanyId, "Adam");
+        db.Drivers.AddRange(selectedDriver, omittedDriver);
+        db.DriverActivities.AddRange(
+            CreateActivity(tenantId, selectedDriver, new DateTime(2026, 10, 1, 8, 0, 0, DateTimeKind.Utc)),
+            CreateActivity(tenantId, omittedDriver, new DateTime(2026, 10, 1, 9, 0, 0, DateTimeKind.Utc)));
+        await db.SaveChangesAsync();
+
+        var result = await new DriverActivityService(db, new TestCurrentUserService(tenantId))
+            .GetActivitiesAsync(null, null, null, null, operatingCompanyId, [selectedDriver.Id]);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual("Jan", result[0].DriverFirstName);
+    }
+
     private static Driver CreateDriver(Guid tenantId, Guid operatingCompanyId, string firstName) => new()
     {
         Id = Guid.NewGuid(), CompanyId = tenantId, OperatingCompanyId = operatingCompanyId,

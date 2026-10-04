@@ -93,9 +93,11 @@ export function getCompanyReportActivities(
     operatingCompanyId: string,
     dateFrom: string,
     dateTo: string,
+    driverIds: string[],
 ): Promise<ReportActivity[]> {
     const parameters = buildLocalDateRangeParameters(dateFrom, dateTo);
     parameters.set("operatingCompanyId", operatingCompanyId);
+    driverIds.forEach((driverId) => parameters.append("driverIds", driverId));
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
         "Nie udało się pobrać raportu firmy.",
@@ -162,8 +164,10 @@ export async function downloadCompanyReport(
     operatingCompanyId: string,
     dateFrom: string,
     dateTo: string,
+    driverIds: string[],
 ): Promise<void> {
     const parameters = new URLSearchParams({ from: dateFrom, to: dateTo });
+    driverIds.forEach((driverId) => parameters.append("driverIds", driverId));
     await downloadReportFile(
         `/api/reports/company/${operatingCompanyId}/export/pdf?${parameters.toString()}`,
         "pdf",

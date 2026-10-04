@@ -41,6 +41,7 @@ public class DashboardService : IDashboardService
         var (rangeStartUtc, rangeEndUtc) = ResolveDashboardRange(now, fromUtc, toUtc);
         var importTrendStartUtc = rangeEndUtc.Date.AddDays(-6);
         var companyId = _currentUser.CompanyId;
+        var operatingCompanyId = _currentUser.OperatingCompanyId;
         var driverDownloads = await _downloadScheduleService.GetDriverDownloadsAsync(companyId, cancellationToken);
         var vehicleDownloads = await _downloadScheduleService.GetVehicleDownloadsAsync(companyId, cancellationToken);
 
@@ -49,6 +50,7 @@ public class DashboardService : IDashboardService
             .Where(x =>
                 x.Driver != null
                 && x.Driver.CompanyId == companyId
+                && (!operatingCompanyId.HasValue || x.Driver.OperatingCompanyId == operatingCompanyId.Value)
                 && x.ViolationEnd >= rangeStartUtc
                 && x.ViolationStart <= rangeEndUtc);
 
@@ -76,6 +78,7 @@ public class DashboardService : IDashboardService
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
+                && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
                 && x.EndUtc >= rangeStartUtc
                 && x.StartUtc <= rangeEndUtc);
 
@@ -131,6 +134,7 @@ public class DashboardService : IDashboardService
             .AsNoTracking()
             .Where(x =>
                 x.CompanyId == companyId
+                && (!operatingCompanyId.HasValue || (x.Driver != null && x.Driver.OperatingCompanyId == operatingCompanyId.Value))
                 && x.UploadedAtUtc >= importTrendStartUtc
                 && x.UploadedAtUtc <= rangeEndUtc)
             .Select(x => x.UploadedAtUtc)
@@ -155,7 +159,8 @@ public class DashboardService : IDashboardService
 
         var latestImports = await _dbContext.DddFiles
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!operatingCompanyId.HasValue || (x.Driver != null && x.Driver.OperatingCompanyId == operatingCompanyId.Value)))
             .OrderByDescending(x => x.UploadedAtUtc)
             .Take(5)
             .Select(x => new DashboardLatestImportDto
@@ -202,9 +207,11 @@ public class DashboardService : IDashboardService
         return new DashboardDto
         {
             DddFilesCount = await _dbContext.DddFiles
-                .CountAsync(x => x.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || (x.Driver != null && x.Driver.OperatingCompanyId == operatingCompanyId.Value)), cancellationToken),
             DriversCount = await _dbContext.Drivers
-                .CountAsync(x => x.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value), cancellationToken),
             VehiclesCount = await _dbContext.Vehicles
                 .CountAsync(x => x.CompanyId == companyId && x.Active, cancellationToken),
             ViolationsCount = await violationsQuery
@@ -212,6 +219,7 @@ public class DashboardService : IDashboardService
             DriverActivitiesCount = await _dbContext.DriverActivities
                 .CountAsync(
                     x => x.DddFile.CompanyId == companyId
+                         && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
                          && x.EndUtc >= rangeStartUtc
                          && x.StartUtc <= rangeEndUtc,
                     cancellationToken),

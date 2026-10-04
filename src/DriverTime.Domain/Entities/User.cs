@@ -8,6 +8,10 @@ public class User : BaseEntity
 
     public Company? Company { get; set; }
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public OperatingCompany? OperatingCompany { get; set; }
+
     public string Email { get; set; } = string.Empty;
 
     public string PasswordHash { get; set; } = string.Empty;

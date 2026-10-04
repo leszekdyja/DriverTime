@@ -1,4 +1,5 @@
 using DriverTime.Application.Companies.DTOs;
+using DriverTime.Application.Authentication;
 using DriverTime.Application.Interfaces;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
@@ -34,7 +35,7 @@ public class OperatingCompanyServiceTests
         await using var db = CreateDbContext();
         var service = new OperatingCompanyService(db, new TestCurrentUserService(companyId));
 
-        var result = await service.CreateAsync(new SaveOperatingCompanyDto { Name = "  Przewozy A  ", TaxNumber = "123", Active = true });
+        var result = await service.CreateAsync(new CreateOperatingCompanyDto { Name = "  Przewozy A  ", TaxNumber = "123", Active = true });
 
         Assert.AreEqual("Przewozy A", result.Name);
         Assert.IsTrue(await db.OperatingCompanies.AnyAsync(x => x.Id == result.Id && x.CompanyId == companyId));
@@ -65,7 +66,35 @@ public class OperatingCompanyServiceTests
         var service = new OperatingCompanyService(db, new TestCurrentUserService(companyId));
 
         await Assert.ThrowsExceptionAsync<InvalidOperationException>(() =>
-            service.CreateAsync(new SaveOperatingCompanyDto { Name = "firma a" }));
+            service.CreateAsync(new CreateOperatingCompanyDto { Name = "firma a" }));
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithLoginAccount_CreatesRestrictedDispatcherUser()
+    {
+        var companyId = Guid.NewGuid();
+        await using var db = CreateDbContext();
+        db.Roles.Add(new Role { Id = Guid.NewGuid(), Name = RoleNames.Dispatcher });
+        await db.SaveChangesAsync();
+        var service = new OperatingCompanyService(db, new TestCurrentUserService(companyId));
+
+        var result = await service.CreateAsync(new CreateOperatingCompanyDto
+        {
+            Name = "Firma z kontem",
+            CreateLoginAccount = true,
+            AccountFirstName = "Jan",
+            AccountLastName = "Kowalski",
+            AccountEmail = " FIRMA@EXAMPLE.PL ",
+            AccountPassword = "bezpieczne123"
+        });
+
+        var user = await db.Users.Include(x => x.Role).SingleAsync();
+        Assert.AreEqual(companyId, user.CompanyId);
+        Assert.AreEqual(result.Id, user.OperatingCompanyId);
+        Assert.AreEqual("firma@example.pl", user.Email);
+        Assert.AreEqual(RoleNames.Dispatcher, user.Role.Name);
+        Assert.AreNotEqual("bezpieczne123", user.PasswordHash);
+        Assert.AreEqual("firma@example.pl", result.AccountEmail);
     }
 
     private static DriverTimeDbContext CreateDbContext() => new(

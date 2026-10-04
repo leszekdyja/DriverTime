@@ -28,6 +28,10 @@ public class CurrentUserDto
 
     public string CompanyName { get; set; } = string.Empty;
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public string? OperatingCompanyName { get; set; }
+
     public string FirstName { get; set; } = string.Empty;
 
     public string LastName { get; set; } = string.Empty;

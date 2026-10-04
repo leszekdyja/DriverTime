@@ -109,6 +109,10 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Role)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.RoleId);
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany(x => x.Users)
+                .HasForeignKey(x => x.OperatingCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DddFile>(entity =>
