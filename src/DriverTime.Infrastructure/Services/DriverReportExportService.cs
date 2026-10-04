@@ -14,6 +14,8 @@ public class DriverReportExportService : IDriverReportExportService
     private const string PdfContentType = "application/pdf";
     private const string ExcelContentType =
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private static readonly TimeZoneInfo PolishTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "Central European Standard Time" : "Europe/Warsaw");
 
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
@@ -62,6 +64,48 @@ public class DriverReportExportService : IDriverReportExportService
             };
     }
 
+    public async Task<ReportExportDto?> ExportCompanyPdfAsync(
+        Guid operatingCompanyId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default)
+    {
+        var operatingCompany = await _dbContext.OperatingCompanies
+            .AsNoTracking()
+            .Where(x => x.Id == operatingCompanyId && x.CompanyId == _currentUser.CompanyId)
+            .Select(x => new
+            {
+                x.Name,
+                DriverIds = x.Drivers.OrderBy(d => d.LastName).ThenBy(d => d.FirstName).Select(d => d.Id).ToList()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (operatingCompany is null || operatingCompany.DriverIds.Count == 0)
+        {
+            return null;
+        }
+
+        var reports = new List<DriverReportDto>();
+        foreach (var driverId in operatingCompany.DriverIds)
+        {
+            var report = await GetReportAsync(driverId, from, to, cancellationToken);
+            if (report is not null)
+            {
+                report.OperatingCompanyName = operatingCompany.Name;
+                reports.Add(report);
+            }
+        }
+
+        return reports.Count == 0
+            ? null
+            : new ReportExportDto
+            {
+                Content = GeneratePdf(reports),
+                ContentType = PdfContentType,
+                FileName = $"drivertime-raport-firma-{ToFileName(operatingCompany.Name)}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf"
+            };
+    }
+
     private async Task<DriverReportDto?> GetReportAsync(
         Guid driverId,
         DateOnly from,
@@ -71,7 +115,7 @@ public class DriverReportExportService : IDriverReportExportService
         var driver = await _dbContext.Drivers
             .AsNoTracking()
             .Where(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId)
-            .Select(x => new { x.Id, x.FirstName, x.LastName, x.CardNumber })
+            .Select(x => new { x.Id, x.FirstName, x.LastName, x.CardNumber, OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : string.Empty })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (driver is null)
@@ -92,12 +136,7 @@ public class DriverReportExportService : IDriverReportExportService
             })
             .FirstAsync(cancellationToken);
 
-        var fromUtc = DateTime.SpecifyKind(
-            from.ToDateTime(TimeOnly.MinValue),
-            DateTimeKind.Utc);
-        var toUtcExclusive = DateTime.SpecifyKind(
-            to.AddDays(1).ToDateTime(TimeOnly.MinValue),
-            DateTimeKind.Utc);
+        var (fromUtc, toUtcExclusive) = GetUtcRange(from, to);
 
         var activities = await _dbContext.DriverActivities
             .AsNoTracking()
@@ -129,6 +168,7 @@ public class DriverReportExportService : IDriverReportExportService
             CompanyAddress = company.Address,
             CompanyEmail = company.Email,
             CompanyPhone = company.Phone,
+            OperatingCompanyName = driver.OperatingCompanyName,
             DriverId = driver.Id,
             DriverFirstName = driver.FirstName,
             DriverLastName = driver.LastName,
@@ -373,29 +413,23 @@ public class DriverReportExportService : IDriverReportExportService
             activity.StartUtc,
             activity.EndUtc);
     }
-    private static byte[] GeneratePdf(DriverReportDto report)
+    private static byte[] GeneratePdf(DriverReportDto report) => GeneratePdf([report]);
+
+    private static byte[] GeneratePdf(IReadOnlyCollection<DriverReportDto> reports)
     {
         const int rowsPerPage = 16;
-        var indexedActivities = report.Activities
-            .Select((activity, index) => (Activity: activity, Index: index))
-            .ToList();
-        var activityPages = indexedActivities.Chunk(rowsPerPage).ToList();
-
-        if (activityPages.Count == 0)
+        var pages = reports.SelectMany(report =>
         {
-            activityPages.Add(Array.Empty<(DriverReportActivityDto Activity, int Index)>());
-        }
+            var chunks = report.Activities
+                .Select((activity, index) => (Activity: activity, Index: index))
+                .Chunk(rowsPerPage)
+                .ToList();
+            if (chunks.Count == 0) chunks.Add([]);
+            return chunks.Select(chunk => (Report: report, Activities: (IReadOnlyList<(DriverReportActivityDto Activity, int Index)>)chunk));
+        }).ToList();
 
-        var pageContents = new List<string>();
-
-        for (var pageIndex = 0; pageIndex < activityPages.Count; pageIndex++)
-        {
-            pageContents.Add(BuildDriverReportPdfPage(
-                report,
-                activityPages[pageIndex],
-                pageIndex + 1,
-                activityPages.Count));
-        }
+        var pageContents = pages.Select((page, index) => BuildDriverReportPdfPage(
+            page.Report, page.Activities, index + 1, pages.Count)).ToList();
 
         return BuildPdfDocument(pageContents);
     }
@@ -471,7 +505,7 @@ public class DriverReportExportService : IDriverReportExportService
         page.Text(margin, 563, "DriverTime", 22, true, "#FFFFFF");
         page.Text(margin, 544, "Raport aktywnosci kierowcy", 11, false, "#CBD5E1");
         page.Text(808, 563, $"Zakres: {FormatDate(report.From)} - {FormatDate(report.To)}", 10, false, "#E2E8F0", PdfTextAlign.Right);
-        page.Text(808, 545, $"Wygenerowano: {DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC", 9, false, "#CBD5E1", PdfTextAlign.Right);
+        page.Text(808, 545, $"Wygenerowano: {ToPolishTime(DateTime.UtcNow):dd.MM.yyyy HH:mm} czasu polskiego", 9, false, "#CBD5E1", PdfTextAlign.Right);
 
         page.FillRectangle(margin, 434, 374, 72, "#FFFFFF");
         page.StrokeRectangle(margin, 434, 374, 72, "#E2E8F0");
@@ -479,6 +513,10 @@ public class DriverReportExportService : IDriverReportExportService
         page.Text(50, 469, DisplayValue(report.CompanyName), 14, true, "#0F172A");
         page.Text(50, 451, $"NIP: {DisplayValue(report.CompanyVatNumber)}", 9, false, "#475569");
         page.Text(206, 451, $"Kontakt: {FormatCompanyContact(report)}", 9, false, "#475569");
+        if (!string.IsNullOrWhiteSpace(report.OperatingCompanyName))
+        {
+            page.Text(50, 437, $"Firma kierowcy: {report.OperatingCompanyName}", 8, false, "#475569");
+        }
 
         page.FillRectangle(434, 434, 374, 72, "#FFFFFF");
         page.StrokeRectangle(434, 434, 374, 72, "#E2E8F0");
@@ -619,7 +657,7 @@ public class DriverReportExportService : IDriverReportExportService
         WriteKeyValueRow(writer, 12, "Kierowca", GetDriverName(report));
         WriteKeyValueRow(writer, 13, "Numer karty", DisplayValue(report.DriverCardNumber));
         WriteKeyValueRow(writer, 14, "Zakres raportu", $"{FormatDate(report.From)} - {FormatDate(report.To)}");
-        WriteKeyValueRow(writer, 15, "Wygenerowano", $"{DateTime.UtcNow:dd.MM.yyyy HH:mm} UTC");
+        WriteKeyValueRow(writer, 15, "Wygenerowano", $"{ToPolishTime(DateTime.UtcNow):dd.MM.yyyy HH:mm} czasu polskiego");
         WriteStringRow(writer, 17, 3, "Podsumowanie czasu");
         WriteStringRow(writer, 18, 6, "Jazda", "Praca", "Odpoczynek", "Dyspozycyjnosc", "Kilometry");
         WriteStringRow(writer, 19, 7,
@@ -828,14 +866,14 @@ public class DriverReportExportService : IDriverReportExportService
         string reference,
         DateTime value,
         int style) =>
-        WriteNumberCell(writer, reference, value.ToOADate(), style);
+        WriteNumberCell(writer, reference, ToPolishTime(value).ToOADate(), style);
 
     private static void WriteDateOnlyCell(
         XmlWriter writer,
         string reference,
         DateTime value,
         int style) =>
-        WriteNumberCell(writer, reference, value.Date.ToOADate(), style);
+        WriteNumberCell(writer, reference, ToPolishTime(value).Date.ToOADate(), style);
 
     private static void WriteNullableNumberCell(
         XmlWriter writer,
@@ -924,13 +962,32 @@ public class DriverReportExportService : IDriverReportExportService
     }
 
     private static string FormatDate(DateOnly value) => value.ToString("dd.MM.yyyy");
-    private static string FormatDate(DateTime value) => value.ToString("dd.MM.yyyy");
-    private static string FormatTime(DateTime value) => value.ToString("HH:mm:ss");
-    private static string FormatDateTime(DateTime value) => value.ToString("dd.MM.yyyy HH:mm:ss");
+    private static string FormatDate(DateTime value) => ToPolishTime(value).ToString("dd.MM.yyyy");
+    private static string FormatTime(DateTime value) => ToPolishTime(value).ToString("HH:mm:ss");
+    private static string FormatDateTime(DateTime value) => ToPolishTime(value).ToString("dd.MM.yyyy HH:mm:ss");
     private static string FormatNullableInt(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "-";
     private static string FormatDistance(int? value) => value.HasValue ? $"{value.Value} km" : "Brak danych";
     private static string DisplayValue(string value) => string.IsNullOrWhiteSpace(value) ? "Brak danych" : value;
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
+    private static DateTime ToPolishTime(DateTime value) => TimeZoneInfo.ConvertTimeFromUtc(
+        value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        PolishTimeZone);
+
+    internal static (DateTime FromUtc, DateTime ToUtcExclusive) GetUtcRange(DateOnly from, DateOnly to)
+    {
+        var localFrom = DateTime.SpecifyKind(from.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        var localTo = DateTime.SpecifyKind(to.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        return (
+            TimeZoneInfo.ConvertTimeToUtc(localFrom, PolishTimeZone),
+            TimeZoneInfo.ConvertTimeToUtc(localTo, PolishTimeZone));
+    }
+
+    private static string ToFileName(string value)
+    {
+        var normalized = string.Concat(value.Trim().ToLowerInvariant().Select(character =>
+            char.IsLetterOrDigit(character) ? character : '-'));
+        return string.Join('-', normalized.Split('-', StringSplitOptions.RemoveEmptyEntries));
+    }
     private static string EscapePdf(string value) => value.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
     private static string ToPdfAscii(string value) => string.Concat(value.Select(ToPdfAscii));
 

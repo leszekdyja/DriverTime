@@ -20,11 +20,33 @@ public class DriverActivitiesController : ControllerBase
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
         [FromQuery] string? driverCardNumber,
-        [FromQuery] Guid? driverId)
+        [FromQuery] Guid? driverId,
+        [FromQuery] Guid? operatingCompanyId,
+        [FromQuery] DateOnly? localFrom,
+        [FromQuery] DateOnly? localTo)
     {
+        if (localFrom.HasValue)
+        {
+            from = ToUtc(localFrom.Value);
+        }
+
+        if (localTo.HasValue)
+        {
+            to = ToUtc(localTo.Value.AddDays(1));
+        }
+
         var result = await _driverActivityService
-            .GetActivitiesAsync(from, to, driverCardNumber, driverId);
+            .GetActivitiesAsync(from, to, driverCardNumber, driverId, operatingCompanyId);
 
         return Ok(result);
+    }
+
+    private static DateTime ToUtc(DateOnly date)
+    {
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(
+            OperatingSystem.IsWindows() ? "Central European Standard Time" : "Europe/Warsaw");
+        return TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified),
+            timeZone);
     }
 }

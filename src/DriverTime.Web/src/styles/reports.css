@@ -111,7 +111,7 @@
 
 .reports-filters {
     display: grid;
-    grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(160px, 1fr)) auto;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(240px, 2fr) repeat(2, minmax(160px, 1fr)) auto;
     align-items: end;
     gap: 16px;
     margin-top: 24px;

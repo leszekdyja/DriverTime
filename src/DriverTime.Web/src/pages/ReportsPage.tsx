@@ -4,11 +4,14 @@ import Pagination from "../components/Pagination";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     downloadDriverReport,
+    downloadCompanyReport,
+    getCompanyReportActivities,
     getReportActivities,
     getReportDrivers,
     type ReportActivity,
     type ReportDriver,
 } from "../services/reportsService";
+import { getOperatingCompanies, type OperatingCompany } from "../services/operatingCompaniesService";
 import { formatDriverNameOrFallback } from "../utils/driverName";
 import "../styles/reports.css";
 
@@ -18,10 +21,12 @@ const defaultReportRangeDays = 60;
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Europe/Warsaw",
 });
 
 const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
     dateStyle: "medium",
+    timeZone: "Europe/Warsaw",
 });
 
 const activityLabels: Record<string, string> = {
@@ -47,6 +52,11 @@ function formatDateOnly(value: string) {
     return Number.isNaN(date.getTime())
         ? "Nie wybrano"
         : dateFormatter.format(date);
+}
+
+function formatActivityDate(value: string) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "Brak danych" : dateFormatter.format(date);
 }
 
 function formatDuration(seconds: number) {
@@ -104,13 +114,16 @@ function escapeCsv(value: string | number) {
 }
 
 function toDateInputValue(date: Date) {
-    return date.toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
 }
 
 function getDefaultDateRange() {
     const today = new Date();
     const from = new Date(today);
-    from.setUTCDate(today.getUTCDate() - defaultReportRangeDays);
+    from.setDate(today.getDate() - defaultReportRangeDays);
 
     return {
         from: toDateInputValue(from),
@@ -121,8 +134,11 @@ function getDefaultDateRange() {
 export default function ReportsPage() {
     const defaultDateRange = useMemo(() => getDefaultDateRange(), []);
     const [drivers, setDrivers] = useState<ReportDriver[]>([]);
+    const [companies, setCompanies] = useState<OperatingCompany[]>([]);
     const [activities, setActivities] = useState<ReportActivity[]>([]);
+    const [reportScope, setReportScope] = useState<"driver" | "company">("driver");
     const [selectedDriverId, setSelectedDriverId] = useState("");
+    const [selectedCompanyId, setSelectedCompanyId] = useState("");
     const [dateFrom, setDateFrom] = useState(defaultDateRange.from);
     const [dateTo, setDateTo] = useState(defaultDateRange.to);
     const [isLoading, setIsLoading] = useState(true);
@@ -140,15 +156,23 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            const driver = drivers.find((item) => item.id === driverId);
-
-            if (!driver) {
-                setError("Wybierz kierowcę przed wygenerowaniem raportu.");
-                setActivities([]);
-                return;
+            let loadedActivities: ReportActivity[];
+            if (reportScope === "company") {
+                if (!selectedCompanyId) {
+                    setError("Wybierz firmę przed wygenerowaniem raportu.");
+                    setActivities([]);
+                    return;
+                }
+                loadedActivities = await getCompanyReportActivities(selectedCompanyId, from, to);
+            } else {
+                const driver = drivers.find((item) => item.id === driverId);
+                if (!driver) {
+                    setError("Wybierz kierowcę przed wygenerowaniem raportu.");
+                    setActivities([]);
+                    return;
+                }
+                loadedActivities = await getReportActivities(driver.id, from, to, driver.cardNumber);
             }
-
-            const loadedActivities = await getReportActivities(driver.id, from, to, driver.cardNumber);
             setCurrentPage(1);
             setActivities(loadedActivities);
         } catch (loadError) {
@@ -167,10 +191,14 @@ export default function ReportsPage() {
             setIsLoading(true);
 
             try {
-                const loadedDrivers = await getReportDrivers();
+                const [loadedDrivers, loadedCompanies] = await Promise.all([
+                    getReportDrivers(),
+                    getOperatingCompanies(),
+                ]);
 
                 setCurrentPage(1);
                 setDrivers(loadedDrivers);
+                setCompanies(loadedCompanies);
                 setActivities([]);
             } catch (loadError) {
                 setError(
@@ -189,6 +217,10 @@ export default function ReportsPage() {
     const selectedDriver = useMemo(
         () => drivers.find((item) => item.id === selectedDriverId),
         [selectedDriverId, drivers],
+    );
+    const selectedCompany = useMemo(
+        () => companies.find((item) => item.id === selectedCompanyId),
+        [selectedCompanyId, companies],
     );
 
     const dateRangeLabel = useMemo(() => {
@@ -242,8 +274,8 @@ export default function ReportsPage() {
             return;
         }
 
-        if (!selectedDriverId) {
-            setError("Wybierz kierowcę przed wygenerowaniem raportu.");
+        if (reportScope === "driver" ? !selectedDriverId : !selectedCompanyId) {
+            setError(reportScope === "driver" ? "Wybierz kierowcę przed wygenerowaniem raportu." : "Wybierz firmę przed wygenerowaniem raportu.");
             return;
         }
 
@@ -289,16 +321,16 @@ export default function ReportsPage() {
         const link = document.createElement("a");
 
         link.href = url;
-        link.download = "raport-aktywnosci-kierowcy-z-kilometrami.csv";
+        link.download = reportScope === "company"
+            ? "raport-aktywnosci-firmy-z-kilometrami.csv"
+            : "raport-aktywnosci-kierowcy-z-kilometrami.csv";
         link.click();
         URL.revokeObjectURL(url);
     }
 
     async function handlePdfExport() {
-        const driver = selectedDriver;
-
-        if (!driver || !dateFrom || !dateTo) {
-            setError("Wybierz kierowcę oraz pełny zakres dat przed eksportem.");
+        if (!(reportScope === "driver" ? selectedDriver : selectedCompany) || !dateFrom || !dateTo) {
+            setError(`Wybierz ${reportScope === "driver" ? "kierowcę" : "firmę"} oraz pełny zakres dat przed eksportem.`);
             return;
         }
 
@@ -311,7 +343,11 @@ export default function ReportsPage() {
         setError("");
 
         try {
-            await downloadDriverReport(driver.id, dateFrom, dateTo, "pdf");
+            if (reportScope === "company") {
+                await downloadCompanyReport(selectedCompanyId, dateFrom, dateTo);
+            } else {
+                await downloadDriverReport(selectedDriverId, dateFrom, dateTo, "pdf");
+            }
         } catch (exportError) {
             setError(
                 exportError instanceof Error
@@ -354,8 +390,8 @@ export default function ReportsPage() {
         <div className="reports-page">
             <section className="reports-hero">
                 <div className="reports-hero-copy">
-                    <span className="reports-eyebrow">Raport kierowcy</span>
-                    <h2>Aktywności kierowcy z kilometrami</h2>
+                    <span className="reports-eyebrow">Raport {reportScope === "driver" ? "kierowcy" : "firmy"}</span>
+                    <h2>Aktywności {reportScope === "driver" ? "kierowcy" : "kierowców firmy"} z kilometrami</h2>
                     <p>
                         Sprawdź czas jazdy, pracy, odpoczynku, dyspozycyjności oraz kilometry
                         przypisane do użyć pojazdu z plików DDD.
@@ -363,11 +399,11 @@ export default function ReportsPage() {
                 </div>
                 <div className="reports-context-card" aria-label="Zakres raportu">
                     <span>Aktualny raport</span>
-                    <strong>{getDriverName(selectedDriver)}</strong>
+                    <strong>{reportScope === "driver" ? getDriverName(selectedDriver) : selectedCompany?.name ?? "Wybierz firmę"}</strong>
                     <dl>
                         <div>
-                            <dt>Numer karty</dt>
-                            <dd>{selectedDriver?.cardNumber || "Nie wybrano"}</dd>
+                            <dt>{reportScope === "driver" ? "Numer karty" : "Kierowcy"}</dt>
+                            <dd>{reportScope === "driver" ? selectedDriver?.cardNumber || "Nie wybrano" : selectedCompany ? `${selectedCompany.driversCount} przypisanych` : "Nie wybrano"}</dd>
                         </div>
                         <div>
                             <dt>Zakres dat</dt>
@@ -378,6 +414,14 @@ export default function ReportsPage() {
             </section>
 
             <form className="reports-filters" onSubmit={handleSubmit}>
+                <label>
+                    Typ raportu
+                    <select value={reportScope} onChange={(event) => { setReportScope(event.target.value as "driver" | "company"); setActivities([]); setError(""); }}>
+                        <option value="driver">Według kierowcy</option>
+                        <option value="company">Według firmy</option>
+                    </select>
+                </label>
+                {reportScope === "driver" ? (
                 <label>
                     Kierowca
                     <select
@@ -392,6 +436,15 @@ export default function ReportsPage() {
                         ))}
                     </select>
                 </label>
+                ) : (
+                    <label>
+                        Firma
+                        <select value={selectedCompanyId} onChange={(event) => setSelectedCompanyId(event.target.value)}>
+                            <option value="">Wybierz firmę</option>
+                            {companies.map((company) => <option key={company.id} value={company.id}>{company.name} ({company.driversCount})</option>)}
+                        </select>
+                    </label>
+                )}
 
                 <label>
                     Data od
@@ -460,21 +513,23 @@ export default function ReportsPage() {
                             type="button"
                             onClick={() => void handlePdfExport()}
                             disabled={
-                                !selectedDriverId
+                                (reportScope === "driver" ? !selectedDriverId : !selectedCompanyId)
                                 || !dateFrom
                                 || !dateTo
                                 || isGeneratingPdf
                                 || isGeneratingExcel
                             }
                         >
-                            {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF"}
+                            {isGeneratingPdf ? "Generowanie PDF..." : "Eksport PDF / druk"}
                         </button>
                         <button
                             className="excel-button"
                             type="button"
+                            title={reportScope === "company" ? "Raport firmowy jest dostępny do druku jako PDF oraz CSV." : undefined}
                             onClick={() => void handleExcelExport()}
                             disabled={
-                                !selectedDriverId
+                                reportScope === "company"
+                                || !selectedDriverId
                                 || !dateFrom
                                 || !dateTo
                                 || activities.length === 0
@@ -492,7 +547,7 @@ export default function ReportsPage() {
                 ) : activities.length === 0 ? (
                     <EmptyState
                         title="Brak aktywności w raporcie"
-                        description="Wybierz kierowcę i zakres dat. Po imporcie plików DDD aktywności pojawią się tutaj automatycznie."
+                        description={`Wybierz ${reportScope === "driver" ? "kierowcę" : "firmę"} i zakres dat. Po imporcie plików DDD aktywności pojawią się tutaj automatycznie.`}
                     />
                 ) : (
                     <div className={isLoading ? "reports-content is-refreshing" : "reports-content"} aria-busy={isLoading}>
@@ -501,6 +556,7 @@ export default function ReportsPage() {
                                 <thead>
                                     <tr>
                                         <th>Data</th>
+                                        {reportScope === "company" && <th>Kierowca</th>}
                                         <th>Od</th>
                                         <th>Do</th>
                                         <th>Aktywność</th>
@@ -514,7 +570,8 @@ export default function ReportsPage() {
                                 <tbody>
                                     {visibleActivities.map((activity) => (
                                         <tr key={activity.id}>
-                                            <td data-label="Data">{formatDateOnly(activity.startUtc.slice(0, 10))}</td>
+                                            <td data-label="Data">{formatActivityDate(activity.startUtc)}</td>
+                                            {reportScope === "company" && <td data-label="Kierowca">{formatDriverNameOrFallback(activity.driverFirstName, activity.driverLastName)}</td>}
                                             <td data-label="Od">{formatDate(activity.startUtc)}</td>
                                             <td data-label="Do">{formatDate(activity.endUtc)}</td>
                                             <td data-label="Aktywność">

@@ -12,6 +12,8 @@ public class DriverReportDto
 
     public string CompanyPhone { get; set; } = string.Empty;
 
+    public string OperatingCompanyName { get; set; } = string.Empty;
+
     public Guid DriverId { get; set; }
 
     public string DriverFirstName { get; set; } = string.Empty;

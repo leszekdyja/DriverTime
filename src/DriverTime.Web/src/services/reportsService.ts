@@ -6,6 +6,8 @@ export type ReportDriver = {
     firstName: string;
     lastName: string;
     cardNumber: string;
+    operatingCompanyId: string | null;
+    operatingCompanyName: string | null;
 };
 
 export type ReportActivity = {
@@ -62,7 +64,6 @@ export function getReportActivities(
     dateTo: string,
     driverCardNumber?: string,
 ): Promise<ReportActivity[]> {
-    const parameters = new URLSearchParams();
     const safeDriverId = driverId.trim();
     const safeDriverCardNumber = driverCardNumber?.trim() ?? "";
     const safeDateFrom = dateFrom.trim();
@@ -72,6 +73,8 @@ export function getReportActivities(
         throw new Error("Wybierz kierowcę i pełny zakres dat przed pobraniem aktywności.");
     }
 
+    const parameters = buildLocalDateRangeParameters(safeDateFrom, safeDateTo);
+
     if (safeDriverId) {
         parameters.set("driverId", safeDriverId);
     }
@@ -80,12 +83,22 @@ export function getReportActivities(
         parameters.set("driverCardNumber", safeDriverCardNumber);
     }
 
-    parameters.set("from", `${safeDateFrom}T00:00:00Z`);
-    parameters.set("to", `${safeDateTo}T23:59:59Z`);
-
     return getJson<ReportActivity[]>(
         `${API_URL}/api/driver-activities?${parameters.toString()}`,
         "Nie udało się pobrać danych raportu.",
+    );
+}
+
+export function getCompanyReportActivities(
+    operatingCompanyId: string,
+    dateFrom: string,
+    dateTo: string,
+): Promise<ReportActivity[]> {
+    const parameters = buildLocalDateRangeParameters(dateFrom, dateTo);
+    parameters.set("operatingCompanyId", operatingCompanyId);
+    return getJson<ReportActivity[]>(
+        `${API_URL}/api/driver-activities?${parameters.toString()}`,
+        "Nie udało się pobrać raportu firmy.",
     );
 }
 
@@ -143,6 +156,39 @@ export async function downloadDriverReport(
     link.remove();
 
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+export async function downloadCompanyReport(
+    operatingCompanyId: string,
+    dateFrom: string,
+    dateTo: string,
+): Promise<void> {
+    const parameters = new URLSearchParams({ from: dateFrom, to: dateTo });
+    await downloadReportFile(
+        `/api/reports/company/${operatingCompanyId}/export/pdf?${parameters.toString()}`,
+        "pdf",
+        "raport-firmy.pdf",
+    );
+}
+
+async function downloadReportFile(urlPath: string, format: ReportFormat, fallbackName: string) {
+    const response = await apiFetch(urlPath);
+    if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message ?? `Nie udało się pobrać raportu ${format.toUpperCase()}.`);
+    }
+    const blob = await response.blob();
+    if (blob.size === 0) throw new Error("Pobrany raport jest pusty.");
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getDownloadFileName(response.headers.get("Content-Disposition"), fallbackName);
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
+function buildLocalDateRangeParameters(dateFrom: string, dateTo: string) {
+    return new URLSearchParams({ localFrom: dateFrom, localTo: dateTo });
 }
 
 function getDownloadFileName(contentDisposition: string | null, fallback: string) {

@@ -59,4 +59,24 @@ public class ReportsController : ControllerBase
             ? NotFound()
             : File(export.Content, export.ContentType, export.FileName);
     }
+
+    [HttpGet("company/{operatingCompanyId:guid}/export/pdf")]
+    public async Task<IActionResult> ExportCompanyPdf(
+        Guid operatingCompanyId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        if (from > to)
+        {
+            return BadRequest(new { message = "Data from nie moze byc pozniejsza niz data to." });
+        }
+
+        var export = await _reportExportService.ExportCompanyPdfAsync(
+            operatingCompanyId, from, to, cancellationToken);
+
+        return export is null
+            ? NotFound(new { message = "Nie znaleziono firmy lub przypisanych kierowców." })
+            : File(export.Content, export.ContentType, export.FileName);
+    }
 }
