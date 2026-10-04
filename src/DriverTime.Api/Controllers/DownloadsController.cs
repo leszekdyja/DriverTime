@@ -31,6 +31,7 @@ public class DownloadsController : ControllerBase
 
         var drivers = await _downloadScheduleService.GetDriverDownloadsAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             cancellationToken);
 
         return Ok(drivers);
@@ -47,6 +48,7 @@ public class DownloadsController : ControllerBase
 
         var vehicles = await _downloadScheduleService.GetVehicleDownloadsAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             cancellationToken);
 
         return Ok(vehicles);
@@ -63,6 +65,7 @@ public class DownloadsController : ControllerBase
 
         var dashboard = await _downloadScheduleService.GetDashboardAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             cancellationToken);
 
         return Ok(dashboard);
