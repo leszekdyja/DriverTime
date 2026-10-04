@@ -23,14 +23,20 @@ public class DriverActivityService : IDriverActivityService
         DateTime? from,
         DateTime? to,
         string? driverCardNumber,
-        Guid? driverId = null)
+        Guid? driverId = null,
+        Guid? operatingCompanyId = null)
     {
         var query = _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x => x.DddFile.CompanyId == _currentUser.CompanyId)
             .AsQueryable();
 
-        if (driverId.HasValue)
+        if (operatingCompanyId.HasValue)
+        {
+            query = query.Where(x => x.DddFile.Driver != null
+                && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value);
+        }
+        else if (driverId.HasValue)
         {
             query = query.Where(x => x.DddFile.DriverId == driverId.Value);
         }

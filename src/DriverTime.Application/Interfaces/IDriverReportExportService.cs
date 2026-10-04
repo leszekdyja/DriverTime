@@ -15,4 +15,10 @@ public interface IDriverReportExportService
         DateOnly from,
         DateOnly to,
         CancellationToken cancellationToken = default);
+
+    Task<ReportExportDto?> ExportCompanyPdfAsync(
+        Guid operatingCompanyId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken = default);
 }

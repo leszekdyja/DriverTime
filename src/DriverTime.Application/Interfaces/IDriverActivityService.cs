@@ -8,5 +8,6 @@ public interface IDriverActivityService
         DateTime? from,
         DateTime? to,
         string? driverCardNumber,
-        Guid? driverId = null);
+        Guid? driverId = null,
+        Guid? operatingCompanyId = null);
 }
