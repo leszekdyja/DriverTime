@@ -66,7 +66,10 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         options = options with
         {
             DriverPairs = await _dbContext.PlanningDriverPairs.AsNoTracking()
-                .Where(x => x.CompanyId == companyId && x.IsActive)
+                .Where(x => x.CompanyId == companyId && x.IsActive
+                    && (!_currentUser.OperatingCompanyId.HasValue
+                        || (x.FirstDriver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value
+                            && x.SecondDriver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)))
                 .Select(x => new PlanningDriverPairRule(x.FirstDriverId, x.SecondDriverId, x.IsNightDutyPair, x.PreventSameShift))
                 .ToListAsync(cancellationToken)
         };
@@ -86,6 +89,10 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
 
         var requestedDriverIds = request.DriverIds.Where(x => x != Guid.Empty).Distinct().ToList();
         var driversQuery = _dbContext.Drivers.Where(x => x.CompanyId == companyId && x.IncludeInPlanning);
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            driversQuery = driversQuery.Where(x => x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
+        }
         if (requestedDriverIds.Count > 0)
         {
             driversQuery = driversQuery.Where(x => requestedDriverIds.Contains(x.Id));
@@ -126,7 +133,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .Where(x => x.CompanyId == companyId
                 && x.Date >= request.DateFrom
                 && x.Date <= request.DateTo
-                && x.Status == PlanningAssignmentStatus.Generated)
+                && x.Status == PlanningAssignmentStatus.Generated
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .ToListAsync(cancellationToken);
         _dbContext.PlanningAssignments.RemoveRange(oldGenerated);
 
@@ -148,6 +157,8 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .Where(x => x.CompanyId == companyId
                 && x.Date >= contextDateFrom
                 && x.Date <= contextDateTo
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
                 && !(x.Date >= request.DateFrom
                     && x.Date <= request.DateTo
                     && x.Status == PlanningAssignmentStatus.Generated))
@@ -436,7 +447,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
             .AsNoTracking()
             .Include(x => x.Driver)
             .Include(x => x.PlanningDuty)
-            .Where(x => x.CompanyId == companyId && x.Date >= dateFrom && x.Date <= dateTo)
+            .Where(x => x.CompanyId == companyId && x.Date >= dateFrom && x.Date <= dateTo
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .OrderBy(x => x.Date)
             .ThenBy(x => x.Driver.LastName)
             .ThenBy(x => x.Driver.FirstName)
@@ -649,7 +662,9 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
     {
         var persistentRules = await _dbContext.PlanningDriverDutyRules
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => new PlanningAssignmentRule
             {
                 CompanyId = x.CompanyId,

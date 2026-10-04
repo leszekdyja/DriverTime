@@ -78,7 +78,9 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
             .Include(x => x.Driver)
             .Include(x => x.PlanningDuty)
                 .ThenInclude(x => x!.Lines)
-            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (assignment is null)
@@ -118,7 +120,9 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
     {
         var companyId = _currentUser.CompanyId;
         var assignment = await _dbContext.PlanningAssignments
-            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
         if (assignment is null)
         {
@@ -133,7 +137,9 @@ public class PlanningManualAssignmentService : IPlanningManualAssignmentService
     private async Task<Driver> LoadDriverAsync(Guid driverId, Guid companyId, CancellationToken cancellationToken)
     {
         var driver = await _dbContext.Drivers
-            .Where(x => x.Id == driverId && x.CompanyId == companyId)
+            .Where(x => x.Id == driverId && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
         return driver ?? throw new PlanningDutyValidationException(new[] { "Kierowca nie należy do bieżącej firmy." });
     }

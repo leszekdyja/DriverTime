@@ -33,7 +33,9 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
         return await _dbContext.PlanningDriverAvailabilities
             .AsNoTracking()
             .Include(x => x.Driver)
-            .Where(x => x.CompanyId == companyId && x.DateFrom <= dateTo && x.DateTo >= dateFrom)
+            .Where(x => x.CompanyId == companyId && x.DateFrom <= dateTo && x.DateTo >= dateFrom
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .OrderBy(x => x.DateFrom)
             .ThenBy(x => x.Driver.LastName)
             .ThenBy(x => x.Driver.FirstName)
@@ -49,7 +51,9 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
         var companyId = _currentUser.CompanyId;
 
         var driver = await _dbContext.Drivers
-            .Where(x => x.Id == request.DriverId && x.CompanyId == companyId)
+            .Where(x => x.Id == request.DriverId && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (driver is null)
@@ -107,7 +111,9 @@ public class PlanningDriverAvailabilityService : IPlanningDriverAvailabilityServ
     {
         var companyId = _currentUser.CompanyId;
         var availability = await _dbContext.PlanningDriverAvailabilities
-            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (availability is null)

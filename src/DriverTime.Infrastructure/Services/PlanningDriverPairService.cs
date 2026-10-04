@@ -29,7 +29,10 @@ public class PlanningDriverPairService(DriverTimeDbContext dbContext, ICurrentUs
 
     public async Task<PlanningDriverPairDto?> UpdateAsync(Guid id, PlanningDriverPairRequestDto request, CancellationToken cancellationToken = default)
     {
-        var pair = await dbContext.PlanningDriverPairs.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId, cancellationToken);
+        var pair = await dbContext.PlanningDriverPairs.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue
+                || (x.FirstDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value
+                    && x.SecondDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value)), cancellationToken);
         if (pair is null) return null;
         await ValidateAsync(request, id, cancellationToken);
         pair.FirstDriverId = request.FirstDriverId; pair.SecondDriverId = request.SecondDriverId;
@@ -41,13 +44,19 @@ public class PlanningDriverPairService(DriverTimeDbContext dbContext, ICurrentUs
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var pair = await dbContext.PlanningDriverPairs.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId, cancellationToken);
+        var pair = await dbContext.PlanningDriverPairs.SingleOrDefaultAsync(x => x.Id == id && x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue
+                || (x.FirstDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value
+                    && x.SecondDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value)), cancellationToken);
         if (pair is null) return false;
         dbContext.PlanningDriverPairs.Remove(pair); await dbContext.SaveChangesAsync(cancellationToken); return true;
     }
 
     private IQueryable<PlanningDriverPair> Query() => dbContext.PlanningDriverPairs.AsNoTracking()
-        .Include(x => x.FirstDriver).Include(x => x.SecondDriver).Where(x => x.CompanyId == currentUser.CompanyId);
+        .Include(x => x.FirstDriver).Include(x => x.SecondDriver).Where(x => x.CompanyId == currentUser.CompanyId
+            && (!currentUser.OperatingCompanyId.HasValue
+                || (x.FirstDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value
+                    && x.SecondDriver.OperatingCompanyId == currentUser.OperatingCompanyId.Value)));
 
     private async Task ValidateAsync(PlanningDriverPairRequestDto request, Guid? currentId, CancellationToken cancellationToken)
     {
@@ -55,7 +64,8 @@ public class PlanningDriverPairService(DriverTimeDbContext dbContext, ICurrentUs
         if (request.FirstDriverId == Guid.Empty || request.SecondDriverId == Guid.Empty) errors.Add("Wybierz obu kierowców.");
         if (request.FirstDriverId == request.SecondDriverId) errors.Add("Para musi składać się z dwóch różnych kierowców.");
         var ids = new[] { request.FirstDriverId, request.SecondDriverId }.Distinct().ToList();
-        if (await dbContext.Drivers.CountAsync(x => x.CompanyId == currentUser.CompanyId && ids.Contains(x.Id), cancellationToken) != ids.Count) errors.Add("Kierowca nie należy do bieżącej firmy.");
+        if (await dbContext.Drivers.CountAsync(x => x.CompanyId == currentUser.CompanyId && ids.Contains(x.Id)
+            && (!currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == currentUser.OperatingCompanyId.Value), cancellationToken) != ids.Count) errors.Add("Kierowca nie należy do bieżącej firmy.");
         var duplicate = await dbContext.PlanningDriverPairs.AnyAsync(x => x.CompanyId == currentUser.CompanyId && x.Id != currentId
             && ((x.FirstDriverId == request.FirstDriverId && x.SecondDriverId == request.SecondDriverId) || (x.FirstDriverId == request.SecondDriverId && x.SecondDriverId == request.FirstDriverId))
             && x.IsNightDutyPair == request.IsNightDutyPair, cancellationToken);

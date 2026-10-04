@@ -31,7 +31,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
             .AsNoTracking()
             .Include(x => x.Driver)
             .Include(x => x.PlanningDuty)
-            .Where(x => x.CompanyId == companyId);
+            .Where(x => x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value));
 
         if (filter.DriverId.HasValue)
         {
@@ -103,7 +105,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
         ValidateRequest(request);
         var companyId = _currentUser.CompanyId;
         var rule = await _dbContext.PlanningDriverDutyRules
-            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
         if (rule is null)
         {
@@ -131,7 +135,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
     {
         var companyId = _currentUser.CompanyId;
         var rule = await _dbContext.PlanningDriverDutyRules
-            .Where(x => x.Id == id && x.CompanyId == companyId)
+            .Where(x => x.Id == id && x.CompanyId == companyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .FirstOrDefaultAsync(cancellationToken);
         if (rule is null)
         {
@@ -148,7 +154,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
             .AsNoTracking()
             .Include(x => x.Driver)
             .Include(x => x.PlanningDuty)
-            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Id == id && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => ToDto(x))
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -158,7 +166,9 @@ public class PlanningDriverDutyRuleService : IPlanningDriverDutyRuleService
         Guid companyId,
         CancellationToken cancellationToken)
     {
-        var driverExists = await _dbContext.Drivers.AnyAsync(x => x.Id == driverId && x.CompanyId == companyId, cancellationToken);
+        var driverExists = await _dbContext.Drivers.AnyAsync(x => x.Id == driverId && x.CompanyId == companyId
+            && (!_currentUser.OperatingCompanyId.HasValue
+                || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
         if (!driverExists)
         {
             throw new PlanningDutyValidationException(new[] { "Kierowca nie należy do bieżącej firmy." });
