@@ -135,18 +135,38 @@ public class DriverReportExportService : IDriverReportExportService
             return null;
         }
 
-        var company = await _dbContext.Companies
-            .AsNoTracking()
-            .Where(x => x.Id == _currentUser.CompanyId)
-            .Select(x => new
-            {
-                x.Name,
-                x.VatNumber,
-                x.Address,
-                x.Email,
-                x.Phone
-            })
-            .FirstAsync(cancellationToken);
+        ReportCompanyDetails company;
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            company = await _dbContext.OperatingCompanies
+                .AsNoTracking()
+                .Where(x => x.Id == _currentUser.OperatingCompanyId.Value
+                    && x.CompanyId == _currentUser.CompanyId)
+                .Select(x => new ReportCompanyDetails
+                {
+                    Name = x.Name,
+                    VatNumber = x.TaxNumber,
+                    Address = x.Address,
+                    Email = x.Email,
+                    Phone = x.Phone
+                })
+                .FirstAsync(cancellationToken);
+        }
+        else
+        {
+            company = await _dbContext.Companies
+                .AsNoTracking()
+                .Where(x => x.Id == _currentUser.CompanyId)
+                .Select(x => new ReportCompanyDetails
+                {
+                    Name = x.Name,
+                    VatNumber = x.VatNumber,
+                    Address = x.Address,
+                    Email = x.Email,
+                    Phone = x.Phone
+                })
+                .FirstAsync(cancellationToken);
+        }
 
         var (fromUtc, toUtcExclusive) = GetUtcRange(from, to);
 
@@ -180,7 +200,9 @@ public class DriverReportExportService : IDriverReportExportService
             CompanyAddress = company.Address,
             CompanyEmail = company.Email,
             CompanyPhone = company.Phone,
-            OperatingCompanyName = driver.OperatingCompanyName,
+            OperatingCompanyName = _currentUser.OperatingCompanyId.HasValue
+                ? string.Empty
+                : driver.OperatingCompanyName,
             DriverId = driver.Id,
             DriverFirstName = driver.FirstName,
             DriverLastName = driver.LastName,
@@ -1026,6 +1048,19 @@ public class DriverReportExportService : IDriverReportExportService
         <= '\u007f' => character,
         _ => '?'
     };
+
+    private sealed class ReportCompanyDetails
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string VatNumber { get; set; } = string.Empty;
+
+        public string Address { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        public string Phone { get; set; } = string.Empty;
+    }
 
     internal sealed class DriverReportActivitySource
     {
