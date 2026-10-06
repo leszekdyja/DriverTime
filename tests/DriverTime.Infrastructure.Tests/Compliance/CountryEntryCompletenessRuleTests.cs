@@ -328,6 +328,29 @@ public class CountryEntryCompletenessRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithValidAndInvalidCopiesOfSameEvents_PrefersValidCountryCodes()
+    {
+        var driverId = Guid.NewGuid();
+        var legacyDddFileId = Guid.NewGuid();
+        var currentDddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-09-11T03:10:00Z", "2026-09-11T17:30:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, legacyDddFileId, "---", "2026-09-11T02:56:40Z", "Start"),
+            CountryEntry(driverId, currentDddFileId, "PL", "2026-09-11T02:56:40Z", "Start"),
+            CountryEntry(driverId, legacyDddFileId, "0x00", "2026-09-11T17:49:09Z", "End"),
+            CountryEntry(driverId, currentDddFileId, "PL", "2026-09-11T17:49:09Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
     public void Evaluate_WithGenuineMissingStart_UsesEndEntryTimeInsteadOfMidnight()
     {
         var driverId = Guid.NewGuid();

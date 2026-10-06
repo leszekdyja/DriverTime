@@ -99,10 +99,16 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
             .GroupBy(x => new
             {
                 EntryTimeUtc = EnsureUtc(x.EntryTimeUtc),
-                EntryType = NormalizeEntryType(x.EntryType),
-                CountryCode = NormalizeCountryCode(x.CountryCode)
+                EntryType = NormalizeEntryType(x.EntryType)
             })
-            .Select(x => x.First())
+            // The same physical place record can be stored by several overlapping card
+            // downloads. Older imports may contain an empty/unrecognized country while a
+            // newer parse of that exact event contains the valid value. Treat timestamp and
+            // entry type as the event identity and prefer the valid representation.
+            .Select(x => x
+                .OrderByDescending(entry => IsValidCountryCode(entry.CountryCode))
+                .ThenBy(entry => NormalizeCountryCode(entry.CountryCode), StringComparer.Ordinal)
+                .First())
             .OrderBy(x => x.EntryTimeUtc)
             .ToList();
     }
