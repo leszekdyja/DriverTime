@@ -119,6 +119,7 @@ public class AlertsController : ControllerBase
     {
         var drivers = await _downloadScheduleService.GetDriverDownloadsAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             cancellationToken);
 
         if (_currentUser.OperatingCompanyId.HasValue)
@@ -170,6 +171,7 @@ public class AlertsController : ControllerBase
     {
         var vehicles = await _downloadScheduleService.GetVehicleDownloadsAsync(
             _currentUser.CompanyId,
+            _currentUser.OperatingCompanyId,
             cancellationToken);
 
         return vehicles

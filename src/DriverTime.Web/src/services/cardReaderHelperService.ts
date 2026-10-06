@@ -179,6 +179,30 @@ export type TachographCardReadResult = {
     fileReads: CardReaderFileReadResult[];
 };
 
+export type DriverCardDddFileResult = {
+    name: string;
+    fileId: string;
+    success: boolean;
+    sizeBytes: number;
+    message: string;
+};
+
+export type DriverCardDddReadResult = {
+    success: boolean;
+    message: string;
+    readerName: string;
+    outputFileName: string;
+    outputPath: string;
+    fileSizeBytes: number;
+    startedAtUtc: string;
+    finishedAtUtc: string;
+    errorDetails: string;
+    isImportable: boolean;
+    exportFormat: CardReaderExportFormat;
+    rawDataBase64: string;
+    files: DriverCardDddFileResult[];
+};
+
 async function getJson<T>(
     path: string,
     errorMessage: string,
@@ -264,6 +288,20 @@ export function startTachographStructureRead(
     return getJson<TachographCardReadResult>(
         "/api/card/read/tachograph-structure",
         "Nie udało się uruchomić odczytu struktury karty.",
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedReaderName, readerName: selectedReaderName }),
+        },
+    );
+}
+
+export function readDriverCardDdd(
+    selectedReaderName?: string,
+): Promise<DriverCardDddReadResult> {
+    return getJson<DriverCardDddReadResult>(
+        "/api/card/read/ddd",
+        "Nie udało się pobrać pliku DDD z karty kierowcy.",
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },

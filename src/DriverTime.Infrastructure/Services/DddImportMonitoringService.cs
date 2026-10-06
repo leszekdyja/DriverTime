@@ -181,8 +181,9 @@ public class DddImportMonitoringService : IDddImportMonitoringService
         if (_currentUser.IsAuthenticated && _currentUser.CompanyId != Guid.Empty)
         {
             return query.Where(x =>
-                x.CompanyId == _currentUser.CompanyId ||
-                x.CompanyId == null);
+                _currentUser.OperatingCompanyId.HasValue
+                    ? x.CompanyId == _currentUser.CompanyId && x.UserId == _currentUser.UserId
+                    : x.CompanyId == _currentUser.CompanyId || x.CompanyId == null);
         }
 
         return query;
@@ -237,8 +238,9 @@ public class DddImportMonitoringService : IDddImportMonitoringService
         if (_currentUser.IsAuthenticated && _currentUser.CompanyId != Guid.Empty)
         {
             return query.Where(x =>
-                x.CompanyId == _currentUser.CompanyId ||
-                x.CompanyId == null);
+                _currentUser.OperatingCompanyId.HasValue
+                    ? x.CompanyId == _currentUser.CompanyId && x.UserId == _currentUser.UserId
+                    : x.CompanyId == _currentUser.CompanyId || x.CompanyId == null);
         }
 
         return query;

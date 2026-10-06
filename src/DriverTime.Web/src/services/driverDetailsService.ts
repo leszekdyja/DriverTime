@@ -45,6 +45,9 @@ export type DriverVehicle = {
     firstUsedAtUtc: string;
     lastUsedAtUtc: string;
     usageCount: number;
+    operatingCompanyId: string | null;
+    operatingCompanyName: string | null;
+    isOutsideDriverCompany: boolean;
 };
 
 export type DriverDetails = {

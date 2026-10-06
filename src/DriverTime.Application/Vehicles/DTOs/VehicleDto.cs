@@ -9,4 +9,8 @@ public class VehicleDto
     public string Vin { get; set; } = string.Empty;
 
     public bool Active { get; set; }
+
+    public Guid? OperatingCompanyId { get; set; }
+
+    public string? OperatingCompanyName { get; set; }
 }

@@ -34,6 +34,7 @@ public class VehiclesController : ControllerBase
         }
 
         var vehicles = await BuildCompanyVehiclesQuery()
+            .Include(x => x.OperatingCompany)
             .OrderBy(x => x.RegistrationNumber)
             .Select(x => MapVehicle(x))
             .ToListAsync(cancellationToken);
@@ -49,6 +50,11 @@ public class VehiclesController : ControllerBase
         if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
         {
             return Unauthorized();
+        }
+
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            return NotFound();
         }
 
         var vehicle = await _dbContext.Vehicles
@@ -76,6 +82,48 @@ public class VehiclesController : ControllerBase
         await transaction.CommitAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    [HttpPatch("{id:guid}/operating-company")]
+    public async Task<ActionResult<VehicleDto>> UpdateOperatingCompany(
+        Guid id,
+        [FromBody] UpdateVehicleOperatingCompanyDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            return Forbid();
+        }
+
+        var vehicle = await _dbContext.Vehicles
+            .Include(x => x.OperatingCompany)
+            .FirstOrDefaultAsync(x => x.Id == id && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+        if (vehicle is null)
+        {
+            return NotFound();
+        }
+
+        OperatingCompany? operatingCompany = null;
+        if (request.OperatingCompanyId.HasValue)
+        {
+            operatingCompany = await _dbContext.OperatingCompanies
+                .FirstOrDefaultAsync(x => x.Id == request.OperatingCompanyId.Value
+                    && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            if (operatingCompany is null)
+            {
+                return BadRequest(new { message = "Firma nie należy do bieżącego konta." });
+            }
+        }
+
+        vehicle.OperatingCompanyId = operatingCompany?.Id;
+        vehicle.OperatingCompany = operatingCompany;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(MapVehicle(vehicle));
     }
 
     [HttpGet("{id:guid}")]
@@ -116,6 +164,8 @@ public class VehiclesController : ControllerBase
             RegistrationNumber = vehicle.RegistrationNumber,
             Vin = vehicle.Vin,
             Active = vehicle.Active,
+            OperatingCompanyId = vehicle.OperatingCompanyId,
+            OperatingCompanyName = vehicle.OperatingCompany?.Name,
             LastActivityAtUtc = await vehicleUses
                 .Select(x => (DateTime?)(rangeToExclusiveUtc.HasValue && x.EndUtc > rangeToExclusiveUtc.Value
                     ? rangeToExclusiveUtc.Value
@@ -344,12 +394,19 @@ public class VehiclesController : ControllerBase
 
     private IQueryable<Vehicle> BuildCompanyVehiclesQuery()
     {
-        return _dbContext.Set<Vehicle>()
+        var query = _dbContext.Set<Vehicle>()
             .AsNoTracking()
             .Where(x =>
                 x.CompanyId == _currentUser.CompanyId
                 && x.Active
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5);
+
+        if (_currentUser.OperatingCompanyId.HasValue)
+        {
+            query = query.Where(vehicle => vehicle.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
+        }
+
+        return query;
     }
 
     private IQueryable<VehicleUse> BuildVehicleUsesQuery(
@@ -363,6 +420,9 @@ public class VehiclesController : ControllerBase
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || (x.DddFile.Driver != null
+                        && x.DddFile.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 && x.StartUtc >= VehicleUseDateValidator.MinimumStartUtc
                 && x.EndUtc > x.StartUtc
                 && x.StartUtc <= latestAllowedUtc
@@ -457,7 +517,9 @@ public class VehiclesController : ControllerBase
             Id = vehicle.Id,
             RegistrationNumber = vehicle.RegistrationNumber,
             Vin = vehicle.Vin,
-            Active = vehicle.Active
+            Active = vehicle.Active,
+            OperatingCompanyId = vehicle.OperatingCompanyId,
+            OperatingCompanyName = vehicle.OperatingCompany == null ? null : vehicle.OperatingCompany.Name
         };
     }
 

@@ -128,6 +128,13 @@ app.MapPost("/api/card/read/tachograph-structure", (StartCardReadRequest? reques
     return Results.Ok(result);
 });
 
+app.MapPost("/api/card/read/ddd", (StartCardReadRequest? request, PcscReaderService readerService) =>
+{
+    var result = readerService.ReadDriverCardDdd(request?.GetRequestedReaderName());
+
+    return Results.Ok(result);
+});
+
 app.Run();
 
 internal sealed class PcscReaderService
@@ -812,6 +819,302 @@ internal sealed class PcscReaderService
         }
     }
 
+    public DriverCardDddReadResult ReadDriverCardDdd(string? selectedReaderName)
+    {
+        var startedAtUtc = DateTime.UtcNow;
+        var requestedReaderName = string.IsNullOrWhiteSpace(selectedReaderName)
+            ? string.Empty
+            : selectedReaderName.Trim();
+
+        if (IsMockReaderName(requestedReaderName))
+        {
+            return DriverCardDddReadResult.Failure(
+                requestedReaderName,
+                startedAtUtc,
+                "Czytnik testowy nie generuje pliku DDD. Wybierz fizyczny czytnik z kartą kierowcy.",
+                "mock-reader");
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return DriverCardDddReadResult.Failure(
+                requestedReaderName,
+                startedAtUtc,
+                "Odczyt PC/SC jest dostępny tylko w systemie Windows.",
+                "pcsc-unavailable");
+        }
+
+        var establishResult = NativeMethods.SCardEstablishContext(
+            NativeMethods.ScardScopeUser,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            out var context);
+
+        if (establishResult != NativeMethods.ScardSuccess)
+        {
+            return DriverCardDddReadResult.Failure(
+                requestedReaderName,
+                startedAtUtc,
+                GetFriendlyError(establishResult),
+                ToHex(establishResult));
+        }
+
+        try
+        {
+            var readerNames = ListReaderNames(context, out var listResult);
+            if (listResult != NativeMethods.ScardSuccess)
+            {
+                return DriverCardDddReadResult.Failure(
+                    requestedReaderName,
+                    startedAtUtc,
+                    GetFriendlyError(listResult),
+                    ToHex(listResult));
+            }
+
+            var readerName = string.IsNullOrWhiteSpace(requestedReaderName)
+                ? readerNames.FirstOrDefault() ?? string.Empty
+                : requestedReaderName;
+            if (!readerNames.Contains(readerName, StringComparer.OrdinalIgnoreCase))
+            {
+                return DriverCardDddReadResult.Failure(
+                    readerName,
+                    startedAtUtc,
+                    "Nie znaleziono wskazanego czytnika.",
+                    ToHex(NativeMethods.ScardUnknownReader));
+            }
+
+            var connectResult = NativeMethods.SCardConnect(
+                context,
+                readerName,
+                NativeMethods.ScardShareShared,
+                NativeMethods.ScardProtocolT0 | NativeMethods.ScardProtocolT1,
+                out var card,
+                out var activeProtocol);
+            if (connectResult != NativeMethods.ScardSuccess)
+            {
+                return DriverCardDddReadResult.Failure(
+                    readerName,
+                    startedAtUtc,
+                    GetFriendlyError(connectResult),
+                    ToHex(connectResult));
+            }
+
+            try
+            {
+                var output = new MemoryStream();
+                var fileResults = new List<DriverCardDddFileResult>();
+
+                var selectMf = TransmitStructuredApdu(
+                    card,
+                    activeProtocol,
+                    ApduCommand.SelectFile("SELECT MF", "3F00"));
+                if (!selectMf.Success)
+                {
+                    return DriverCardDddReadResult.Failure(
+                        readerName,
+                        startedAtUtc,
+                        "Karta nie udostępniła pliku głównego MF.",
+                        selectMf.StatusMeaning);
+                }
+
+                foreach (var file in GetDriverCardMasterFiles())
+                {
+                    ReadDddFile(card, activeProtocol, file, output, fileResults);
+                }
+
+                var selectApplication = TransmitStructuredApdu(
+                    card,
+                    activeProtocol,
+                    ApduCommand.SelectApplicationByAid("SELECT tachograph application", "FF544143484F"));
+                if (!selectApplication.Success)
+                {
+                    return DriverCardDddReadResult.Failure(
+                        readerName,
+                        startedAtUtc,
+                        "Nie udało się wybrać aplikacji tachografu na karcie kierowcy.",
+                        selectApplication.StatusMeaning);
+                }
+
+                foreach (var file in GetDriverCardApplicationFiles())
+                {
+                    ReadDddFile(card, activeProtocol, file, output, fileResults);
+                }
+
+                var mandatoryIds = new[] { "0501", "0520", "0504", "0505", "0506" };
+                var missingMandatory = mandatoryIds
+                    .Where(id => fileResults.All(result => result.FileId != id || !result.Success))
+                    .ToArray();
+                if (missingMandatory.Length > 0)
+                {
+                    return DriverCardDddReadResult.Failure(
+                        readerName,
+                        startedAtUtc,
+                        $"Odczyt karty jest niepełny. Brakuje wymaganych plików: {string.Join(", ", missingMandatory)}.",
+                        string.Join(" | ", fileResults.Where(x => !x.Success).Select(x => $"{x.FileId}: {x.Message}")),
+                        fileResults);
+                }
+
+                var bytes = output.ToArray();
+                var outputDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "DriverTime",
+                    "CardReaderHelper",
+                    "DddReads");
+                Directory.CreateDirectory(outputDirectory);
+                var outputFileName = $"driver-card-{DateTime.Now:yyyyMMdd-HHmmss}.ddd";
+                var outputPath = Path.Combine(outputDirectory, outputFileName);
+                File.WriteAllBytes(outputPath, bytes);
+
+                return new DriverCardDddReadResult(
+                    Success: true,
+                    Message: $"Odczytano kartę kierowcy. Plik DDD ma {bytes.Length} bajtów i jest gotowy do importu.",
+                    ReaderName: readerName,
+                    OutputFileName: outputFileName,
+                    OutputPath: outputPath,
+                    FileSizeBytes: bytes.Length,
+                    StartedAtUtc: startedAtUtc,
+                    FinishedAtUtc: DateTime.UtcNow,
+                    ErrorDetails: string.Empty,
+                    IsImportable: true,
+                    ExportFormat: "DDD",
+                    RawDataBase64: Convert.ToBase64String(bytes),
+                    Files: fileResults);
+            }
+            finally
+            {
+                NativeMethods.SCardDisconnect(card, NativeMethods.ScardLeaveCard);
+            }
+        }
+        finally
+        {
+            NativeMethods.SCardReleaseContext(context);
+        }
+    }
+
+    private static void ReadDddFile(
+        IntPtr card,
+        uint activeProtocol,
+        DriverCardFileDefinition file,
+        Stream output,
+        ICollection<DriverCardDddFileResult> results)
+    {
+        var select = TransmitStructuredApdu(
+            card,
+            activeProtocol,
+            ApduCommand.SelectEfByFileIdentifier($"SELECT EF {file.Name}", file.FileId));
+        if (!select.Success)
+        {
+            results.Add(new DriverCardDddFileResult(file.Name, file.FileId, false, 0, select.StatusMeaning));
+            return;
+        }
+
+        var data = ReadSelectedTransparentFile(card, activeProtocol, out var message);
+        if (data.Length == 0)
+        {
+            results.Add(new DriverCardDddFileResult(file.Name, file.FileId, false, 0, message));
+            return;
+        }
+
+        var fileId = FromHex(file.FileId);
+        output.Write(fileId);
+        output.WriteByte(0x00);
+        output.WriteByte((byte)(data.Length >> 8));
+        output.WriteByte((byte)data.Length);
+        output.Write(data);
+        results.Add(new DriverCardDddFileResult(file.Name, file.FileId, true, data.Length, message));
+    }
+
+    private static byte[] ReadSelectedTransparentFile(
+        IntPtr card,
+        uint activeProtocol,
+        out string message)
+    {
+        const int chunkSize = 240;
+        const int maximumFileSize = 65535;
+        var output = new MemoryStream();
+
+        for (var offset = 0; offset < maximumFileSize; offset += chunkSize)
+        {
+            var command = new byte[]
+            {
+                0x00, 0xB0, (byte)(offset >> 8), (byte)offset, chunkSize
+            };
+            var response = TransmitRawApdu(card, activeProtocol, command);
+
+            if (response.Data.Length > 0)
+            {
+                output.Write(response.Data);
+            }
+
+            if (response.StatusWord == "6282" || response.Data.Length < chunkSize)
+            {
+                message = "Odczyt zakończony na końcu pliku.";
+                return output.ToArray();
+            }
+
+            if (response.StatusWord != "9000")
+            {
+                message = response.Message;
+                return output.ToArray();
+            }
+        }
+
+        message = "Osiągnięto maksymalny obsługiwany rozmiar pliku EF.";
+        return output.ToArray();
+    }
+
+    private static RawApduResponse TransmitRawApdu(IntPtr card, uint activeProtocol, byte[] command)
+    {
+        var ioRequest = new NativeMethods.ScardIoRequest
+        {
+            Protocol = activeProtocol,
+            PciLength = Marshal.SizeOf<NativeMethods.ScardIoRequest>()
+        };
+        var receiveBuffer = new byte[258];
+        var receiveLength = receiveBuffer.Length;
+        var result = NativeMethods.SCardTransmit(
+            card,
+            ref ioRequest,
+            command,
+            command.Length,
+            IntPtr.Zero,
+            receiveBuffer,
+            ref receiveLength);
+        if (result != NativeMethods.ScardSuccess)
+        {
+            return new RawApduResponse(Array.Empty<byte>(), string.Empty, GetFriendlyError(result));
+        }
+
+        var response = receiveBuffer.Take(receiveLength).ToArray();
+        var statusWord = response.Length >= 2 ? $"{response[^2]:X2}{response[^1]:X2}" : string.Empty;
+        var data = response.Length > 2 ? response[..^2] : Array.Empty<byte>();
+        return new RawApduResponse(data, statusWord, InterpretStatusWord(statusWord));
+    }
+
+    private static IReadOnlyList<DriverCardFileDefinition> GetDriverCardMasterFiles() =>
+        new[]
+        {
+            new DriverCardFileDefinition("ICC", "0002"),
+            new DriverCardFileDefinition("IC", "0005")
+        };
+
+    private static IReadOnlyList<DriverCardFileDefinition> GetDriverCardApplicationFiles() =>
+        new[]
+        {
+            new DriverCardFileDefinition("Application Identification", "0501"),
+            new DriverCardFileDefinition("Card Certificate", "C100"),
+            new DriverCardFileDefinition("CA Certificate", "C108"),
+            new DriverCardFileDefinition("Identification", "0520"),
+            new DriverCardFileDefinition("Events Data", "0502"),
+            new DriverCardFileDefinition("Faults Data", "0503"),
+            new DriverCardFileDefinition("Driver Activity Data", "0504"),
+            new DriverCardFileDefinition("Vehicles Used", "0505"),
+            new DriverCardFileDefinition("Places", "0506"),
+            new DriverCardFileDefinition("Current Usage", "0507"),
+            new DriverCardFileDefinition("Control Activity Data", "0508"),
+            new DriverCardFileDefinition("Specific Conditions", "0521")
+        };
+
     private static CardTechnicalReadResult WriteTechnicalReadFile(CardTechnicalReadPayload payload)
     {
         var outputDirectory = Path.Combine(
@@ -1428,6 +1731,56 @@ internal sealed record StartCardReadRequest(
             : ReaderName.Trim();
     }
 }
+
+internal sealed record DriverCardDddReadResult(
+    bool Success,
+    string Message,
+    string ReaderName,
+    string OutputFileName,
+    string OutputPath,
+    long FileSizeBytes,
+    DateTime StartedAtUtc,
+    DateTime FinishedAtUtc,
+    string ErrorDetails,
+    bool IsImportable,
+    string ExportFormat,
+    string RawDataBase64,
+    IReadOnlyList<DriverCardDddFileResult> Files)
+{
+    public static DriverCardDddReadResult Failure(
+        string readerName,
+        DateTime startedAtUtc,
+        string message,
+        string errorDetails,
+        IReadOnlyList<DriverCardDddFileResult>? files = null)
+    {
+        return new DriverCardDddReadResult(
+            Success: false,
+            Message: message,
+            ReaderName: readerName,
+            OutputFileName: string.Empty,
+            OutputPath: string.Empty,
+            FileSizeBytes: 0,
+            StartedAtUtc: startedAtUtc,
+            FinishedAtUtc: DateTime.UtcNow,
+            ErrorDetails: errorDetails,
+            IsImportable: false,
+            ExportFormat: "Unknown",
+            RawDataBase64: string.Empty,
+            Files: files ?? Array.Empty<DriverCardDddFileResult>());
+    }
+}
+
+internal sealed record DriverCardDddFileResult(
+    string Name,
+    string FileId,
+    bool Success,
+    int SizeBytes,
+    string Message);
+
+internal sealed record DriverCardFileDefinition(string Name, string FileId);
+
+internal sealed record RawApduResponse(byte[] Data, string StatusWord, string Message);
 
 internal sealed record CardExportReadiness(
     bool IsImportable,

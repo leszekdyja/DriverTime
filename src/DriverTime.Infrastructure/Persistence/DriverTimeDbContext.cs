@@ -209,6 +209,8 @@ public class DriverTimeDbContext : DbContext
             entity.HasIndex(x => new { x.CompanyId, x.RegistrationNumber })
                 .IsUnique();
 
+            entity.HasIndex(x => x.OperatingCompanyId);
+
             entity.Property(x => x.RegistrationNumber)
                 .HasMaxLength(50);
 
@@ -219,6 +221,11 @@ public class DriverTimeDbContext : DbContext
                 .WithMany(x => x.Vehicles)
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany()
+                .HasForeignKey(x => x.OperatingCompanyId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<CountryEntry>(entity =>

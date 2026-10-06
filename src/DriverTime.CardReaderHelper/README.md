@@ -7,7 +7,7 @@ Ten projekt to lokalny helper MVP dla przyszłego fizycznego odczytu kart kierow
 - Helper uruchamia się lokalnie na komputerze użytkownika.
 - Nasłuchuje pod adresem `http://localhost:47888`.
 - Aplikacja webowa DriverTime komunikuje się z helperem przez `localhost`.
-- Obecny upload/import plików DDD w głównej aplikacji pozostaje bez zmian.
+- Pełny odczyt zapisuje lokalną kopię `.ddd`, a aplikacja webowa automatycznie przekazuje ją do istniejącego importu DriverTime.
 
 ## Wymagania lokalne
 
@@ -26,11 +26,12 @@ Ten projekt to lokalny helper MVP dla przyszłego fizycznego odczytu kart kierow
 - `GET /api/reader-status?readerName=...` - zwraca bieżący stan czytnika i karty: nazwę czytnika, informację czy czytnik jest podłączony, czy karta jest włożona, ATR oraz flagę trybu testowego.
 - `POST /api/card/read/start` - działa nadal w trybie testowym i nie wykonuje realnego odczytu danych DDD/C1B.
   Endpoint może działać bez fizycznego czytnika i zwraca wynik mockowy z nazwą testowego pliku.
+- `POST /api/card/read/ddd` - odczytuje przez PC/SC wymagane pliki EF karty kierowcy, zapisuje plik `.ddd` i zwraca jego zawartość aplikacji webowej do automatycznego importu.
 
 ## Obecne ograniczenia
 
-Ten etap wykrywa lokalne czytniki PC/SC i testuje obecność karty przez odczyt ATR. Gdy czytnika nie ma, można użyć trybu testowego/mock, który nie komunikuje się z kartą i nie generuje prawdziwego pliku DDD/C1B. Helper nadal nie pobiera danych z karty kierowcy, nie wykonuje komend APDU `SELECT` i nie zapisuje pliku DDD/C1B. Realny odczyt karty zostanie dodany w kolejnym kroku.
+Tryb testowy/mock nie komunikuje się z kartą i nie generuje pliku DDD. Pełny odczyt wymaga fizycznego czytnika i karty kierowcy. Helper pobiera transparentne pliki EF pierwszej generacji aplikacji tachografu. Karty drugiej generacji wymagające bezpiecznej komunikacji dla danych G2 mogą udostępnić tylko zgodną część pierwszej generacji.
 
 ## Ważne
 
-Helper jest osobnym procesem lokalnym. Nie modyfikuje istniejącego endpointu importu DDD i nie zmienia obecnego przepływu uploadu plików w DriverTime.
+Helper jest osobnym procesem lokalnym. Korzysta z istniejącego, uwierzytelnionego endpointu importu DDD. Dzięki temu nowy kierowca jest przypisywany do firmy konta, na którym wykonano odczyt, a kolejna karta tej samej osoby jest łączona z istniejącym kierowcą przez standardową logikę importu.

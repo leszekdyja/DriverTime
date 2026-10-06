@@ -42,8 +42,8 @@ public class DashboardService : IDashboardService
         var importTrendStartUtc = rangeEndUtc.Date.AddDays(-6);
         var companyId = _currentUser.CompanyId;
         var operatingCompanyId = _currentUser.OperatingCompanyId;
-        var driverDownloads = await _downloadScheduleService.GetDriverDownloadsAsync(companyId, cancellationToken);
-        var vehicleDownloads = await _downloadScheduleService.GetVehicleDownloadsAsync(companyId, cancellationToken);
+        var driverDownloads = await _downloadScheduleService.GetDriverDownloadsAsync(companyId, operatingCompanyId, cancellationToken);
+        var vehicleDownloads = await _downloadScheduleService.GetVehicleDownloadsAsync(companyId, operatingCompanyId, cancellationToken);
 
         var violationsQuery = _dbContext.Violations
             .AsNoTracking()
@@ -213,7 +213,8 @@ public class DashboardService : IDashboardService
                 .CountAsync(x => x.CompanyId == companyId
                     && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value), cancellationToken),
             VehiclesCount = await _dbContext.Vehicles
-                .CountAsync(x => x.CompanyId == companyId && x.Active, cancellationToken),
+                .CountAsync(x => x.CompanyId == companyId && x.Active
+                    && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value), cancellationToken),
             ViolationsCount = await violationsQuery
                 .CountAsync(cancellationToken),
             DriverActivitiesCount = await _dbContext.DriverActivities
@@ -224,9 +225,13 @@ public class DashboardService : IDashboardService
                          && x.StartUtc <= rangeEndUtc,
                     cancellationToken),
             VehicleUsesCount = await _dbContext.VehicleUses
-                .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.DddFile.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null
+                        && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value)), cancellationToken),
             CountryEntriesCount = await _dbContext.CountryEntries
-                .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.DddFile.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null
+                        && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value)), cancellationToken),
             OverdueDriverDownloads = driverDownloads.Count(x => x.Status == DownloadStatus.Overdue),
             DriverDownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7),
             DownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7) + CountDownloadsDueInDays(vehicleDownloads, 7),
@@ -292,7 +297,9 @@ public class DashboardService : IDashboardService
         var now = DateTime.UtcNow;
         var drivers = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .Select(x => new DriverRiskDto
             {
                 DriverId = x.Id,
@@ -311,7 +318,9 @@ public class DashboardService : IDashboardService
 
         var violationSummaries = await _dbContext.Violations
             .AsNoTracking()
-            .Where(x => x.Driver != null && x.Driver.CompanyId == _currentUser.CompanyId)
+            .Where(x => x.Driver != null && x.Driver.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
             .GroupBy(x => x.DriverId)
             .Select(x => new
             {

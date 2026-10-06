@@ -17,12 +17,14 @@ public class DownloadScheduleService : IDownloadScheduleService
 
     public async Task<IReadOnlyList<DriverDownloadDto>> GetDriverDownloadsAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         CancellationToken cancellationToken = default)
     {
         var nowUtc = DateTime.UtcNow;
         var drivers = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value))
             .Select(x => new
             {
                 x.Id,
@@ -38,6 +40,8 @@ public class DownloadScheduleService : IDownloadScheduleService
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
+                && (!operatingCompanyId.HasValue
+                    || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
                 && x.DddFile.DriverId.HasValue)
             .GroupBy(x => x.DddFile.DriverId!.Value)
             .Select(x => new
@@ -78,11 +82,13 @@ public class DownloadScheduleService : IDownloadScheduleService
 
     public async Task<IReadOnlyList<VehicleDownloadDto>> GetVehicleDownloadsAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         CancellationToken cancellationToken = default)
     {
         var vehicles = await _dbContext.Set<Vehicle>()
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId && x.Active)
+            .Where(x => x.CompanyId == companyId && x.Active
+                && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value))
             .OrderBy(x => x.RegistrationNumber)
             .Select(x => new
             {
@@ -95,6 +101,8 @@ public class DownloadScheduleService : IDownloadScheduleService
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
+                && (!operatingCompanyId.HasValue
+                    || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
                 && x.RegistrationNumber != null
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5)
             .Select(x => x.RegistrationNumber)
@@ -140,10 +148,11 @@ public class DownloadScheduleService : IDownloadScheduleService
 
     public async Task<DownloadDashboardDto> GetDashboardAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         CancellationToken cancellationToken = default)
     {
-        var drivers = await GetDriverDownloadsAsync(companyId, cancellationToken);
-        var vehicles = await GetVehicleDownloadsAsync(companyId, cancellationToken);
+        var drivers = await GetDriverDownloadsAsync(companyId, operatingCompanyId, cancellationToken);
+        var vehicles = await GetVehicleDownloadsAsync(companyId, operatingCompanyId, cancellationToken);
 
         return new DownloadDashboardDto
         {

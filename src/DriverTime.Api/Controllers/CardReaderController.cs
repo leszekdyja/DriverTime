@@ -30,6 +30,7 @@ public class CardReaderController : ControllerBase
 
         var sessions = await _cardReadSessionService.GetRecentAsync(
             _currentUser.CompanyId,
+            GetScopedUserId(),
             cancellationToken);
 
         return Ok(sessions);
@@ -67,6 +68,7 @@ public class CardReaderController : ControllerBase
 
         var session = await _cardReadSessionService.CompleteAsync(
             _currentUser.CompanyId,
+            GetScopedUserId(),
             id,
             request ?? new CompleteCardReadSessionRequest(),
             cancellationToken);
@@ -87,6 +89,7 @@ public class CardReaderController : ControllerBase
 
         var session = await _cardReadSessionService.FailAsync(
             _currentUser.CompanyId,
+            GetScopedUserId(),
             id,
             request ?? new FailCardReadSessionRequest(),
             cancellationToken);
@@ -98,4 +101,7 @@ public class CardReaderController : ControllerBase
     {
         return _currentUser.IsAuthenticated && _currentUser.CompanyId != Guid.Empty;
     }
+
+    private Guid? GetScopedUserId() =>
+        _currentUser.OperatingCompanyId.HasValue ? _currentUser.UserId : null;
 }

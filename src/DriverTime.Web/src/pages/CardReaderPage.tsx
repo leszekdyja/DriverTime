@@ -14,12 +14,14 @@ import {
     getCardReaderDiagnostics,
     getCardReaderReaders,
     getCardReaderStatus,
+    readDriverCardDdd,
     readCardAtr,
     startMockCardRead,
     startTachographStructureRead,
     startTechnicalCardRead,
     type CardReaderAtrResult,
     type CardReaderDiagnostics,
+    type DriverCardDddReadResult,
     type CardReaderHelperHealth,
     type CardReaderMockReadResult,
     type CardReaderReader,
@@ -28,6 +30,7 @@ import {
     type CardReaderTechnicalReadResult,
     type TachographCardReadResult,
 } from "../services/cardReaderHelperService";
+import { uploadDddFile, type DddUploadResult } from "../services/dddUploadService";
 import "../styles/card-reader.css";
 
 type BadgeTone = "neutral" | "success" | "warning" | "danger" | "info" | "critical";
@@ -103,6 +106,8 @@ export default function CardReaderPage() {
     const [mockReadResult, setMockReadResult] = useState<CardReaderMockReadResult | null>(null);
     const [technicalReadResult, setTechnicalReadResult] = useState<CardReaderTechnicalReadResult | null>(null);
     const [tachographStructureResult, setTachographStructureResult] = useState<TachographCardReadResult | null>(null);
+    const [dddReadResult, setDddReadResult] = useState<DriverCardDddReadResult | null>(null);
+    const [dddImportResult, setDddImportResult] = useState<DddUploadResult | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [isFailing, setIsFailing] = useState(false);
@@ -113,6 +118,7 @@ export default function CardReaderPage() {
     const [isMockReading, setIsMockReading] = useState(false);
     const [isTechnicalReading, setIsTechnicalReading] = useState(false);
     const [isStructureReading, setIsStructureReading] = useState(false);
+    const [isDddReading, setIsDddReading] = useState(false);
     const [error, setError] = useState("");
     const [helperError, setHelperError] = useState("");
 
@@ -512,6 +518,79 @@ export default function CardReaderPage() {
         }
     }
 
+    async function readAndImportDriverCard() {
+        if (!selectedReaderName) {
+            setHelperError("Najpierw wybierz fizyczny czytnik.");
+            return;
+        }
+
+        if (selectedReader?.isMock) {
+            setHelperError("Pełny odczyt DDD wymaga fizycznego czytnika i karty kierowcy.");
+            return;
+        }
+
+        setIsDddReading(true);
+        setHelperError("");
+        setError("");
+        setDddReadResult(null);
+        setDddImportResult(null);
+        let session = activeSession;
+
+        try {
+            if (!session) {
+                session = await startCardReadSession({
+                    readerName: selectedReaderName,
+                    notes: "Automatyczny odczyt i import pliku DDD z karty kierowcy.",
+                });
+                setSessions((current) => upsertSession(current, session as CardReadSession));
+            }
+
+            const readResult = await readDriverCardDdd(selectedReaderName);
+            setDddReadResult(readResult);
+            if (!readResult.success || !readResult.isImportable || !readResult.rawDataBase64) {
+                throw new Error(readResult.message || "Czytnik nie zwrócił kompletnego pliku DDD.");
+            }
+
+            const binary = window.atob(readResult.rawDataBase64);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+            }
+            const file = new File([bytes], readResult.outputFileName, {
+                type: "application/octet-stream",
+            });
+            const importResult = await uploadDddFile(file);
+            setDddImportResult(importResult);
+
+            const completedSession = await completeCardReadSession(session.id, {
+                notes: [
+                    `Odczytano ${readResult.fileSizeBytes} B z karty.`,
+                    `Zaimportowano ${readResult.outputFileName}.`,
+                    importResult.driverCreated ? "Utworzono kierowcę na bieżącym koncie firmy." : "Dane połączono z istniejącym kierowcą.",
+                ].join(" | "),
+            });
+            setSessions((current) => upsertSession(current, completedSession));
+        } catch (readError) {
+            const message = readError instanceof Error
+                ? readError.message
+                : "Nie udało się odczytać i zaimportować karty kierowcy.";
+            setHelperError(message);
+            if (session) {
+                try {
+                    const failedSession = await failCardReadSession(session.id, {
+                        errorMessage: message,
+                        notes: `Czytnik: ${selectedReaderName}`,
+                    });
+                    setSessions((current) => upsertSession(current, failedSession));
+                } catch {
+                    setError("Nie udało się zapisać statusu nieudanej sesji.");
+                }
+            }
+        } finally {
+            setIsDddReading(false);
+        }
+    }
+
     return (
         <div className="card-reader-page">
             <section className="card-reader-hero">
@@ -591,7 +670,10 @@ export default function CardReaderPage() {
                     <button type="button" onClick={runTechnicalRead} disabled={!selectedReaderName || isTechnicalReading}>
                         {isTechnicalReading ? "Odczyt karty..." : "Odczytaj kartę"}
                     </button>
-                    <button type="button" onClick={runTachographStructureRead} disabled={!selectedReaderName || isStructureReading}>
+                    <button type="button" onClick={readAndImportDriverCard} disabled={!selectedReaderName || Boolean(selectedReader?.isMock) || isDddReading}>
+                        {isDddReading ? "Odczyt i import..." : "Odczytaj i zaimportuj kartę"}
+                    </button>
+                    <button className="secondary" type="button" onClick={runTachographStructureRead} disabled={!selectedReaderName || isStructureReading}>
                         {isStructureReading ? "Odczyt struktury..." : "Odczytaj strukturę karty"}
                     </button>
                     <button type="button" onClick={runMockRead} disabled={isMockReading}>
@@ -669,6 +751,25 @@ export default function CardReaderPage() {
                         <div><span>Karta</span><StatusBadge label={atrResult.cardPresent ? "Karta obecna" : "Brak karty"} tone={atrResult.cardPresent ? "success" : "warning"} /></div>
                         <div><span>ATR HEX</span><code>{atrResult.atrHex || "Brak danych ATR"}</code></div>
                         {atrResult.errorMessage ? <p>{atrResult.errorMessage} {atrResult.errorCodeHex ? `(${atrResult.errorCodeHex})` : ""}</p> : null}
+                    </div>
+                ) : null}
+
+                {dddReadResult ? (
+                    <div className="card-reader-read-result">
+                        <div>
+                            <span>Pełny odczyt karty kierowcy</span>
+                            <StatusBadge
+                                label={dddImportResult ? "Zaimportowano" : dddReadResult.success ? "Odczytano DDD" : "Błąd odczytu"}
+                                tone={dddImportResult ? "success" : dddReadResult.success ? "info" : "danger"}
+                            />
+                        </div>
+                        <p>{dddImportResult?.importMessage ?? dddReadResult.message}</p>
+                        <div className="card-reader-diagnostic-grid">
+                            <article><span>Plik</span><strong>{dddReadResult.outputFileName || "Nie utworzono"}</strong></article>
+                            <article><span>Rozmiar</span><strong>{formatFileSize(dddReadResult.fileSizeBytes)}</strong></article>
+                            <article><span>Pliki EF</span><strong>{dddReadResult.files.filter((file) => file.success).length} / {dddReadResult.files.length}</strong></article>
+                            <article><span>Kierowca</span><strong>{dddImportResult ? `${dddImportResult.driver.first_name} ${dddImportResult.driver.last_name}` : "Oczekiwanie na import"}</strong></article>
+                        </div>
                     </div>
                 ) : null}
 

@@ -5,6 +5,8 @@ export type Vehicle = {
     registrationNumber: string;
     vin: string;
     active: boolean;
+    operatingCompanyId: string | null;
+    operatingCompanyName: string | null;
 };
 
 export type VehicleUseHistory = {
@@ -109,6 +111,20 @@ export async function deleteVehicle(id: string): Promise<void> {
     if (!response.ok) {
         throw new Error("Nie udało się usunąć pojazdu.");
     }
+}
+
+export async function updateVehicleOperatingCompany(id: string, operatingCompanyId: string | null): Promise<Vehicle> {
+    const response = await apiFetch(`/api/vehicles/${id}/operating-company`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operatingCompanyId }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Nie udało się przypisać pojazdu do firmy.");
+    }
+
+    return response.json() as Promise<Vehicle>;
 }
 export async function getVehicle(id: string, range?: VehicleDetailsDateRange): Promise<VehicleDetails> {
     const params = new URLSearchParams();
