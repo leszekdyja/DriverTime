@@ -220,6 +220,73 @@ public class CountryEntryCompletenessRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithSameStartAndEndImportedFromSeveralDddFiles_ReturnsNoWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var firstDddFileId = Guid.NewGuid();
+        var secondDddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-05-14T08:00:00Z", "2026-05-14T16:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, firstDddFileId, "PL", "2026-05-14T07:45:00Z", "Start"),
+            CountryEntry(driverId, secondDddFileId, "pl", "2026-05-14T07:45:00Z", "Start"),
+            CountryEntry(driverId, firstDddFileId, "PL", "2026-05-14T16:15:00Z", "End"),
+            CountryEntry(driverId, secondDddFileId, "PL", "2026-05-14T16:15:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithSameUnpairedStartImportedFromSeveralDddFiles_ReturnsOneWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var firstDddFileId = Guid.NewGuid();
+        var secondDddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, firstDddFileId, "PL", "2026-05-14T07:45:00Z", "Start"),
+            CountryEntry(driverId, secondDddFileId, "PL", "2026-05-14T07:45:00Z", "Start")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("MISSING_END_COUNTRY", result.Violations[0].Code);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithSameInvalidEntryImportedFromSeveralDddFiles_ReturnsOneWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var firstDddFileId = Guid.NewGuid();
+        var secondDddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-05-14T08:00:00Z", "2026-05-14T12:00:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, firstDddFileId, "---", "2026-05-14T07:45:00Z", "Start"),
+            CountryEntry(driverId, secondDddFileId, " --- ", "2026-05-14T07:45:00Z", "Start")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("INVALID_COUNTRY_CODE", result.Violations[0].Code);
+    }
+
+    [TestMethod]
     public void Evaluate_WithGenuineMissingStart_UsesEndEntryTimeInsteadOfMidnight()
     {
         var driverId = Guid.NewGuid();
