@@ -4,7 +4,9 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using DriverTime.Application.Interfaces;
+using DriverTime.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace DriverTime.Api.Authentication;
@@ -14,32 +16,36 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
     public const string SchemeName = "Bearer";
 
     private readonly IJwtSettings _settings;
+    private readonly DriverTimeDbContext _dbContext;
 
     public JwtAuthenticationHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IJwtSettings settings)
+        IJwtSettings settings,
+        DriverTimeDbContext dbContext)
         : base(options, logger, encoder)
     {
         _settings = settings;
+        _dbContext = dbContext;
     }
 
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+    protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var authorization = Request.Headers.Authorization.ToString();
 
         if (!authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult(AuthenticateResult.NoResult());
+            return AuthenticateResult.NoResult();
         }
 
         try
         {
             var principal = ValidateToken(authorization["Bearer ".Length..].Trim());
+            await RefreshUserScopeAsync(principal, Context.RequestAborted);
             var ticket = new AuthenticationTicket(principal, SchemeName);
 
-            return Task.FromResult(AuthenticateResult.Success(ticket));
+            return AuthenticateResult.Success(ticket);
         }
         catch (Exception exception) when (
             exception is FormatException
@@ -47,7 +53,54 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
             or CryptographicException
             or InvalidOperationException)
         {
-            return Task.FromResult(AuthenticateResult.Fail("Invalid or expired JWT token."));
+            return AuthenticateResult.Fail("Invalid or expired JWT token.");
+        }
+    }
+
+    private async Task RefreshUserScopeAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        var identity = principal.Identity as ClaimsIdentity
+            ?? throw new InvalidOperationException("JWT identity is unavailable.");
+        if (identity.FindFirst("token_type")?.Value == "mobile_driver")
+        {
+            return;
+        }
+
+        if (!Guid.TryParse(identity.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId))
+        {
+            throw new InvalidOperationException("JWT user identifier is invalid.");
+        }
+
+        var userScope = await _dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId && user.Active)
+            .Select(user => new { user.CompanyId, user.OperatingCompanyId })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new InvalidOperationException("JWT user is inactive or no longer exists.");
+
+        ReplaceClaim(identity, "company_id", userScope.CompanyId.ToString());
+        RemoveClaims(identity, "operating_company_id");
+        if (userScope.OperatingCompanyId.HasValue)
+        {
+            identity.AddClaim(new Claim(
+                "operating_company_id",
+                userScope.OperatingCompanyId.Value.ToString()));
+        }
+    }
+
+    private static void ReplaceClaim(ClaimsIdentity identity, string claimType, string value)
+    {
+        RemoveClaims(identity, claimType);
+        identity.AddClaim(new Claim(claimType, value));
+    }
+
+    private static void RemoveClaims(ClaimsIdentity identity, string claimType)
+    {
+        foreach (var claim in identity.FindAll(claimType).ToArray())
+        {
+            identity.RemoveClaim(claim);
         }
     }
 
