@@ -121,7 +121,7 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
         IReadOnlySet<DateTime> activeDays)
     {
         var typedEntries = countryEntries
-            .Where(x => x.EntryTimeUtc != default && IsValidCountryCode(x.CountryCode))
+            .Where(x => x.EntryTimeUtc != default)
             .Where(x => !IsUnknownEntry(x.EntryType))
             .OrderBy(x => x.EntryTimeUtc)
             .ToList();
@@ -141,12 +141,13 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
                 continue;
             }
 
-            if (pendingStart is not null &&
-                entry.EntryTimeUtc >= pendingStart.EntryTimeUtc &&
-                entry.EntryTimeUtc - pendingStart.EntryTimeUtc <= TimeSpan.FromHours(24))
+            if (pendingStart is not null && entry.EntryTimeUtc >= pendingStart.EntryTimeUtc)
             {
-                // A daily work period may legitimately cross UTC midnight. Pair entries by
-                // chronology instead of requiring both records to have the same calendar date.
+                // Place records describe the beginning and end of a daily work period, not
+                // necessarily a single card-insertion session. A driver can leave the card in
+                // the tachograph and the recorded interval may exceed 24 hours (including
+                // manually entered activity). Pair by chronology; duration alone is not proof
+                // that either country entry is missing.
                 pendingStart = null;
                 continue;
             }
@@ -171,6 +172,13 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
         ComplianceCountryEntry endEntry,
         IReadOnlySet<DateTime> activeDays)
     {
+        if (!IsValidCountryCode(endEntry.CountryCode))
+        {
+            // The invalid-code warning already describes the reliable problem. Do not infer
+            // an additional missing counterpart from an entry whose own data is incomplete.
+            return;
+        }
+
         var day = endEntry.EntryTimeUtc.Date;
         if (!activeDays.Contains(day))
         {
@@ -192,6 +200,11 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
         ComplianceCountryEntry startEntry,
         IReadOnlySet<DateTime> activeDays)
     {
+        if (!IsValidCountryCode(startEntry.CountryCode))
+        {
+            return;
+        }
+
         var day = startEntry.EntryTimeUtc.Date;
         if (!activeDays.Contains(day))
         {
