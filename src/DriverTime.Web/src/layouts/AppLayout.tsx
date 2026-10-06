@@ -44,8 +44,11 @@ export default function AppLayout() {
     const { user, logout } = useAuth();
     const { isDark, toggleTheme } = useTheme();
     const location = useLocation();
+    const visibleNavigationItems = user?.operatingCompanyId
+        ? navigationItems.filter((item) => item.to !== "/companies")
+        : navigationItems;
     const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}` || "U";
-    const currentSection = [...navigationItems]
+    const currentSection = [...visibleNavigationItems]
         .sort((left, right) => right.to.length - left.to.length)
         .find((item) => item.to === "/"
             ? location.pathname === "/"
@@ -63,7 +66,7 @@ export default function AppLayout() {
                 </div>
 
                 <nav className="sidebar-nav" aria-label="Nawigacja glowna">
-                    {navigationItems.map((item) => (
+                    {visibleNavigationItems.map((item) => (
                         <NavLink
                             key={item.to}
                             to={item.to}
