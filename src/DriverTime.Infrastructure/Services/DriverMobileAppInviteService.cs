@@ -31,7 +31,9 @@ public class DriverMobileAppInviteService : IDriverMobileAppInviteService
     {
         var driver = await _dbContext.Drivers
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
 
         if (driver is null)
         {

@@ -8,6 +8,10 @@ public class Vehicle : BaseEntity
 
     public Company? Company { get; set; }
 
+    public Guid? OperatingCompanyId { get; set; }
+
+    public OperatingCompany? OperatingCompany { get; set; }
+
     public string RegistrationNumber { get; set; } = string.Empty;
 
     public string Vin { get; set; } = string.Empty;

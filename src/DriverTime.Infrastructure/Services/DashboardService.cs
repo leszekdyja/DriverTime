@@ -213,7 +213,8 @@ public class DashboardService : IDashboardService
                 .CountAsync(x => x.CompanyId == companyId
                     && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value), cancellationToken),
             VehiclesCount = await _dbContext.Vehicles
-                .CountAsync(x => x.CompanyId == companyId && x.Active, cancellationToken),
+                .CountAsync(x => x.CompanyId == companyId && x.Active
+                    && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value), cancellationToken),
             ViolationsCount = await violationsQuery
                 .CountAsync(cancellationToken),
             DriverActivitiesCount = await _dbContext.DriverActivities
@@ -224,9 +225,13 @@ public class DashboardService : IDashboardService
                          && x.StartUtc <= rangeEndUtc,
                     cancellationToken),
             VehicleUsesCount = await _dbContext.VehicleUses
-                .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.DddFile.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null
+                        && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value)), cancellationToken),
             CountryEntriesCount = await _dbContext.CountryEntries
-                .CountAsync(x => x.DddFile.CompanyId == companyId, cancellationToken),
+                .CountAsync(x => x.DddFile.CompanyId == companyId
+                    && (!operatingCompanyId.HasValue || (x.DddFile.Driver != null
+                        && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value)), cancellationToken),
             OverdueDriverDownloads = driverDownloads.Count(x => x.Status == DownloadStatus.Overdue),
             DriverDownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7),
             DownloadsDueIn7Days = CountDownloadsDueInDays(driverDownloads, 7) + CountDownloadsDueInDays(vehicleDownloads, 7),

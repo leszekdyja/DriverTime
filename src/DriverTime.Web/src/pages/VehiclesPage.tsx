@@ -1,13 +1,17 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { useAuth } from "../auth/useAuth";
 import StatusBadge from "../components/StatusBadge";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
-import { deleteVehicle, getVehicles, type Vehicle } from "../services/vehicleService";
+import { getOperatingCompanies, type OperatingCompany } from "../services/operatingCompaniesService";
+import { deleteVehicle, getVehicles, updateVehicleOperatingCompany, type Vehicle } from "../services/vehicleService";
 import "../styles/drivers.css";
 
 export default function VehiclesPage() {
+    const { user } = useAuth();
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [companies, setCompanies] = useState<OperatingCompany[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
@@ -20,7 +24,12 @@ export default function VehiclesPage() {
         setError("");
 
         try {
-            setVehicles(await getVehicles());
+            const [loadedVehicles, loadedCompanies] = await Promise.all([
+                getVehicles(),
+                getOperatingCompanies(),
+            ]);
+            setVehicles(loadedVehicles);
+            setCompanies(loadedCompanies);
         } catch (loadError) {
             setError(
                 loadError instanceof Error
@@ -31,6 +40,19 @@ export default function VehiclesPage() {
             setIsLoading(false);
         }
     }, []);
+
+    async function assignCompany(vehicle: Vehicle, operatingCompanyId: string | null) {
+        setMessage("");
+        setIsMessageError(false);
+        try {
+            const saved = await updateVehicleOperatingCompany(vehicle.id, operatingCompanyId);
+            setVehicles(current => current.map(item => item.id === saved.id ? saved : item));
+            setMessage(operatingCompanyId ? "Pojazd został przypisany do firmy." : "Usunięto przypisanie pojazdu do firmy.");
+        } catch (assignError) {
+            setIsMessageError(true);
+            setMessage(assignError instanceof Error ? assignError.message : "Nie udało się przypisać pojazdu do firmy.");
+        }
+    }
 
     async function confirmDeleteVehicle() {
         if (!vehicleToDelete) return;
@@ -106,6 +128,7 @@ export default function VehiclesPage() {
                                     <th>Rejestracja</th>
                                     <th>VIN</th>
                                     <th>Status</th>
+                                    <th>Firma</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -126,17 +149,34 @@ export default function VehiclesPage() {
                                             )}
                                         </td>
                                         <td>
+                                            {user?.operatingCompanyId ? (
+                                                vehicle.operatingCompanyName ?? "Brak przypisania"
+                                            ) : (
+                                                <select
+                                                    value={vehicle.operatingCompanyId ?? ""}
+                                                    onChange={event => void assignCompany(vehicle, event.target.value || null)}
+                                                >
+                                                    <option value="">Brak przypisania</option>
+                                                    {companies
+                                                        .filter(company => company.active || company.id === vehicle.operatingCompanyId)
+                                                        .map(company => <option key={company.id} value={company.id}>{company.name}{company.active ? "" : " (nieaktywna)"}</option>)}
+                                                </select>
+                                            )}
+                                        </td>
+                                        <td>
                                             <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/vehicles/${vehicle.id}`}>
                                                     Szczegóły
                                                 </Link>
-                                                <button
-                                                    className="driver-delete-button"
-                                                    type="button"
-                                                    onClick={() => setVehicleToDelete(vehicle)}
-                                                >
-                                                    Usuń
-                                                </button>
+                                                {!user?.operatingCompanyId ? (
+                                                    <button
+                                                        className="driver-delete-button"
+                                                        type="button"
+                                                        onClick={() => setVehicleToDelete(vehicle)}
+                                                    >
+                                                        Usuń
+                                                    </button>
+                                                ) : null}
                                             </div>
                                         </td>
                                     </tr>

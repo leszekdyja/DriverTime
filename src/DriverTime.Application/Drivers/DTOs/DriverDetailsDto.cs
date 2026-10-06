@@ -62,6 +62,12 @@ public class DriverVehicleDto
     public DateTime LastUsedAtUtc { get; set; }
 
     public int UsageCount { get; set; }
+
+    public Guid? OperatingCompanyId { get; set; }
+
+    public string? OperatingCompanyName { get; set; }
+
+    public bool IsOutsideDriverCompany { get; set; }
 }
 
 public class DriverCountryEntryDto

@@ -111,7 +111,9 @@ public class DriverWorkEvidenceService : IDriverWorkEvidenceService
         }
 
         var driverExists = await _dbContext.Drivers
-            .AnyAsync(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            .AnyAsync(x => x.Id == driverId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
 
         if (!driverExists)
         {
@@ -151,7 +153,9 @@ public class DriverWorkEvidenceService : IDriverWorkEvidenceService
         CancellationToken cancellationToken = default)
     {
         var entry = await _dbContext.DriverWorkEvidenceEntries
-            .FirstOrDefaultAsync(x => x.Id == entryId && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == entryId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
 
         if (entry is null)
         {
@@ -186,7 +190,9 @@ public class DriverWorkEvidenceService : IDriverWorkEvidenceService
         CancellationToken cancellationToken = default)
     {
         var entry = await _dbContext.DriverWorkEvidenceEntries
-            .FirstOrDefaultAsync(x => x.Id == entryId && x.CompanyId == _currentUser.CompanyId, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == entryId && x.CompanyId == _currentUser.CompanyId
+                && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value), cancellationToken);
 
         if (entry is null)
         {

@@ -20,11 +20,13 @@ public class CardReadSessionService : ICardReadSessionService
 
     public async Task<IReadOnlyList<CardReadSessionDto>> GetRecentAsync(
         Guid companyId,
+        Guid? scopedUserId,
         CancellationToken cancellationToken)
     {
         return await _dbContext.CardReadSessions
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId)
+            .Where(x => x.CompanyId == companyId
+                && (!scopedUserId.HasValue || x.UserId == scopedUserId.Value))
             .OrderByDescending(x => x.StartedAtUtc)
             .Take(50)
             .Select(x => new CardReadSessionDto
@@ -73,11 +75,12 @@ public class CardReadSessionService : ICardReadSessionService
 
     public async Task<CardReadSessionDto?> CompleteAsync(
         Guid companyId,
+        Guid? scopedUserId,
         Guid id,
         CompleteCardReadSessionRequest request,
         CancellationToken cancellationToken)
     {
-        var session = await GetSessionAsync(companyId, id, cancellationToken);
+        var session = await GetSessionAsync(companyId, scopedUserId, id, cancellationToken);
         if (session is null)
         {
             return null;
@@ -98,11 +101,12 @@ public class CardReadSessionService : ICardReadSessionService
 
     public async Task<CardReadSessionDto?> FailAsync(
         Guid companyId,
+        Guid? scopedUserId,
         Guid id,
         FailCardReadSessionRequest request,
         CancellationToken cancellationToken)
     {
-        var session = await GetSessionAsync(companyId, id, cancellationToken);
+        var session = await GetSessionAsync(companyId, scopedUserId, id, cancellationToken);
         if (session is null)
         {
             return null;
@@ -121,11 +125,13 @@ public class CardReadSessionService : ICardReadSessionService
 
     private Task<CardReadSession?> GetSessionAsync(
         Guid companyId,
+        Guid? scopedUserId,
         Guid id,
         CancellationToken cancellationToken)
     {
         return _dbContext.CardReadSessions
-            .Where(x => x.CompanyId == companyId && x.Id == id)
+            .Where(x => x.CompanyId == companyId && x.Id == id
+                && (!scopedUserId.HasValue || x.UserId == scopedUserId.Value))
             .FirstOrDefaultAsync(cancellationToken);
     }
 

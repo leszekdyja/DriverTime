@@ -4,6 +4,7 @@ public interface ICardReadSessionService
 {
     Task<IReadOnlyList<CardReadSessionDto>> GetRecentAsync(
         Guid companyId,
+        Guid? scopedUserId,
         CancellationToken cancellationToken);
 
     Task<CardReadSessionDto> StartAsync(
@@ -14,12 +15,14 @@ public interface ICardReadSessionService
 
     Task<CardReadSessionDto?> CompleteAsync(
         Guid companyId,
+        Guid? scopedUserId,
         Guid id,
         CompleteCardReadSessionRequest request,
         CancellationToken cancellationToken);
 
     Task<CardReadSessionDto?> FailAsync(
         Guid companyId,
+        Guid? scopedUserId,
         Guid id,
         FailCardReadSessionRequest request,
         CancellationToken cancellationToken);

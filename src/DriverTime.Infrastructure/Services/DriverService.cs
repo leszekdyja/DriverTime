@@ -216,8 +216,41 @@ public class DriverService : IDriverService
             .OrderByDescending(x => x.LastUsedAtUtc)
             .ToListAsync();
 
+        var vehicleOwners = await _dbContext.Vehicles
+            .AsNoTracking()
+            .Include(x => x.OperatingCompany)
+            .Where(x => x.CompanyId == _currentUser.CompanyId)
+            .Select(x => new
+            {
+                x.RegistrationNumber,
+                x.OperatingCompanyId,
+                OperatingCompanyName = x.OperatingCompany == null ? null : x.OperatingCompany.Name
+            })
+            .ToListAsync();
+        var ownersByRegistration = vehicleOwners
+            .GroupBy(x => NormalizeVehicleRegistration(x.RegistrationNumber))
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
+        foreach (var vehicle in driver.Vehicles)
+        {
+            if (!ownersByRegistration.TryGetValue(NormalizeVehicleRegistration(vehicle.RegistrationNumber), out var owner))
+            {
+                continue;
+            }
+
+            vehicle.OperatingCompanyId = owner.OperatingCompanyId;
+            vehicle.OperatingCompanyName = owner.OperatingCompanyName;
+            vehicle.IsOutsideDriverCompany = owner.OperatingCompanyId.HasValue
+                && driver.OperatingCompanyId.HasValue
+                && owner.OperatingCompanyId != driver.OperatingCompanyId;
+        }
+
         return driver;
     }
+
+    private static string NormalizeVehicleRegistration(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Replace(" ", string.Empty).Trim().ToUpperInvariant();
 
 
     private async Task<List<DriverCountryEntryDto>> GetCountryEntriesAsync(

@@ -85,14 +85,10 @@ public class DownloadScheduleService : IDownloadScheduleService
         Guid? operatingCompanyId,
         CancellationToken cancellationToken = default)
     {
-        if (operatingCompanyId.HasValue)
-        {
-            return Array.Empty<VehicleDownloadDto>();
-        }
-
         var vehicles = await _dbContext.Set<Vehicle>()
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId && x.Active)
+            .Where(x => x.CompanyId == companyId && x.Active
+                && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value))
             .OrderBy(x => x.RegistrationNumber)
             .Select(x => new
             {
@@ -105,6 +101,8 @@ public class DownloadScheduleService : IDownloadScheduleService
             .AsNoTracking()
             .Where(x =>
                 x.DddFile.CompanyId == companyId
+                && (!operatingCompanyId.HasValue
+                    || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
                 && x.RegistrationNumber != null
                 && x.RegistrationNumber.Replace(" ", "").Length >= 5)
             .Select(x => x.RegistrationNumber)

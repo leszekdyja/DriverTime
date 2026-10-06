@@ -370,7 +370,7 @@ public class DddFileService : IDddFileService
         AddActivities(dddFile, parseResult.Activities, nowUtc);
         AddVehicleUses(dddFile, parseResult.VehicleUses, nowUtc);
         AddCountryEntries(dddFile, parseResult.CountryCodeEntries);
-        await AddMissingVehiclesAsync(companyId, parseResult.VehicleUses);
+        await AddMissingVehiclesAsync(companyId, driver.OperatingCompanyId, parseResult.VehicleUses);
         _dbContext.DddFiles.Add(dddFile);
 
         driver = await SaveImportChangesHandlingDuplicatesAsync(
@@ -826,6 +826,7 @@ public class DddFileService : IDddFileService
 
     private async Task AddMissingVehiclesAsync(
         Guid companyId,
+        Guid? operatingCompanyId,
         IEnumerable<ParsedVehicleUseDto> vehicleUses)
     {
         var registrationNumbers = vehicleUses
@@ -853,6 +854,18 @@ public class DddFileService : IDddFileService
             .Select(x => x.RegistrationNumber)
             .ToListAsync();
 
+        if (operatingCompanyId.HasValue)
+        {
+            var matchingVehicles = await vehicles
+                .Where(x => x.CompanyId == companyId && x.OperatingCompanyId == null)
+                .ToListAsync();
+            foreach (var vehicle in matchingVehicles.Where(x =>
+                         registrationNumbers.Contains(NormalizeVehicleRegistration(x.RegistrationNumber), StringComparer.OrdinalIgnoreCase)))
+            {
+                vehicle.OperatingCompanyId = operatingCompanyId.Value;
+            }
+        }
+
         var existing = existingRegistrationNumbers
             .Select(NormalizeVehicleRegistration)
             .Where(IsUsableVehicleRegistration)
@@ -877,6 +890,7 @@ public class DddFileService : IDddFileService
             {
                 Id = Guid.NewGuid(),
                 CompanyId = companyId,
+                OperatingCompanyId = operatingCompanyId,
                 RegistrationNumber = registrationNumber,
                 Vin = string.Empty,
                 Active = true

@@ -532,8 +532,8 @@ export default function DriverDetailsPage() {
                     </section>
 
                     <DetailsSection title="Użyte pojazdy" empty={details.vehicles.length === 0}>
-                        <table><thead><tr><th>Numer rejestracyjny</th><th>Pierwsze użycie</th><th>Ostatnie użycie</th><th>Liczba użyć</th></tr></thead>
-                            <tbody>{details.vehicles.map((item) => <tr key={item.registrationNumber}><td>{item.registrationNumber}</td><td>{formatDate(item.firstUsedAtUtc)}</td><td>{formatDate(item.lastUsedAtUtc)}</td><td>{item.usageCount}</td></tr>)}</tbody>
+                        <table><thead><tr><th>Numer rejestracyjny</th><th>Firma pojazdu</th><th>Pierwsze użycie</th><th>Ostatnie użycie</th><th>Liczba użyć</th></tr></thead>
+                            <tbody>{details.vehicles.map((item) => <tr key={item.registrationNumber}><td>{item.registrationNumber}</td><td>{item.operatingCompanyName ?? "Brak przypisania"}{item.isOutsideDriverCompany ? " — pojazd innej firmy" : ""}</td><td>{formatDate(item.firstUsedAtUtc)}</td><td>{formatDate(item.lastUsedAtUtc)}</td><td>{item.usageCount}</td></tr>)}</tbody>
                         </table>
                     </DetailsSection>
                 </>
