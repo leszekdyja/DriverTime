@@ -220,6 +220,47 @@ public class CountryEntryCompletenessRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WithCardLeftInTachographForMoreThan24Hours_PairsStartAndEnd()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Work, "2026-09-20T12:30:00Z", "2026-09-22T05:10:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "PL", "2026-09-20T12:30:00Z", "Start"),
+            CountryEntry(driverId, dddFileId, "PL", "2026-09-22T03:36:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(0, result.Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WithInvalidStartCountryAndFollowingEnd_ReturnsOnlyInvalidCodeWarning()
+    {
+        var driverId = Guid.NewGuid();
+        var dddFileId = Guid.NewGuid();
+        var timeline = new[]
+        {
+            Activity(driverId, ActivityTypeNormalizer.Driving, "2026-09-19T07:35:00Z", "2026-09-20T14:30:00Z")
+        };
+        var countryEntries = new[]
+        {
+            CountryEntry(driverId, dddFileId, "---", "2026-09-19T07:35:00Z", "Start"),
+            CountryEntry(driverId, dddFileId, "PL", "2026-09-20T11:40:00Z", "End")
+        };
+
+        var result = _rule.Evaluate(driverId, timeline, countryEntries);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("INVALID_COUNTRY_CODE", result.Violations[0].Code);
+    }
+
+    [TestMethod]
     public void Evaluate_WithSameStartAndEndImportedFromSeveralDddFiles_ReturnsNoWarning()
     {
         var driverId = Guid.NewGuid();
