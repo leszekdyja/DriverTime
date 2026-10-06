@@ -2,6 +2,7 @@
 
 import { AuthProvider } from "./auth/AuthContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
+import MainAccountRoute from "./auth/MainAccountRoute";
 import AppLayout from "./layouts/AppLayout";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
@@ -44,7 +45,9 @@ export default function App() {
                                 <Route path="import-monitoring" element={<ImportMonitoringPage />} />
                                 <Route path="imports/:id" element={<ImportDetailsPage />} />
                                 <Route path="drivers" element={<DriversPage />} />
-                                <Route path="companies" element={<OperatingCompaniesPage />} />
+                                <Route element={<MainAccountRoute />}>
+                                    <Route path="companies" element={<OperatingCompaniesPage />} />
+                                </Route>
                                 <Route path="drivers/:id" element={<DriverDetailsPage />} />
                                 <Route path="card-reader" element={<CardReaderPage />} />
                                 <Route path="downloads" element={<DownloadsPage />} />
