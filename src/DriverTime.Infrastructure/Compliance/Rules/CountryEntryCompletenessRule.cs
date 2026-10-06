@@ -44,8 +44,13 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
             return result;
         }
 
-        var entriesByDay = countryEntries
-            .Where(x => x.EntryTimeUtc != default)
+        // Consecutive card downloads contain overlapping historical place records.
+        // Treat the same physical card event as one entry even when it was imported
+        // from several DDD files; otherwise Start, Start, End, End is incorrectly
+        // reported as a missing end followed by a missing start.
+        var uniqueCountryEntries = DeduplicateCountryEntries(countryEntries);
+
+        var entriesByDay = uniqueCountryEntries
             .GroupBy(x => x.EntryTimeUtc.Date)
             .ToDictionary(x => x.Key, x => x.OrderBy(entry => entry.EntryTimeUtc).ToList());
 
@@ -73,18 +78,42 @@ public class CountryEntryCompletenessRule : ICountryEntryComplianceRule
             }
         }
 
-        AddMissingStartOrEndViolations(result, countryEntries, activeDaySet);
+        AddMissingStartOrEndViolations(result, uniqueCountryEntries, activeDaySet);
 
         _logger.LogInformation(
             "Compliance rule {RuleCode} driver {DriverId}: activeDays={ActiveDays}, countryEntries={CountryEntries}, warnings={WarningCount}.",
             Code,
             driverId,
             activeDays.Count,
-            countryEntries.Count,
+            uniqueCountryEntries.Count,
             result.Violations.Count);
 
         return result;
     }
+
+    private static IReadOnlyList<ComplianceCountryEntry> DeduplicateCountryEntries(
+        IReadOnlyList<ComplianceCountryEntry> countryEntries)
+    {
+        return countryEntries
+            .Where(x => x.EntryTimeUtc != default)
+            .GroupBy(x => new
+            {
+                EntryTimeUtc = EnsureUtc(x.EntryTimeUtc),
+                EntryType = NormalizeEntryType(x.EntryType),
+                CountryCode = NormalizeCountryCode(x.CountryCode)
+            })
+            .Select(x => x.First())
+            .OrderBy(x => x.EntryTimeUtc)
+            .ToList();
+    }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+
+    private static string NormalizeCountryCode(string? countryCode) =>
+        countryCode?.Trim().ToUpperInvariant() ?? string.Empty;
 
     private static void AddMissingStartOrEndViolations(
         ComplianceRuleResult result,
