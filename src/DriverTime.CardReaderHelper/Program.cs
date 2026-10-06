@@ -13,7 +13,10 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "http://localhost:5173",
                 "http://localhost:3000",
-                "https://drivetime.com.pl")
+                "https://drivetime.com.pl",
+                "https://www.drivetime.com.pl",
+                "https://drivertime.pl",
+                "https://www.drivertime.pl")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -908,18 +911,12 @@ internal sealed class PcscReaderService
                     card,
                     activeProtocol,
                     ApduCommand.SelectFile("SELECT MF", "3F00"));
-                if (!selectMf.Success)
+                if (selectMf.Success)
                 {
-                    return DriverCardDddReadResult.Failure(
-                        readerName,
-                        startedAtUtc,
-                        "Karta nie udostępniła pliku głównego MF.",
-                        selectMf.StatusMeaning);
-                }
-
-                foreach (var file in GetDriverCardMasterFiles())
-                {
-                    ReadDddFile(card, activeProtocol, file, output, fileResults);
+                    foreach (var file in GetDriverCardMasterFiles())
+                    {
+                        ReadDddFile(card, activeProtocol, file, output, fileResults);
+                    }
                 }
 
                 var selectApplication = TransmitStructuredApdu(
@@ -1029,24 +1026,53 @@ internal sealed class PcscReaderService
         uint activeProtocol,
         out string message)
     {
-        const int chunkSize = 240;
+        const int preferredChunkSize = 240;
         const int maximumFileSize = 65535;
         var output = new MemoryStream();
 
-        for (var offset = 0; offset < maximumFileSize; offset += chunkSize)
+        for (var offset = 0; offset < maximumFileSize;)
         {
-            var command = new byte[]
+            var requestedLength = Math.Min(preferredChunkSize, maximumFileSize - offset);
+            RawApduResponse response;
+
+            while (true)
             {
-                0x00, 0xB0, (byte)(offset >> 8), (byte)offset, chunkSize
-            };
-            var response = TransmitRawApdu(card, activeProtocol, command);
+                var command = new byte[]
+                {
+                    0x00, 0xB0, (byte)(offset >> 8), (byte)offset, (byte)requestedLength
+                };
+                response = TransmitRawApdu(card, activeProtocol, command);
+
+                if (response.StatusWord.StartsWith("6C", StringComparison.Ordinal) &&
+                    byte.TryParse(response.StatusWord[2..], System.Globalization.NumberStyles.HexNumber, null, out var exactLength) &&
+                    exactLength > 0)
+                {
+                    requestedLength = exactLength;
+                    continue;
+                }
+
+                if (response.StatusWord == "6700" && requestedLength > 1)
+                {
+                    requestedLength = Math.Max(1, requestedLength / 2);
+                    continue;
+                }
+
+                break;
+            }
 
             if (response.Data.Length > 0)
             {
                 output.Write(response.Data);
+                offset += response.Data.Length;
             }
 
-            if (response.StatusWord == "6282" || response.Data.Length < chunkSize)
+            if (response.StatusWord == "6282" || response.Data.Length < requestedLength)
+            {
+                message = "Odczyt zakończony na końcu pliku.";
+                return output.ToArray();
+            }
+
+            if (response.StatusWord == "6B00" && output.Length > 0)
             {
                 message = "Odczyt zakończony na końcu pliku.";
                 return output.ToArray();

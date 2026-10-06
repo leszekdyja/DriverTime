@@ -154,6 +154,49 @@ export default function CardReaderPage() {
         void loadSessions();
     }, [loadSessions]);
 
+    useEffect(() => {
+        let isCancelled = false;
+
+        async function detectLocalReader() {
+            setIsCheckingHelper(true);
+            setIsCheckingReaders(true);
+            setHelperError("");
+
+            try {
+                const [healthResponse, readerResponse] = await Promise.all([
+                    checkCardReaderHelperHealth(),
+                    getCardReaderReaders(),
+                ]);
+
+                if (isCancelled) return;
+
+                setHelperHealth(healthResponse);
+                setReaders(readerResponse);
+                setSelectedReaderName(readerResponse.readers[0]?.name ?? "");
+            } catch (checkError) {
+                if (isCancelled) return;
+
+                setHelperHealth(null);
+                setReaders(null);
+                setSelectedReaderName("");
+                setHelperError(checkError instanceof Error
+                    ? checkError.message
+                    : "Helper odczytu karty jest niedostępny.");
+            } finally {
+                if (!isCancelled) {
+                    setIsCheckingHelper(false);
+                    setIsCheckingReaders(false);
+                }
+            }
+        }
+
+        void detectLocalReader();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, []);
+
     async function startSession() {
         setIsStarting(true);
         setError("");
