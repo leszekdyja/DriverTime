@@ -114,6 +114,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<DatabaseSeeder>();
+        services.AddHostedService<CountryComplianceRefreshWorker>();
         services.AddHostedService<ComplianceSchedulerWorker>();
 
         return services;
