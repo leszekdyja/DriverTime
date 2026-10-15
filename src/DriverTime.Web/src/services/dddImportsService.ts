@@ -9,6 +9,9 @@ export type DddImport = {
     driverStatus: "new" | "existing";
     uploadedAtUtc: string;
     activitiesCount: number;
+    fileType: "driver_card" | "vehicle_unit";
+    vehicleRegistrationNumber: string;
+    vehicleIdentificationNumber: string;
 };
 
 export async function getDddImports(): Promise<DddImport[]> {

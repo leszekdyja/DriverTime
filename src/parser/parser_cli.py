@@ -23,6 +23,13 @@ from ddd_parser import (
     analyze_country_code_entries,
     analyze,
 )
+from vehicle_unit_parser import parse_vehicle_unit_ddd
+
+
+def is_vehicle_unit_file(path: Path) -> bool:
+    with path.open("rb") as source:
+        prefix = source.read(2)
+    return prefix.startswith(b"\x76") or path.name.upper().startswith("M_")
 
 
 def main() -> int:
@@ -43,7 +50,19 @@ def main() -> int:
         return 1
 
     try:
-        raw_json = parse_ddd_driver_card_embedded(ddd_path)
+        raw_json = (
+            parse_vehicle_unit_ddd(ddd_path)
+            if is_vehicle_unit_file(ddd_path)
+            else parse_ddd_driver_card_embedded(ddd_path)
+        )
+
+        if raw_json.get("parser", {}).get("file_type") == "vehicle_unit":
+            print(json.dumps({
+                "success": True,
+                "sourceFile": str(ddd_path),
+                "raw": raw_json,
+            }, ensure_ascii=False, default=str))
+            return 0
 
         activities = normalize_activities(raw_json)
         continuity_issues = analyze_data_continuity(activities)

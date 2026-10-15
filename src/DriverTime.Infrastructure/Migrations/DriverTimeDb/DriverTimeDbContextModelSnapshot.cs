@@ -291,12 +291,38 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("driver_card");
+
+                    b.Property<Guid?>("OperatingCompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ParsedVehicleUnitJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("UploadedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleIdentificationNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("VehicleRegistrationNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("DriverId");
+
+                    b.HasIndex("OperatingCompanyId");
 
                     b.HasIndex("CompanyId", "FileHash")
                         .IsUnique();
@@ -1428,9 +1454,16 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasForeignKey("DriverId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("DriverTime.Domain.Entities.OperatingCompany", "OperatingCompany")
+                        .WithMany()
+                        .HasForeignKey("OperatingCompanyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Company");
 
                     b.Navigation("Driver");
+
+                    b.Navigation("OperatingCompany");
                 });
 
             modelBuilder.Entity("DriverTime.Domain.Entities.DddImportMonitoringEntry", b =>

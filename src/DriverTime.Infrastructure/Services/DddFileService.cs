@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using DriverTime.Application.Compliance;
 using DriverTime.Application.DDD.Exceptions;
 using DriverTime.Application.DDD.DTOs;
@@ -172,6 +173,7 @@ public class DddFileService : IDddFileService
         return await _dbContext.DddFiles
             .Where(x => x.CompanyId == _currentUser.CompanyId
                 && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value
                     || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)))
             .OrderByDescending(x => x.UploadedAtUtc)
             .Select(x => new DddFileDto
@@ -183,7 +185,10 @@ public class DddFileService : IDddFileService
                 DriverCardNumber = x.DriverCardNumber,
                 DriverStatus = x.DriverCreatedDuringImport ? "new" : "existing",
                 UploadedAtUtc = x.UploadedAtUtc,
-                ActivitiesCount = x.DriverActivities.Count
+                ActivitiesCount = x.DriverActivities.Count,
+                FileType = x.FileType,
+                VehicleRegistrationNumber = x.VehicleRegistrationNumber,
+                VehicleIdentificationNumber = x.VehicleIdentificationNumber
             })
             .ToListAsync();
     }
@@ -198,6 +203,7 @@ public class DddFileService : IDddFileService
             .FirstOrDefaultAsync(x =>
                 x.Id == id && x.CompanyId == _currentUser.CompanyId
                 && (!_currentUser.OperatingCompanyId.HasValue
+                    || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value
                     || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)));
 
         if (dddFile is null)
@@ -213,6 +219,10 @@ public class DddFileService : IDddFileService
             DriverLastName = dddFile.DriverLastName,
             DriverCardNumber = dddFile.DriverCardNumber,
             UploadedAtUtc = dddFile.UploadedAtUtc,
+            FileType = dddFile.FileType,
+            VehicleRegistrationNumber = dddFile.VehicleRegistrationNumber,
+            VehicleIdentificationNumber = dddFile.VehicleIdentificationNumber,
+            VehicleUnit = ParseVehicleUnitJson(dddFile.ParsedVehicleUnitJson),
             DriverActivities = dddFile.DriverActivities
                 .OrderBy(x => x.StartUtc)
                 .Select(x => new ParsedDriverActivityDto
@@ -256,6 +266,7 @@ public class DddFileService : IDddFileService
             .AnyAsync(
                 x => x.Id == id && x.CompanyId == _currentUser.CompanyId
                     && (!_currentUser.OperatingCompanyId.HasValue
+                        || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value
                         || (x.Driver != null && x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)),
                 cancellationToken);
 
@@ -303,6 +314,17 @@ public class DddFileService : IDddFileService
         }
 
         var parseResult = await _dddParserGateway.ParseAsync(filePath);
+
+        if (parseResult.FileType.Equals("vehicle_unit", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ImportVehicleUnitAsync(
+                parseResult,
+                companyId,
+                fileHash,
+                originalFileName,
+                monitoringId);
+        }
+
         var cardNumber = NormalizeCardNumber(parseResult.Driver.CardNumber);
 
         if (string.IsNullOrWhiteSpace(cardNumber))
@@ -393,6 +415,98 @@ public class DddFileService : IDddFileService
         await _importMonitoringService.MarkCompletedAsync(monitoringId);
 
         return parseResult;
+    }
+
+    private async Task<DddParseResultDto> ImportVehicleUnitAsync(
+        DddParseResultDto parseResult,
+        Guid companyId,
+        string fileHash,
+        string originalFileName,
+        Guid monitoringId)
+    {
+        if (!parseResult.VehicleUnit.HasValue ||
+            parseResult.VehicleUnit.Value.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidOperationException("Plik tachografu nie zawiera danych jednostki pojazdowej.");
+        }
+
+        var vehicleUnit = parseResult.VehicleUnit.Value;
+        var registration = GetVehicleUnitText(vehicleUnit, "registration_number");
+        var vin = GetVehicleUnitText(vehicleUnit, "vin");
+
+        if (string.IsNullOrWhiteSpace(registration) && string.IsNullOrWhiteSpace(vin))
+        {
+            throw new InvalidOperationException("Nie udało się odczytać numeru rejestracyjnego ani VIN z tachografu.");
+        }
+
+        var normalizedRegistration = registration.Trim().ToUpperInvariant();
+        Vehicle? vehicle = null;
+        if (!string.IsNullOrWhiteSpace(normalizedRegistration))
+        {
+            vehicle = await _dbContext.Vehicles.FirstOrDefaultAsync(x =>
+                x.CompanyId == companyId && x.RegistrationNumber == normalizedRegistration);
+        }
+
+        var vehicleCreated = vehicle is null;
+        if (vehicleCreated)
+        {
+            vehicle = new Vehicle
+            {
+                Id = Guid.NewGuid(),
+                CompanyId = companyId,
+                OperatingCompanyId = _currentUser.OperatingCompanyId,
+                RegistrationNumber = normalizedRegistration,
+                Vin = vin.Trim(),
+                Active = true
+            };
+            _dbContext.Vehicles.Add(vehicle);
+        }
+        else if (string.IsNullOrWhiteSpace(vehicle!.Vin) && !string.IsNullOrWhiteSpace(vin))
+        {
+            vehicle.Vin = vin.Trim();
+        }
+
+        var dddFile = new DddFile
+        {
+            Id = Guid.NewGuid(),
+            CompanyId = companyId,
+            OperatingCompanyId = vehicle!.OperatingCompanyId,
+            FileName = originalFileName,
+            FileHash = fileHash,
+            FileType = "vehicle_unit",
+            UploadedAtUtc = DateTime.UtcNow,
+            VehicleRegistrationNumber = normalizedRegistration,
+            VehicleIdentificationNumber = vin.Trim(),
+            ParsedVehicleUnitJson = vehicleUnit.GetRawText()
+        };
+
+        _dbContext.DddFiles.Add(dddFile);
+        await _dbContext.SaveChangesAsync();
+
+        parseResult.ImportId = dddFile.Id;
+        parseResult.DriverCreated = false;
+        parseResult.ImportMessage = vehicleCreated
+            ? "Zaimportowano dane tachografu i utworzono pojazd."
+            : "Zaimportowano dane tachografu pojazdu.";
+
+        await _importMonitoringService.MarkCompletedAsync(monitoringId);
+        return parseResult;
+    }
+
+    private static string GetVehicleUnitText(JsonElement vehicleUnit, string propertyName) =>
+        vehicleUnit.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static JsonElement? ParseVehicleUnitJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
     }
 
     private async Task<Driver> SaveImportChangesHandlingDuplicatesAsync(

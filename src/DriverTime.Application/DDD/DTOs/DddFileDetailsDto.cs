@@ -19,4 +19,12 @@ public class DddFileDetailsDto
     public List<ParsedCountryEntryDto> CountryEntries { get; set; } = new();
 
     public List<ParsedVehicleUseDto> VehicleUses { get; set; } = new();
+
+    public string FileType { get; set; } = "driver_card";
+
+    public string VehicleRegistrationNumber { get; set; } = string.Empty;
+
+    public string VehicleIdentificationNumber { get; set; } = string.Empty;
+
+    public System.Text.Json.JsonElement? VehicleUnit { get; set; }
 }
