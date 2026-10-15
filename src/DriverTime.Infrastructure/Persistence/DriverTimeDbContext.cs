@@ -132,6 +132,21 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.FileHash)
                 .HasMaxLength(64);
 
+            entity.Property(x => x.FileType)
+                .HasMaxLength(30)
+                .HasDefaultValue("driver_card");
+
+            entity.Property(x => x.VehicleRegistrationNumber)
+                .HasMaxLength(50);
+
+            entity.Property(x => x.VehicleIdentificationNumber)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ParsedVehicleUnitJson)
+                .HasColumnType("text");
+
+            entity.HasIndex(x => x.OperatingCompanyId);
+
             entity.HasOne(x => x.Company)
                 .WithMany(x => x.DddFiles)
                 .HasForeignKey(x => x.CompanyId);
@@ -139,6 +154,11 @@ public class DriverTimeDbContext : DbContext
             entity.HasOne(x => x.Driver)
                 .WithMany(x => x.DddFiles)
                 .HasForeignKey(x => x.DriverId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.OperatingCompany)
+                .WithMany()
+                .HasForeignKey(x => x.OperatingCompanyId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

@@ -131,8 +131,8 @@ export default function ImportsPage() {
                             <thead>
                                 <tr>
                                     <th>Nazwa pliku</th>
-                                    <th>Kierowca</th>
-                                    <th>Numer karty</th>
+                                    <th>Typ / właściciel danych</th>
+                                    <th>Karta / VIN</th>
                                     <th>Data importu</th>
                                     <th>Aktywności</th>
                                     <th>Status kierowcy</th>
@@ -144,21 +144,18 @@ export default function ImportsPage() {
                                     <tr key={dddImport.id}>
                                         <td>{displayValue(dddImport.fileName)}</td>
                                         <td>
-                                            {displayValue(
-                                                [
-                                                    dddImport.driverFirstName,
-                                                    dddImport.driverLastName,
-                                                ]
-                                                    .filter(Boolean)
-                                                    .join(" "),
-                                            )}
+                                            {dddImport.fileType === "vehicle_unit"
+                                                ? `Tachograf · ${displayValue(dddImport.vehicleRegistrationNumber)}`
+                                                : displayValue([dddImport.driverFirstName, dddImport.driverLastName].filter(Boolean).join(" "))}
                                         </td>
-                                        <td>{displayValue(dddImport.driverCardNumber)}</td>
+                                        <td>{displayValue(dddImport.fileType === "vehicle_unit" ? dddImport.vehicleIdentificationNumber : dddImport.driverCardNumber)}</td>
                                         <td>{formatUploadDate(dddImport.uploadedAtUtc)}</td>
                                         <td>{dddImport.activitiesCount}</td>
                                         <td>
                                             <span className={`driver-import-status ${dddImport.driverStatus}`}>
-                                                {dddImport.driverStatus === "new"
+                                                {dddImport.fileType === "vehicle_unit"
+                                                    ? "Dane pojazdu"
+                                                    : dddImport.driverStatus === "new"
                                                     ? "Nowy kierowca"
                                                     : "Istniejący kierowca"}
                                             </span>

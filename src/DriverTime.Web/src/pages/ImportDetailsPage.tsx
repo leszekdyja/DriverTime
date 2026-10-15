@@ -125,24 +125,22 @@ export default function ImportDetailsPage() {
             {details && (
                 <>
                     <section className="details-card">
-                        <h3>Informacje o kierowcy</h3>
+                        <h3>{details.fileType === "vehicle_unit" ? "Informacje o tachografie i pojeździe" : "Informacje o kierowcy"}</h3>
                         <dl className="details-summary">
                             <div>
                                 <dt>Plik</dt>
                                 <dd>{displayValue(details.fileName)}</dd>
                             </div>
-                            <div>
-                                <dt>Imie</dt>
-                                <dd>{displayValue(details.driverFirstName)}</dd>
-                            </div>
-                            <div>
-                                <dt>Nazwisko</dt>
-                                <dd>{displayValue(details.driverLastName)}</dd>
-                            </div>
-                            <div>
-                                <dt>Numer karty</dt>
-                                <dd>{displayValue(details.driverCardNumber)}</dd>
-                            </div>
+                            {details.fileType === "vehicle_unit" ? <>
+                                <div><dt>Numer rejestracyjny</dt><dd>{displayValue(details.vehicleRegistrationNumber)}</dd></div>
+                                <div><dt>VIN</dt><dd>{displayValue(details.vehicleIdentificationNumber)}</dd></div>
+                                <div><dt>Generacja</dt><dd>{displayValue(details.vehicleUnit?.generation ?? "")}</dd></div>
+                                <div><dt>Integralność</dt><dd>{displayValue(details.vehicleUnit?.integrity_check ?? "")}</dd></div>
+                            </> : <>
+                                <div><dt>Imię</dt><dd>{displayValue(details.driverFirstName)}</dd></div>
+                                <div><dt>Nazwisko</dt><dd>{displayValue(details.driverLastName)}</dd></div>
+                                <div><dt>Numer karty</dt><dd>{displayValue(details.driverCardNumber)}</dd></div>
+                            </>}
                             <div>
                                 <dt>Data importu</dt>
                                 <dd>{formatDate(details.uploadedAtUtc)}</dd>
@@ -150,7 +148,41 @@ export default function ImportDetailsPage() {
                         </dl>
                     </section>
 
-                    <section className="activity-summary" aria-label="Podsumowanie aktywności">
+                    {details.fileType === "vehicle_unit" && details.vehicleUnit ? (
+                        <>
+                            <section className="activity-summary" aria-label="Podsumowanie danych tachografu">
+                                <article className="activity-summary-card"><span>Dni aktywności</span><strong>{details.vehicleUnit.daily_activities?.length ?? 0}</strong></article>
+                                <article className="activity-summary-card"><span>Sesje kart</span><strong>{details.vehicleUnit.driver_sessions?.length ?? 0}</strong></article>
+                                <article className="activity-summary-card"><span>Zdarzenia</span><strong>{details.vehicleUnit.events?.length ?? 0}</strong></article>
+                                <article className="activity-summary-card"><span>Usterki</span><strong>{details.vehicleUnit.faults?.length ?? 0}</strong></article>
+                            </section>
+
+                            <DetailsTable title="Karty kierowców w tachografie" isEmpty={(details.vehicleUnit.driver_sessions?.length ?? 0) === 0} headers={["Kierowca", "Numer karty", "Włożenie", "Wyjęcie", "Przebieg"]}>
+                                {(details.vehicleUnit.driver_sessions ?? []).map((session, index) => {
+                                    const distance = session.odometer_insertion_km !== undefined && session.odometer_withdrawal_km !== undefined
+                                        ? session.odometer_withdrawal_km - session.odometer_insertion_km
+                                        : null;
+                                    return <tr key={`${session.insertion_time}-${index}`}>
+                                        <td>{displayValue([session.holder_first_names, session.holder_surname].filter(Boolean).join(" "))}</td>
+                                        <td>{displayValue(session.card?.card_number ?? "")}</td>
+                                        <td>{formatDate(session.insertion_time ?? "")}</td>
+                                        <td>{formatDate(session.withdrawal_time ?? "")}</td>
+                                        <td>{distance === null ? "Brak danych" : `${distance} km`}</td>
+                                    </tr>;
+                                })}
+                            </DetailsTable>
+
+                            <DetailsTable title="Zdarzenia tachografu" isEmpty={(details.vehicleUnit.events?.length ?? 0) === 0} headers={["Zdarzenie", "Początek", "Koniec"]}>
+                                {(details.vehicleUnit.events ?? []).map((event, index) => <tr key={`${event.begin_time}-${index}`}><td>{displayValue(event.description ?? "")}</td><td>{formatDate(event.begin_time ?? "")}</td><td>{formatDate(event.end_time ?? "")}</td></tr>)}
+                            </DetailsTable>
+
+                            <DetailsTable title="Usterki tachografu" isEmpty={(details.vehicleUnit.faults?.length ?? 0) === 0} headers={["Usterka", "Początek", "Koniec"]}>
+                                {(details.vehicleUnit.faults ?? []).map((fault, index) => <tr key={`${fault.begin_time}-${index}`}><td>{displayValue(fault.description ?? "")}</td><td>{formatDate(fault.begin_time ?? "")}</td><td>{formatDate(fault.end_time ?? "")}</td></tr>)}
+                            </DetailsTable>
+                        </>
+                    ) : null}
+
+                    {details.fileType !== "vehicle_unit" && <><section className="activity-summary" aria-label="Podsumowanie aktywności">
                         <ActivitySummaryCard
                             label="Suma jazdy"
                             seconds={activitySummary.driving}
@@ -219,7 +251,7 @@ export default function ImportDetailsPage() {
                                 <td>{formatDate(vehicleUse.end)}</td>
                             </tr>
                         ))}
-                    </DetailsTable>
+                    </DetailsTable></>}
                 </>
             )}
         </div>

@@ -17,4 +17,10 @@ public class DddFileDto
     public DateTime UploadedAtUtc { get; set; }
 
     public int ActivitiesCount { get; set; }
+
+    public string FileType { get; set; } = "driver_card";
+
+    public string VehicleRegistrationNumber { get; set; } = string.Empty;
+
+    public string VehicleIdentificationNumber { get; set; } = string.Empty;
 }

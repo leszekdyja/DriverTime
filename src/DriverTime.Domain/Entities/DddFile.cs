@@ -16,6 +16,18 @@ public class DddFile
 
     public string FileHash { get; set; } = string.Empty;
 
+    public string FileType { get; set; } = "driver_card";
+
+    public Guid? OperatingCompanyId { get; set; }
+
+    public OperatingCompany? OperatingCompany { get; set; }
+
+    public string VehicleRegistrationNumber { get; set; } = string.Empty;
+
+    public string VehicleIdentificationNumber { get; set; } = string.Empty;
+
+    public string ParsedVehicleUnitJson { get; set; } = string.Empty;
+
     public bool DriverCreatedDuringImport { get; set; }
 
     public DateTime UploadedAtUtc { get; set; }

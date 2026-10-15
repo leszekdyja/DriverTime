@@ -19,8 +19,13 @@ RUN dotnet publish src/DriverTime.Api/DriverTime.Api.csproj \
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends curl python3 python3-tk \
+    && apt-get install --yes --no-install-recommends curl git python3 python3-tk python3-cryptography \
     && rm -rf /var/lib/apt/lists/*
+
+ARG DDD_TACHOGRAPH_READER_COMMIT=ed033e5cc196ff9af252f6d328975602a48e01da
+RUN git clone https://github.com/Syax89/DDDTachograph_Reader.git /opt/ddd-tachograph-reader \
+    && git -C /opt/ddd-tachograph-reader checkout "$DDD_TACHOGRAPH_READER_COMMIT" \
+    && rm -rf /opt/ddd-tachograph-reader/.git
 
 WORKDIR /app
 COPY --from=build /app/publish ./
@@ -29,7 +34,8 @@ COPY src/parser/ /app/parser/
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_RUNNING_IN_CONTAINER=true \
     PYTHONUNBUFFERED=1 \
-    PYTHONUTF8=1
+    PYTHONUTF8=1 \
+    DDDTACHO_PARSER_ROOT=/opt/ddd-tachograph-reader
 
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "DriverTime.Api.dll"]

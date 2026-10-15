@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace DriverTime.Application.DDD.DTOs;
@@ -33,4 +34,7 @@ public class DddParseResultDto
 
     [JsonPropertyName("country_code_entries")]
     public List<ParsedCountryEntryDto> CountryCodeEntries { get; set; } = new();
+
+    [JsonPropertyName("vehicle_unit")]
+    public JsonElement? VehicleUnit { get; set; }
 }

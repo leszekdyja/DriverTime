@@ -37,6 +37,44 @@ export type DddImportDetails = {
     driverActivities: DriverActivity[];
     countryEntries: CountryEntry[];
     vehicleUses: VehicleUse[];
+    fileType: "driver_card" | "vehicle_unit";
+    vehicleRegistrationNumber: string;
+    vehicleIdentificationNumber: string;
+    vehicleUnit?: VehicleUnitData | null;
+};
+
+export type VehicleUnitDriverSession = {
+    holder_surname?: string;
+    holder_first_names?: string;
+    card?: { card_number?: string; nation?: string };
+    insertion_time?: string;
+    withdrawal_time?: string;
+    odometer_insertion_km?: number;
+    odometer_withdrawal_km?: number;
+    card_slot?: number;
+};
+
+export type VehicleUnitEvent = {
+    description?: string;
+    begin_time?: string;
+    end_time?: string;
+};
+
+export type VehicleUnitData = {
+    generation?: string;
+    integrity_check?: string;
+    coverage_percent?: number;
+    vin?: string;
+    registration_number?: string;
+    registration_country?: string;
+    downloaded_at?: string;
+    daily_activities?: Array<{ date?: string; odometer_km?: number; changes_count?: number }>;
+    driver_sessions?: VehicleUnitDriverSession[];
+    events?: VehicleUnitEvent[];
+    faults?: VehicleUnitEvent[];
+    calibrations?: unknown[];
+    places?: unknown[];
+    overspeeding_events?: unknown[];
 };
 
 export async function getDddImportDetails(
