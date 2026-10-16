@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v508_rn_protected_on_weekday_holidays"
+APP_VERSION = "v509_weekend_low_priority_yields_to_weekday_shortages"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -20407,6 +20407,25 @@ class DutyPlannerApp(tk.Tk):
                 if self.normalize_code(row["code"]) in WEEKEND_SHORTAGE_OPTIONAL_DUTY_CODES
             }
 
+            def duty_can_yield_to_high_priority(duty_id: int, day_text: str) -> bool:
+                """Weekendowe 80/86/139 mogą oddać kierowcę ważniejszej służbie."""
+                if int(duty_id) in rn_duty_ids or int(duty_id) in reserve_duty_id_set:
+                    return False
+                if int(duty_id) in shortage_skip_duty_ids:
+                    return True
+                day_obj = date.fromisoformat(str(day_text))
+                return (
+                    int(duty_id) in weekend_shortage_optional_duty_ids
+                    and self.is_planning_weekend_or_holiday(day_obj)
+                )
+
+            def duty_is_mandatory_for_shortage_audit(duty_id: int, day_obj: date) -> bool:
+                """Wpis wymagany na konkretną datę pozostaje twardy także dla niskiego priorytetu."""
+                if exact_weekend_override_count(day_obj, int(duty_id)) > 0:
+                    return True
+                return not duty_can_yield_to_high_priority(int(duty_id), day_obj.isoformat())
+
+
             pattern_driver_days: dict[tuple[int, int], bool] = {}
             pattern_driver_day_duty: dict[tuple[int, int], int] = {}
             for row in self.rows("SELECT day, driver_id, duty_id FROM original_schedule"):
@@ -21310,7 +21329,7 @@ class DutyPlannerApp(tk.Tk):
                 if work_hours > max_daily_work + 1e-6:
                     return False
                 iso_week = start_dt.date().isocalendar()
-                if not allow_monthly_overtime and driver_month_work_hours[driver_id] + work_hours > monthly_norm_hours + 1e-6:
+                if (not allow_monthly_overtime or duty_can_yield_to_high_priority(int(duty_id), target_date)) and driver_month_work_hours[driver_id] + work_hours > monthly_norm_hours + 1e-6:
                     return False
                 if driver_week_work_hours[(driver_id, iso_week.year, iso_week.week)] + work_hours > max_weekly_work + 1e-6:
                     return False
@@ -23220,16 +23239,14 @@ class DutyPlannerApp(tk.Tk):
                 # ratunkiem R/R2.
                 high_priority_required_duty_ids_v382 = [
                     int(duty_id) for duty_id in required_duty_ids
-                    if self.is_planning_weekend_or_holiday(target_date_obj)
-                    or int(duty_id) not in shortage_skip_duty_ids
+                    if duty_is_mandatory_for_shortage_audit(int(duty_id), target_date_obj)
                 ]
                 # v421: nie przesuwaj służb z przypisanym autem/rodzajem na początek.
                 # W v420 taka kolejność potrafiła zająć kierowców zbyt wcześnie i zostawić
                 # dużo braków. Rodzaj auta działa niżej wyłącznie w punktacji kandydata.
                 low_priority_required_duty_ids_v382 = [
                     int(duty_id) for duty_id in required_duty_ids
-                    if not self.is_planning_weekend_or_holiday(target_date_obj)
-                    and int(duty_id) in shortage_skip_duty_ids
+                    if not duty_is_mandatory_for_shortage_audit(int(duty_id), target_date_obj)
                 ]
                 for _low_duty_id in low_priority_required_duty_ids_v382:
                     _low_key = (target_date, int(_low_duty_id))
@@ -23869,13 +23886,24 @@ class DutyPlannerApp(tk.Tk):
                 nonlocal low_priority_deferred_planned, low_priority_stage_started
                 if not deferred_low_priority_duties:
                     return
-                # v394/v357: niski priorytet wraca po zwykłych służbach.
-                # Nie blokuj całego niskiego priorytetu tylko dlatego, że gdzieś w miesiącu
-                # został brak wysokiego priorytetu; taki globalny blok zaniżał RBH i dawał
-                # dużo pustych komórek.
+                ensure_month_rn_filled("przed etapem niskiego priorytetu")
+                if not high_priority_obligations_filled():
+                    mark_deferred_low_priority_as_unfilled(
+                        "służba niskiego priorytetu odłożona: najpierw pełna obsada wysokiego priorytetu i RN"
+                    )
+                    return
+                # v506: niski priorytet wraca dopiero po pełnej obsadzie wysokiego
+                # priorytetu oraz RN. Wcześniejsze dopuszczenie niskich przy brakach
+                # wysokich zostawiało realne służby nieobsadzone.
                 low_priority_stage_started = True
 
                 for target_date, duty_id, pattern_day, week_index in list(deferred_low_priority_duties):
+                    ensure_month_rn_filled("w trakcie etapu niskiego priorytetu")
+                    if not high_priority_obligations_filled():
+                        mark_deferred_low_priority_as_unfilled(
+                            "służba niskiego priorytetu przerwana: pojawił się brak wysokiego priorytetu lub RN"
+                        )
+                        return
                     duty = duty_rows_by_id.get(int(duty_id))
                     if duty is None:
                         continue
@@ -24487,6 +24515,35 @@ class DutyPlannerApp(tk.Tk):
                             str(target_date),
                             f"brakuje {gap} obsad RN; RN jest narzucone tylko w pierwszym przebiegu i nie jest zmieniane pozniej ({stage_label})",
                         ))
+
+            def high_priority_obligations_filled() -> bool:
+                for required_date, required_duty_id in month_high_priority_required_duties:
+                    if not any(
+                        entry[0] == required_date and int(entry[2]) == int(required_duty_id)
+                        for entry in planned_context_entries
+                    ):
+                        return False
+                if rn_duty_id is not None:
+                    for required_date, required_count in month_rn_required_counts.items():
+                        planned_count = sum(
+                            1 for entry in planned_context_entries
+                            if entry[0] == required_date and int(entry[2]) == int(rn_duty_id)
+                        )
+                        if planned_count < required_count:
+                            return False
+                return True
+
+            def mark_deferred_low_priority_as_unfilled(reason: str) -> None:
+                for target_date, duty_id, _pattern_day, _week_index in list(deferred_low_priority_duties):
+                    duty = duty_rows_by_id.get(int(duty_id))
+                    if duty is None:
+                        continue
+                    code = str(duty["code"] or duty_id)
+                    if any(str(entry[0]) == str(target_date) and int(entry[2]) == int(duty_id) for entry in planned_context_entries):
+                        continue
+                    if any(str(item[0]) == str(target_date) and int(item[1]) == int(duty_id) for item in unfilled_duties):
+                        continue
+                    unfilled_duties.append((str(target_date), int(duty_id), code, reason))
 
             def fill_unfilled_by_replacing_12_15_or_wg() -> None:
                 """Domknij braki przed planowaniem rezerw.
@@ -27232,17 +27289,13 @@ class DutyPlannerApp(tk.Tk):
                     # One też muszą zostać spróbowane przed końcowym R/R2.
                     required_ids = sorted(set(required_ids), key=duty_sort_key)
                     if not low_priority_stage_started:
-                        required_ids = [int(duty_id) for duty_id in required_ids if int(duty_id) not in shortage_skip_duty_ids]
-
-                    # Zachowaj te same świadome wyłączenia co w pierwszym przebiegu.
-                    if (
-                        not weekend_shortage_optional_enabled
-                        and verify_day_obj.weekday() in {5, 6}
-                    ):
                         required_ids = [
                             int(duty_id) for duty_id in required_ids
-                            if int(duty_id) not in weekend_shortage_optional_duty_ids
+                            if duty_is_mandatory_for_shortage_audit(int(duty_id), verify_day_obj)
                         ]
+
+                    # Weekendowe/świąteczne służby pozostają obowiązkowe w audycie
+                    # końcowym, również gdy ich kod widnieje na liście niskiego priorytetu.
                     if verify_day_obj.weekday() == 5:
                         # Jeżeli sobotnia pula kierowców jest mniejsza niż liczba służb,
                         # tak jak w pierwszym przebiegu pomiń najpóźniejsze służby sobotnie.
@@ -27286,14 +27339,14 @@ class DutyPlannerApp(tk.Tk):
             def final_rescue_high_priority_by_sacrificing_other_day_low_priority(stage_label: str, max_passes: int = 4) -> int:
                 """Last rescue: use WG on a high-priority shortage day before leaving it open.
 
-                A driver who has automatic WG/W on the shortage date may be moved to the
-                missing high-priority service. If that driver has an automatic low-priority
-                service on another day, that source day is converted to WG/W. This deliberately
+                A driver with automatic WG/W or an empty cell on the shortage date may
+                take the missing high-priority service. An automatic low-priority service
+                on another day, including weekend 80/86/139, then becomes WG/W. This deliberately
                 ignores weekly same-service continuity as a hard rule; full high-priority
                 coverage wins. Manual entries, RN, vacation/sick notes and blocks stay protected.
                 """
                 nonlocal shortage_replanned_from_12_15, shortage_replanned_from_other_days
-                if not unfilled_duties or not shortage_skip_duty_ids:
+                if not unfilled_duties or not (shortage_skip_duty_ids or weekend_shortage_optional_duty_ids):
                     return 0
 
                 def is_high_priority_shortage(item: tuple[str, int, str, str]) -> bool:
@@ -27302,7 +27355,7 @@ class DutyPlannerApp(tk.Tk):
                         missing_duty_id = int(item[1])
                     except Exception:
                         return False
-                    if missing_duty_id in shortage_skip_duty_ids:
+                    if duty_can_yield_to_high_priority(missing_duty_id, missing_date):
                         return False
                     if not unfilled_duty_blocks_nominal_topup(item):
                         return False
@@ -27364,7 +27417,7 @@ class DutyPlannerApp(tk.Tk):
                         break
                     state = (
                         tuple(sorted((str(item[0]), int(item[1])) for item in high_missing)),
-                        tuple(sorted((str(entry[0]), int(entry[1]), int(entry[2])) for entry in entries if int(entry[2]) in shortage_skip_duty_ids)),
+                        tuple(sorted((str(entry[0]), int(entry[1]), int(entry[2])) for entry in entries if duty_can_yield_to_high_priority(int(entry[2]), str(entry[0])))),
                     )
                     if state in seen_states:
                         break
@@ -27396,18 +27449,20 @@ class DutyPlannerApp(tk.Tk):
                         target_week_index = self.week_index_in_month(target_date_obj)
                         pattern_day = ((target_date_obj.day - 1) % pattern_days) + 1
 
-                        source_candidates: list[tuple[int, int, float, int, str, tuple[str, int, int, str, int | None, str | None], tuple[str, int, int, str, int | None, str | None]]] = []
+                        source_candidates: list[tuple[int, int, float, int, str, tuple[str, int, int, str, int | None, str | None], tuple[str, int, int, str, int | None, str | None] | None]] = []
                         for source_entry in list(entries):
                             source_date = str(source_entry[0])
                             source_driver_id = int(source_entry[1])
                             source_duty_id = int(source_entry[2])
                             if source_date == target_date:
                                 continue
-                            if source_duty_id not in shortage_skip_duty_ids:
+                            if not duty_can_yield_to_high_priority(source_duty_id, source_date):
                                 continue
                             if source_driver_id not in available_drivers_all:
                                 continue
                             if protected_note(source_entry[3]):
+                                continue
+                            if is_hard_weekend_override_entry(source_entry):
                                 continue
                             if (source_date, source_driver_id) in manual_locked_driver_dates or (target_date, source_driver_id) in manual_locked_driver_dates:
                                 continue
@@ -27425,8 +27480,6 @@ class DutyPlannerApp(tk.Tk):
                             if self.is_planning_weekend_or_holiday(target_date_obj) and would_make_consecutive_weekend(source_driver_id, target_date_obj):
                                 continue
                             target_day_off_entry = auto_day_off_entry_for_driver_day(source_driver_id, target_date)
-                            if target_day_off_entry is None:
-                                continue
                             if driver_has_non_day_off_entry(source_driver_id, target_date, ignore_entry=target_day_off_entry):
                                 continue
                             source_duty = duty_rows_by_id.get(source_duty_id)
@@ -27511,6 +27564,10 @@ class DutyPlannerApp(tk.Tk):
                                 source_wg_added = True
                                 shortage_replanned_from_12_15 += 1
                                 shortage_replanned_from_other_days += 1
+                                if source_duty_id in weekend_shortage_optional_duty_ids and self.is_planning_weekend_or_holiday(source_date_obj):
+                                    skipped_item = (source_date, source_code)
+                                    if skipped_item not in skipped_weekend_shortage_optional_duties:
+                                        skipped_weekend_shortage_optional_duties.append(skipped_item)
                                 try:
                                     unfilled_duties.remove(missing)
                                 except ValueError:
@@ -30349,6 +30406,12 @@ class DutyPlannerApp(tk.Tk):
             )
             clear_resolved_rn_unfilled()
             rebuild_unfilled_required_services_before_save()
+            final_rescue_high_priority_by_sacrificing_other_day_low_priority(
+                "v509 weekendowy niski priorytet oddaje kierowce na brak wysokiego",
+                max_passes=2,
+            )
+            clear_resolved_rn_unfilled()
+            rebuild_unfilled_required_services_before_save()
             # v501: po wszystkich zamianach końcowych odtwórz ręcznie wymaganą
             # liczbę R/R2 z pustych pól albo z automatycznego WG/W.
             ensure_exact_weekend_reserve_counts_before_save()
@@ -30451,7 +30514,7 @@ class DutyPlannerApp(tk.Tk):
                     None,
                     f"Pominięto weekendową służbę {code}.",
                     "Reguła awaryjna: gdy brakuje obsady, w weekendy nie planować służb 80, 86 i 139.",
-                    "Możesz włączyć planowanie tych służb w ustawieniach albo dopisać je ręcznie, jeśli pojawi się kierowca.",
+                    "Najpierw zapewnij obsadę służb wysokiego priorytetu. Przywróć służbę niskiego priorytetu, jeśli pojawi się dostępny kierowca.",
                 ))
             for plan_date, code1, code2 in split_duty_blocks:
                 extra_warnings.append((

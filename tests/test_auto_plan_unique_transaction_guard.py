@@ -120,9 +120,9 @@ class AutoPlanUniqueTransactionGuardTests(unittest.TestCase):
     def test_auto_plan_final_rescue_can_sacrifice_other_day_low_priority_for_high_priority(self) -> None:
         src = _auto_plan_source()
         self.assertIn("def final_rescue_high_priority_by_sacrificing_other_day_low_priority", src)
-        self.assertIn("source_duty_id not in shortage_skip_duty_ids", src)
+        self.assertIn("duty_can_yield_to_high_priority(source_duty_id, source_date)", src)
         self.assertIn("WG zamiast niskiego priorytetu", src)
-        self.assertIn("if target_day_off_entry is None:", src)
+        self.assertIn("if target_day_off_entry is not None:", src)
         self.assertIn("source_date == target_date", src)
         self.assertIn("pelna obsada wysokiego priorytetu przed ciagloscia tygodniowa", src)
         self.assertIn("def find_auto_low_priority_entry", src)
