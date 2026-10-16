@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v504_mandatory_rn_reuses_current_month_driver"
+APP_VERSION = "v508_rn_protected_on_weekday_holidays"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -19428,10 +19428,9 @@ class DutyPlannerApp(tk.Tk):
         return blocks
 
     def rn_required_count_for_date(self, day: date) -> int:
-        """Od niedzieli do piątku wymagaj 2 RN, a w sobotę 1 RN.
-
-        Święto nie zmienia obsady RN i nie przerywa bloku niedziela-piątek.
-        """
+        """Święto w tygodniu wymaga 2 RN, jeśli kolejny dzień jest roboczy."""
+        if day.weekday() < 5 and self.is_public_holiday(day):
+            return 2 if self.is_calendar_workday_for_norm(day + timedelta(days=1)) else 1
         return 1 if self.is_rn_single_coverage_day(day) else 2
 
     def rn_full_block_hours_within_limits(
@@ -21194,9 +21193,21 @@ class DutyPlannerApp(tk.Tk):
                     f"kierowca {partner_name} ma już zmianę {shift_label}"
                 )
 
+            def driver_reserved_for_full_rn_block(driver_id: int, day_obj: date) -> bool:
+                """Rezerwacja RN chroni każdy dzień bloku, także święto w tygodniu."""
+                return any(
+                    block_kind == "niedziela-piatek"
+                    and int(driver_id) in reserved_ids
+                    and date.fromisoformat(str(block_start_text)) <= day_obj
+                    <= date.fromisoformat(str(block_start_text)) + timedelta(days=5)
+                    for (block_kind, block_start_text), reserved_ids in rn_week_drivers.items()
+                )
+
             def driver_reserved_for_rn_weekend(driver_id: int, day_obj: date) -> bool:
                 """Chron zarezerwowana pare RN przed sluzbami weekendowymi wokol bloku."""
                 driver_id = int(driver_id)
+                if driver_reserved_for_full_rn_block(driver_id, day_obj):
+                    return True
                 for (block_kind, block_start_text), reserved_ids in rn_week_drivers.items():
                     if driver_id not in reserved_ids:
                         continue
@@ -21277,6 +21288,8 @@ class DutyPlannerApp(tk.Tk):
                 if pair_same_shift_block_reason(int(driver_id), int(duty_id), str(target_date)):
                     return False
                 if int(duty_id) != int(rn_duty_id or -1) and driver_reserved_for_exact_saturday_rn(driver_id, target_day_obj):
+                    return False
+                if int(duty_id) != int(rn_duty_id or -1) and driver_reserved_for_full_rn_block(driver_id, target_day_obj):
                     return False
                 start_dt, end_dt = duty_interval_for_date(duty_id, target_date)
                 if not allow_required_rn_weekend_overlap and would_make_consecutive_weekend(driver_id, target_day_obj):

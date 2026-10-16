@@ -220,7 +220,12 @@ public class PlanningTechnicalAssignmentPlanner
     public static int NightDutyRequiredCount(DateOnly day) => IsSingleNightDutyDay(day) ? 1 : 2;
 
     private static bool IsSingleNightDutyDay(DateOnly day) =>
-        day.DayOfWeek == DayOfWeek.Saturday || IsPolishHolidayOutsideSunday(day);
+        day.DayOfWeek == DayOfWeek.Saturday
+        || (IsPolishHolidayOutsideSunday(day) && !IsCalendarWorkday(day.AddDays(1)));
+
+    private static bool IsCalendarWorkday(DateOnly day) =>
+        day.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday
+        && !IsPolishHolidayOutsideSunday(day);
 
     private static bool IsPolishHolidayOutsideSunday(DateOnly day) =>
         day.DayOfWeek != DayOfWeek.Sunday && new PolishPublicHolidayProvider().GetHolidays(day.Year).Any(x => x.Date == day);
