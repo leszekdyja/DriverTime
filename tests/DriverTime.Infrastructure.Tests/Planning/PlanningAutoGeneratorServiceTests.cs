@@ -648,7 +648,7 @@ public class PlanningAutoGeneratorServiceTests
     {
         Assert.AreEqual(2, PlanningTechnicalAssignmentPlanner.NightDutyRequiredCount(new DateOnly(2026, 8, 2)));
         Assert.AreEqual(1, PlanningTechnicalAssignmentPlanner.NightDutyRequiredCount(new DateOnly(2026, 8, 8)));
-        Assert.AreEqual(1, PlanningTechnicalAssignmentPlanner.NightDutyRequiredCount(new DateOnly(2026, 1, 1)));
+        Assert.AreEqual(2, PlanningTechnicalAssignmentPlanner.NightDutyRequiredCount(new DateOnly(2026, 1, 1)));
     }
 
     [TestMethod]
