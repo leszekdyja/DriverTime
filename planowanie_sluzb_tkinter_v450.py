@@ -21329,7 +21329,7 @@ class DutyPlannerApp(tk.Tk):
                 if work_hours > max_daily_work + 1e-6:
                     return False
                 iso_week = start_dt.date().isocalendar()
-                if not allow_monthly_overtime and driver_month_work_hours[driver_id] + work_hours > monthly_norm_hours + 1e-6:
+                if (not allow_monthly_overtime or duty_can_yield_to_high_priority(int(duty_id), target_date)) and driver_month_work_hours[driver_id] + work_hours > monthly_norm_hours + 1e-6:
                     return False
                 if driver_week_work_hours[(driver_id, iso_week.year, iso_week.week)] + work_hours > max_weekly_work + 1e-6:
                     return False
