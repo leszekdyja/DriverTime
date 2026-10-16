@@ -13,7 +13,7 @@ class WeekendLowPriorityReclaimTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         tree = ast.parse(SOURCE.read_text(encoding='utf-8'))
-        names = {'duty_can_yield_to_high_priority',
+        names = {'duty_can_yield_to_high_priority', 'duty_is_mandatory_for_shortage_audit',
                  'final_rescue_high_priority_by_sacrificing_other_day_low_priority'}
         cls.helpers = [node for node in ast.walk(tree)
                        if isinstance(node, ast.FunctionDef) and node.name in names]
@@ -68,7 +68,7 @@ class WeekendLowPriorityReclaimTests(unittest.TestCase):
             ),
             'auto_plan_pulse': lambda *args: None,
             'rebuild_unfilled_required_services_before_save': lambda: None,
-            'duty_is_mandatory_for_shortage_audit': lambda *args: True,
+            'exact_weekend_override_count': lambda *args: 1 if dated_requirement else 0,
             'unfilled_duty_blocks_nominal_topup': lambda item: True,
             'entry_duty': lambda entry: duties[entry[2]],
             'duty_sort_key': lambda duty: duty,
@@ -88,9 +88,11 @@ class WeekendLowPriorityReclaimTests(unittest.TestCase):
                 '    shortage_replanned_from_12_15 = 0\n'
                 '    shortage_replanned_from_other_days = 0\n')
         code += '\n'.join(textwrap.indent(ast.unparse(node), '    ') for node in self.helpers)
-        code += '\n    return final_rescue_high_priority_by_sacrificing_other_day_low_priority\n'
+        code += '\n    return (final_rescue_high_priority_by_sacrificing_other_day_low_priority, duty_is_mandatory_for_shortage_audit)\n'
         exec(compile(code, str(SOURCE), 'exec'), namespace)
-        count = namespace['create']()('test', max_passes=1)
+        rescue, mandatory = namespace['create']()
+        namespace['mandatory'] = mandatory
+        count = rescue('test', max_passes=1)
         return count, entries, missing, hours, rest_checks, namespace
 
     def test_weekend_80_can_fill_friday_high_priority_even_without_skip_codes(self):
@@ -128,3 +130,16 @@ class WeekendLowPriorityReclaimTests(unittest.TestCase):
         self.assertEqual(1, count)
         self.assertNotIn(86, {e[2] for e in entries})
         self.assertEqual([('2026-11-01', '86')], ns['skipped_weekend_shortage_optional_duties'])
+
+    def test_weekend_low_priority_is_deferred_but_weekday_and_rn_stay_high(self):
+        _, _, _, _, _, ns = self.scenario()
+        mandatory = ns['mandatory']
+        for code in (80, 86, 139):
+            self.assertFalse(mandatory(code, date(2026, 11, 7)))
+            self.assertTrue(mandatory(code, date(2026, 11, 6)))
+        self.assertTrue(mandatory(99, date(2026, 11, 7)))
+        self.assertTrue(mandatory(12, date(2026, 11, 7)))
+
+    def test_explicit_required_weekend_80_is_not_deferred(self):
+        _, _, _, _, _, ns = self.scenario(dated_requirement=True)
+        self.assertTrue(ns['mandatory'](80, date(2026, 11, 7)))

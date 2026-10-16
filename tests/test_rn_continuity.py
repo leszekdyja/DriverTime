@@ -110,7 +110,7 @@ class RnContinuityTests(unittest.TestCase):
         self.assertIn("planning_day_numbers = self.weekend_first_planning_day_numbers(year, month)", auto_source)
         self.assertIn("if not rn_preplanned and not self.is_planning_weekend_or_holiday(target_date_obj):", auto_source)
         self.assertIn("preplan_month_rn_before_services()", auto_source)
-        self.assertIn("if self.is_planning_weekend_or_holiday(target_date_obj)\n                    or int(duty_id) not in shortage_skip_duty_ids", auto_source)
+        self.assertIn("if duty_is_mandatory_for_shortage_audit(int(duty_id), target_date_obj)", auto_source)
         self.assertNotIn("RN obowiazkowe - uzupelnienie pojedynczego dnia po przerwaniu bloku", preplan_source)
 
     def test_saturday_rn_is_reserved_before_adjacent_full_blocks(self) -> None:
