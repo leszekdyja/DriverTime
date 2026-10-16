@@ -23,6 +23,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate desktop planner Python syntax
+        run: python3 -m py_compile planowanie_sluzb_tkinter_v450.py
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
