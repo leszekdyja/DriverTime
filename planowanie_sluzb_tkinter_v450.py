@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v509_weekend_low_priority_yields_to_weekday_shortages"
+APP_VERSION = "v510_continue_duties_across_month_boundary"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -19541,6 +19541,55 @@ class DutyPlannerApp(tk.Tk):
                 pass
         return "sobota" in self.normalize_code(" ".join(text_parts)).lower()
 
+    def month_boundary_rn_drivers(self, year: int, month: int) -> set[int]:
+        month_start = date(year, month, 1)
+        if month_start.weekday() > 4:
+            return set()
+        return {
+            int(row["driver_id"]) for row in self.rows(
+                "SELECT p.driver_id FROM planned_schedule p JOIN duties d ON d.id=p.duty_id "
+                "WHERE p.plan_date=? AND p.driver_id IS NOT NULL AND UPPER(TRIM(d.code))='RN'",
+                ((month_start - timedelta(days=1)).isoformat(),),
+            )
+        }
+
+    def month_boundary_continuity_duties(
+        self, year: int, month: int, available_driver_ids: set[int],
+        duty_rows_by_id: dict[int, sqlite3.Row],
+    ) -> dict[int, int]:
+        """Ostatnie zwykłe służby z tego samego tygodnia przed granicą miesięcy."""
+        month_start = date(year, month, 1)
+        if month_start.weekday() not in {1, 2, 3, 4}:
+            return {}
+        monday = month_start - timedelta(days=month_start.weekday())
+        result: dict[int, int] = {}
+        seen_drivers: set[int] = set()
+        used_duties: set[int] = set()
+        for row in self.rows(
+            "SELECT plan_date, driver_id, duty_id FROM planned_schedule "
+            "WHERE plan_date >= ? AND plan_date < ? AND driver_id IS NOT NULL "
+            "ORDER BY plan_date DESC, driver_id",
+            (monday.isoformat(), month_start.isoformat()),
+        ):
+            driver_id, duty_id = int(row["driver_id"]), int(row["duty_id"])
+            duty = duty_rows_by_id.get(duty_id)
+            if driver_id not in available_driver_ids or duty is None:
+                continue
+            if not self.is_calendar_workday_for_norm(date.fromisoformat(row["plan_date"])):
+                continue
+            code = self.normalize_code(duty["code"])
+            if (code in {"R", "R2", "RN", "NAJEM", "NAJEM2", "ZAGLEBIE", "ZAGŁĘBIE"}
+                    or self.is_day_off_duty(duty)
+                    or self.duty_shift_part(duty) not in {"morning", "afternoon"}):
+                continue
+            if driver_id in seen_drivers:
+                continue
+            seen_drivers.add(driver_id)
+            if duty_id not in used_duties:
+                result[driver_id] = duty_id
+                used_duties.add(duty_id)
+        return result
+
     def week_index_in_month(self, day: date) -> int:
         """Numer tygodnia do zmiany rano/popołudnie liczony od niedzieli do soboty.
 
@@ -20383,6 +20432,15 @@ class DutyPlannerApp(tk.Tk):
             # Automatyczna rotacja RN blokuje kierowców wyłącznie z
             # bezpośrednio poprzedniego miesiąca. Wpis ręczny pozostaje dozwolony.
             recent_rn_driver_ids = set(previous_rn_driver_ids)
+            boundary_rn_driver_ids = self.month_boundary_rn_drivers(year, month)
+
+            def continues_boundary_rn(driver_id: int, day_obj: date) -> bool:
+                return (
+                    int(driver_id) in boundary_rn_driver_ids
+                    and day_obj.year == year and day_obj.month == month
+                    and self.week_index_in_month(day_obj) == 0
+                    and day_obj.weekday() < 5
+                )
             # v373: niski priorytet wynika wyłącznie z kodów wpisanych w zakładce Planowanie.
             # Nie ma już sztywnego wyjątku dla 12/15: jeśli pola są puste, 12 i 15
             # są zwykłymi służbami i mają być obsadzane przed R/R2.
@@ -20473,6 +20531,12 @@ class DutyPlannerApp(tk.Tk):
             # aby weekend planowany jako pierwszy nie narzucał obsady pn-pt.
             weekday_weekly_duty_owner: dict[tuple[int, int], int] = {}
             weekday_weekly_driver_duty: dict[tuple[int, int], int] = {}
+            month_boundary_duties = self.month_boundary_continuity_duties(
+                year, month, set(available_drivers_all), duty_rows_by_id,
+            )
+            for boundary_driver_id, boundary_duty_id in month_boundary_duties.items():
+                weekday_weekly_duty_owner[(boundary_duty_id, 0)] = boundary_driver_id
+                weekday_weekly_driver_duty[(boundary_driver_id, 0)] = boundary_duty_id
             max_daily_work = self.compliance_float("max_daily_work_hours", 12.0)
             min_daily_rest = self.compliance_float("min_daily_rest_hours", 9.0)
             max_weekly_work = self.compliance_float("max_weekly_work_hours", 60.0)
@@ -21299,6 +21363,19 @@ class DutyPlannerApp(tk.Tk):
                 if self.is_day_off_duty(duty):
                     return True
                 target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                inherited_duty_id = month_boundary_duties.get(int(driver_id))
+                if (
+                    inherited_duty_id is not None and int(duty_id) not in {inherited_duty_id, int(rn_duty_id or -1)}
+                    and self.week_index_in_month(target_day_obj) == 0
+                    and self.is_calendar_workday_for_norm(target_day_obj)
+                    and inherited_duty_id not in excluded_duty_ids
+                    and int(driver_id) not in duty_driver_exclusions.get(inherited_duty_id, set())
+                    and duty_required_on_exact_date(duty_rows_by_id[inherited_duty_id], target_day_obj)
+                    and int(duty_rows_by_id[inherited_duty_id]["auto_plan_enabled"] or 0) == 1
+                    and not duty_can_yield_to_high_priority(inherited_duty_id, target_date)
+                    and driver_has_required_rest(int(driver_id), inherited_duty_id, target_date)
+                ):
+                    return False
                 start_shift_reason = direct_month_start_shift_block_reason(int(driver_id), int(duty_id), target_day_obj)
                 if start_shift_reason:
                     has_explicit_start_shift = int(driver_id) in direct_month_start_shifts
@@ -21578,7 +21655,14 @@ class DutyPlannerApp(tk.Tk):
                 first_week_start = month_start_obj - timedelta(days=days_since_sunday)
                 return (reference_day - first_week_start).days // 7
 
+
             def effective_preferred_shift_for_date(driver_id: int, day_obj: date) -> str:
+                boundary_duty_id = month_boundary_duties.get(int(driver_id))
+                if boundary_duty_id is not None and int(driver_id) not in direct_month_start_shifts:
+                    boundary_shift = self.duty_shift_part(duty_rows_by_id[boundary_duty_id])
+                    if shift_week_index_for_date(day_obj) % 2:
+                        return "afternoon" if boundary_shift == "morning" else "morning"
+                    return boundary_shift
                 return effective_preferred_shift(int(driver_id), shift_week_index_for_date(day_obj))
 
             def duty_matches_week_shift(driver_id: int, duty_id: int, day_obj: date) -> bool:
@@ -21596,6 +21680,9 @@ class DutyPlannerApp(tk.Tk):
                 # Bezposredni wpis oraz zmiana odziedziczona z poprzedniego
                 # miesiaca sa rownie wiazace w pierwszym tygodniu planu.
                 preferred = getattr(self, "_active_month_start_shifts", {}).get(int(driver_id))
+                boundary_duty_id = month_boundary_duties.get(int(driver_id))
+                if boundary_duty_id is not None and self.week_index_in_month(day_obj) == 0 and int(driver_id) not in direct_month_start_shifts:
+                    preferred = self.duty_shift_part(duty_rows_by_id[boundary_duty_id])
                 if preferred not in {"morning", "afternoon"}:
                     return None
                 has_real_month_work = any(
@@ -22341,11 +22428,11 @@ class DutyPlannerApp(tk.Tk):
                     driver_id = int(driver_id)
                     if driver_id in assigned_today or driver_id in selected:
                         return False
-                    if driver_id not in available_drivers_all or driver_id in no_rn_driver_ids or driver_id in recent_rn_driver_ids:
+                    if driver_id not in available_drivers_all or driver_id in no_rn_driver_ids or (driver_id in recent_rn_driver_ids and not continues_boundary_rn(driver_id, target_date_obj)):
                         return False
                     if is_driver_blocked_by_day_exclusion(driver_id, target_date_obj):
                         return False
-                    if not rn_driver_has_second_shift_for_date(driver_id, target_date_obj):
+                    if not continues_boundary_rn(driver_id, target_date_obj) and not rn_driver_has_second_shift_for_date(driver_id, target_date_obj):
                         return False
                     if rn_duty_id is not None and driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
                         return False
@@ -22771,9 +22858,9 @@ class DutyPlannerApp(tk.Tk):
                     day_text = day_obj.isoformat()
                     if driver_id not in available_drivers_all:
                         return False
-                    if driver_id in no_rn_driver_ids or driver_id in previous_rn_driver_ids:
+                    if driver_id in no_rn_driver_ids or (driver_id in previous_rn_driver_ids and not continues_boundary_rn(driver_id, day_obj)):
                         return False
-                    if not rn_driver_has_second_shift_for_block(driver_id, [day_obj]):
+                    if not continues_boundary_rn(driver_id, day_obj) and not rn_driver_has_second_shift_for_block(driver_id, [day_obj]):
                         return False
                     if driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
                         return False
@@ -22804,11 +22891,11 @@ class DutyPlannerApp(tk.Tk):
                         return False
                     if driver_id in no_rn_driver_ids:
                         return False
-                    if driver_id in previous_rn_driver_ids:
+                    if driver_id in previous_rn_driver_ids and not continues_boundary_rn(driver_id, block[0]):
                         return False
                     if driver_reserved_for_adjacent_saturday_rn(driver_id, block):
                         return False
-                    if not allow_shift_mismatch and not rn_driver_has_second_shift_for_block(driver_id, block):
+                    if not allow_shift_mismatch and not continues_boundary_rn(driver_id, block[0]) and not rn_driver_has_second_shift_for_block(driver_id, block):
                         return False
                     if driver_id in duty_driver_exclusions.get(int(rn_duty_id), set()):
                         return False
@@ -22922,6 +23009,10 @@ class DutyPlannerApp(tk.Tk):
                     saturday_block: bool,
                 ) -> list[int]:
                     """Wybierz pełne pary RN albo osoby bez pary; nigdy połowę pary."""
+                    remembered = list(dict.fromkeys([
+                        *sorted(driver_id for driver_id in boundary_rn_driver_ids if continues_boundary_rn(driver_id, block[0])),
+                        *remembered,
+                    ]))
 
                     def eligible_ids(*, allow_shift_mismatch: bool, allow_reused_driver: bool = False) -> set[int]:
                         result: set[int] = set()
@@ -23007,7 +23098,7 @@ class DutyPlannerApp(tk.Tk):
                     # są już w kontekście i nie podlegają tej blokadzie.
                     if int(driver_id) in no_rn_driver_ids:
                         return False
-                    if int(driver_id) in previous_rn_driver_ids:
+                    if int(driver_id) in previous_rn_driver_ids and not continues_boundary_rn(driver_id, day_obj):
                         return False
                     if any(str(entry[0]) == day_text and int(entry[1]) == int(driver_id) and int(entry[2]) == int(rn_duty_id) for entry in planned_context_entries):
                         return False

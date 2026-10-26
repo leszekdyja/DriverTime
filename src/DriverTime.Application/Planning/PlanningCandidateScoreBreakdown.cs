@@ -2,6 +2,8 @@
 
 public class PlanningCandidateScoreBreakdown
 {
+    public decimal MonthBoundaryContinuityScore { get; set; }
+
     public decimal AssignmentCountScore { get; set; }
 
     public decimal WorkMinutesScore { get; set; }

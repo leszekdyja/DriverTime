@@ -88,6 +88,8 @@ public class PlanningCandidateEvaluator
                 generationDateTo,
                 options);
             evaluation.ScoreBreakdown = BuildScoreBreakdown(evaluation, assignmentCount);
+            evaluation.ScoreBreakdown.MonthBoundaryContinuityScore = PlanningMonthBoundaryContinuity.GetScore(driver.Id, duty, date, existingAssignments);
+            evaluation.ScoreBreakdown.TotalScore += evaluation.ScoreBreakdown.MonthBoundaryContinuityScore;
             evaluation.Score = evaluation.ScoreBreakdown.TotalScore;
 
             evaluations.Add(evaluation);
@@ -152,6 +154,8 @@ public class PlanningCandidateEvaluator
                 generationDateTo,
                 options);
             evaluation.ScoreBreakdown = BuildScoreBreakdown(evaluation, assignmentCount);
+            evaluation.ScoreBreakdown.MonthBoundaryContinuityScore = PlanningMonthBoundaryContinuity.GetScore(driver.Id, duty, date, driverAssignments);
+            evaluation.ScoreBreakdown.TotalScore += evaluation.ScoreBreakdown.MonthBoundaryContinuityScore;
             evaluation.Score = evaluation.ScoreBreakdown.TotalScore;
 
             evaluations.Add(evaluation);
@@ -162,7 +166,8 @@ public class PlanningCandidateEvaluator
     public PlanningCandidateEvaluation? ChooseBestCandidate(IReadOnlyCollection<PlanningCandidateEvaluation> evaluations) =>
         evaluations
             .Where(x => x.IsEligible)
-            .OrderBy(x => x.ScoreBreakdown.CalendarTargetDeficitScore)
+            .OrderBy(x => x.ScoreBreakdown.MonthBoundaryContinuityScore)
+            .ThenBy(x => x.ScoreBreakdown.CalendarTargetDeficitScore)
             .ThenBy(x => x.ScoreBreakdown.MonthlyDeficitScore)
             .ThenBy(x => x.ScoreBreakdown.WeeklyRestScore)
             .ThenBy(x => x.ScoreBreakdown.ReducedWeeklyRestPenalty)

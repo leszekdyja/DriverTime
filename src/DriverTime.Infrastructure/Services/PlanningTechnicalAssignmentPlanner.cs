@@ -285,6 +285,7 @@ public class PlanningTechnicalAssignmentPlanner
         var blockMonthEnd = blockMonthStart.AddMonths(1).AddDays(-1);
         var previousMonthStart = blockMonthStart.AddMonths(-1);
         var previousMonthEnd = blockMonthStart.AddDays(-1);
+        var continuingDriverIds = PlanningMonthBoundaryContinuity.GetContinuingNightDriverIds(block.First(), assignmentContext);
         foreach (var driver in drivers)
         {
             var previousMonthRnCount = assignmentContext.Count(x =>
@@ -292,7 +293,7 @@ public class PlanningTechnicalAssignmentPlanner
                 && PlanningEntryClassifier.Classify(x).Kind == PlanningEntryKind.NightDuty
                 && x.Date >= previousMonthStart
                 && x.Date <= previousMonthEnd);
-            if (previousMonthRnCount > 0)
+            if (previousMonthRnCount > 0 && !continuingDriverIds.Contains(driver.Id))
             {
                 continue;
             }
@@ -344,6 +345,15 @@ public class PlanningTechnicalAssignmentPlanner
             .ToList();
 
         var eligibleIds = candidates.Select(x => x.Driver.Id).ToHashSet();
+        var continuingDrivers = candidates.Where(x => continuingDriverIds.Contains(x.Driver.Id))
+            .OrderBy(x => x.Score).ThenBy(x => x.Driver.Id).Select(x => x.Driver).Take(required).ToList();
+        if (continuingDrivers.Count > 0)
+        {
+            continuingDrivers.AddRange(candidates.Where(x => !continuingDriverIds.Contains(x.Driver.Id))
+                .OrderBy(x => x.Score).ThenBy(x => x.Driver.Id)
+                .Take(required - continuingDrivers.Count).Select(x => x.Driver));
+            return continuingDrivers;
+        }
         var rnPair = options.DriverPairs
             .Where(x => x.IsNightDutyPair)
             .Select(x => new[] { x.FirstDriverId, x.SecondDriverId })
