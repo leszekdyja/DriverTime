@@ -188,8 +188,8 @@ class RnContinuityTests(unittest.TestCase):
         end = source.index("            preplan_month_rn_before_services()", start)
         preplan_source = source[start:end]
 
-        self.assertIn("if driver_id in previous_rn_driver_ids:", preplan_source)
-        self.assertIn("if int(driver_id) in previous_rn_driver_ids:", preplan_source)
+        self.assertIn("if driver_id in previous_rn_driver_ids and not continues_boundary_rn(driver_id, block[0]):", preplan_source)
+        self.assertIn("if int(driver_id) in previous_rn_driver_ids and not continues_boundary_rn(driver_id, day_obj):", preplan_source)
 
     def test_no_rn_flag_is_a_hard_preplanning_and_central_write_guard(self) -> None:
         source = SOURCE.read_text(encoding="utf-8")
@@ -214,7 +214,7 @@ class RnContinuityTests(unittest.TestCase):
         helper_source = source[start:end]
 
         no_rn_guard = helper_source.index("if driver_id in no_rn_driver_ids:")
-        shift_fallback = helper_source.index("if not allow_shift_mismatch and not rn_driver_has_second_shift_for_block")
+        shift_fallback = helper_source.index("if not allow_shift_mismatch and not continues_boundary_rn")
         self.assertLess(no_rn_guard, shift_fallback)
 
     def test_saturday_rn_prefers_second_shift_without_blocking_legal_first_shift(self) -> None:
@@ -300,7 +300,7 @@ class RnContinuityTests(unittest.TestCase):
         preplan_end = source.index("            preplan_month_rn_before_services()", preplan_start)
         preplan_source = source[preplan_start:preplan_end]
         self.assertIn("if driver_id in no_rn_driver_ids:", preplan_source)
-        self.assertIn("if driver_id in previous_rn_driver_ids:", preplan_source)
+        self.assertIn("if driver_id in previous_rn_driver_ids and not continues_boundary_rn(driver_id, block[0]):", preplan_source)
 
 
 if __name__ == "__main__":

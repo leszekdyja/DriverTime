@@ -113,8 +113,8 @@ class AutoPlanUniqueTransactionGuardTests(unittest.TestCase):
         src = _auto_plan_source()
         self.assertIn("def rn_driver_has_second_shift_for_date", src)
         self.assertIn("effective_preferred_shift_for_date(int(driver_id), day_obj) == \"afternoon\"", src)
-        self.assertIn("if not rn_driver_has_second_shift_for_date(driver_id, target_date_obj):", src)
-        self.assertIn("if not allow_shift_mismatch and not rn_driver_has_second_shift_for_block(driver_id, block):", src)
+        self.assertIn("if not continues_boundary_rn(driver_id, target_date_obj) and not rn_driver_has_second_shift_for_date(driver_id, target_date_obj):", src)
+        self.assertIn("if not allow_shift_mismatch and not continues_boundary_rn(driver_id, block[0]) and not rn_driver_has_second_shift_for_block(driver_id, block):", src)
         self.assertIn("allow_shift_mismatch=True", src)
 
     def test_auto_plan_final_rescue_can_sacrifice_other_day_low_priority_for_high_priority(self) -> None:
