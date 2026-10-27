@@ -94,6 +94,8 @@ internal static class WeeklyRestTimelineHelper
             .Select(x => x.EndUtc)
             .DefaultIfEmpty()
             .Max();
+        var trailingRest = BuildContinuousRestPeriods(validTimeline)
+            .LastOrDefault(x => x.EndUtc == timelineEndUtc);
 
         for (var index = 0; index < weeklyRests.Count; index++)
         {
@@ -115,13 +117,19 @@ internal static class WeeklyRestTimelineHelper
                 continue;
             }
 
-            if (timelineEndUtc != default && timelineEndUtc > deadlineUtc)
+            // A rest cut off by the download may still become a weekly rest.
+            // Only time before its start is evidence of a missed deadline.
+            var comparisonUtc = trailingRest is not null
+                ? trailingRest.StartUtc
+                : timelineEndUtc;
+
+            if (comparisonUtc != default && comparisonUtc > deadlineUtc)
             {
                 violations.Add(new SixPeriodViolation(
                     previousRest,
                     null,
                     deadlineUtc,
-                    timelineEndUtc));
+                    comparisonUtc));
             }
         }
 

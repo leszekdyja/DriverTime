@@ -70,6 +70,73 @@ public class SixTwentyFourHourPeriodsRuleTests
     }
 
     [TestMethod]
+    public void Evaluate_WhenDownloadEndsDuringLukasiewiczRest_DoesNotConfirmViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = new List<TimelineActivity>
+        {
+            Rest(driverId, "2026-10-10T12:35:00Z", "2026-10-12T14:36:00Z"),
+            Work(driverId, "2026-10-12T14:36:00Z", "2026-10-18T00:24:00Z"),
+            Rest(driverId, "2026-10-18T00:24:00Z", "2026-10-18T00:31:14Z"),
+            Rest(driverId, "2026-10-18T00:31:14Z", "2026-10-19T00:00:00Z")
+        };
+
+        Assert.AreEqual(0, _rule.Evaluate(driverId, timeline).Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WhenOpenRestStartsAtDeadline_DoesNotConfirmViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildTimelineWithoutNextWeeklyRest(
+            driverId, DateTime.Parse("2026-06-15T00:00:00Z").ToUniversalTime());
+        timeline.Add(Rest(driverId, "2026-06-15T00:00:00Z", "2026-06-15T05:00:00Z"));
+
+        Assert.AreEqual(0, _rule.Evaluate(driverId, timeline).Violations.Count);
+    }
+
+    [TestMethod]
+    public void Evaluate_WhenOpenRestStartsAfterDeadline_CountsOnlyConfirmedDelay()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildTimelineWithoutNextWeeklyRest(
+            driverId, DateTime.Parse("2026-06-15T02:00:00Z").ToUniversalTime());
+        timeline.Add(Rest(driverId, "2026-06-15T02:00:00Z", "2026-06-15T10:00:00Z"));
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(120L, result.Violations[0].Metadata["exceededMinutes"]);
+    }
+
+    [TestMethod]
+    public void Evaluate_WhenShortRestEndsAndWorkResumes_StillConfirmsViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildTimelineWithoutNextWeeklyRest(
+            driverId, DateTime.Parse("2026-06-14T23:00:00Z").ToUniversalTime());
+        timeline.Add(Rest(driverId, "2026-06-14T23:00:00Z", "2026-06-15T05:00:00Z"));
+        timeline.Add(Work(driverId, "2026-06-15T05:00:00Z", "2026-06-15T06:00:00Z"));
+
+        var result = _rule.Evaluate(driverId, timeline);
+
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual(360L, result.Violations[0].Metadata["exceededMinutes"]);
+    }
+
+    [TestMethod]
+    public void Evaluate_WhenFurtherDataConfirmsFullWeeklyRest_ReturnsNoViolation()
+    {
+        var driverId = Guid.NewGuid();
+        var timeline = BuildTimelineWithoutNextWeeklyRest(
+            driverId, DateTime.Parse("2026-06-14T23:00:00Z").ToUniversalTime());
+        timeline.Add(Rest(driverId, "2026-06-14T23:00:00Z", "2026-06-16T01:00:00Z"));
+        timeline.Add(Work(driverId, "2026-06-16T01:00:00Z", "2026-06-16T06:00:00Z"));
+
+        Assert.AreEqual(0, _rule.Evaluate(driverId, timeline).Violations.Count);
+    }
+
+    [TestMethod]
     public void Evaluate_WhenThereIsNoPreviousWeeklyRest_ReturnsNoViolation()
     {
         var driverId = Guid.NewGuid();
