@@ -81,3 +81,6 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      - name: Test one-time planning mappings
+        run: node --experimental-strip-types --test tests/preparedLocalPlanningMappings.test.mjs
