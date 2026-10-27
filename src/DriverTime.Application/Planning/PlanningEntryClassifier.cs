@@ -48,6 +48,7 @@ public static class PlanningEntryClassifier
         "NAJEM" => Work(PlanningEntryKind.RentalFirstShift, code, requiresDuty: true, generatedTechnical: false),
         "NAJEM2" => Work(PlanningEntryKind.RentalSecondShift, code, requiresDuty: true, generatedTechnical: false),
         "REZERWACJA" => Absence(PlanningEntryKind.Reservation, code),
+        "REZ" => Absence(PlanningEntryKind.Reservation, code),
         _ => null
     };
 

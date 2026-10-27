@@ -30,6 +30,11 @@ and click **Sprawdź różnice bez zapisywania**.
 2. Fill driver and duty mappings. The proposal button is optional; even unique
    surnames must be reviewed. Missing records are not created automatically.
    Create them separately or explicitly acknowledge a partial import with skipped cells.
+   A specially prepared export can contain `oneTimeMappings` tied to its source ID,
+   export timestamp and destination scope. **Wczytaj jednorazowe dopasowania z tego
+   pliku** loads those choices only after a manual click and checks every target
+   against the currently visible options. It does not create permanent matching
+   rules, apply to a later export, resolve collisions or save assignments.
 3. Acknowledge that this imports cells using the selected VPS duty definitions
    (including their times and work minutes), not the local generator's settings.
 4. Click **Przelicz kolizje i przygotuj zapis**. Choose **Keep VPS** or **Use local**

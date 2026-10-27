@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { localSyncRequest, type LocalPlanningSyncPreview, type LocalPlanningMatch, type LocalPlanningImportOptions,
     type LocalPlanningImportRequest, type LocalPlanningImportPlan, type LocalPlanningImportResult, type LocalPlanningBatch } from "../../services/localPlanningSyncService";
+import { readPreparedLocalPlanningMappings } from "../../services/preparedLocalPlanningMappings";
 
 export default function LocalPlanningManualImportPanel({ file, preview, onBusyChange }: {
     file: File | null; preview: LocalPlanningSyncPreview | null; onBusyChange: (busy: boolean) => void;
@@ -23,6 +24,16 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [notice, setNotice] = useState("");
+    const [hasPreparedMappings, setHasPreparedMappings] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        setHasPreparedMappings(false);
+        if (file) void file.text().then(text => {
+            if (active) setHasPreparedMappings(Boolean(JSON.parse(text)?.oneTimeMappings));
+        }).catch(() => { /* The main preview reports invalid files. */ });
+        return () => { active = false; };
+    }, [file]);
 
     useEffect(() => {
         let active = true;
@@ -50,6 +61,18 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
         setDriverMaps(suggested(preview.driverSuggestions, options.drivers));
         setDutyMaps(suggested(preview.dutySuggestions, options.duties));
         setDecisions({}); setPlan(null); invalidate();
+    }
+
+    async function preparedMappings() {
+        if (!file || !options) return;
+        begin();
+        try {
+            const maps = readPreparedLocalPlanningMappings(JSON.parse(await file.text()), options);
+            setDriverMaps(maps.driverMappings); setDutyMaps(maps.dutyMappings);
+            setDecisions({}); setPlan(null); invalidate();
+            setNotice(`Wczytano dopasowania tylko dla tego pliku: kierowcy ${Object.keys(maps.driverMappings).length}, służby ${Object.keys(maps.dutyMappings).length}. Nie zapisano grafiku ani stałych reguł. Sprawdź je przed ręcznym zatwierdzeniem.`);
+        } catch (reason) { setError(reason instanceof Error ? reason.message : "Nie udało się wczytać dopasowań."); }
+        finally { finish(); }
     }
 
     async function prepare() {
@@ -129,6 +152,7 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
                     .map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select></label>
             <button type="button" disabled={busy} onClick={suggestions}>Wstaw jednoznaczne propozycje — następnie sprawdź</button>
+            {hasPreparedMappings ? <button className="planning-primary-button" type="button" disabled={busy} onClick={() => void preparedMappings()}>Wczytaj jednorazowe dopasowania z tego pliku</button> : null}
             {mapping("Kierowcy", preview.driverSuggestions, driverMaps, "driver")}
             {mapping("Służby", preview.dutySuggestions, dutyMaps, "duty")}
             <label><input type="checkbox" disabled={busy} checked={allowSkipping} onChange={event => { setAllowSkipping(event.target.checked); invalidate(); }} /> Zgadzam się na import częściowy: wpisy bez dopasowania zostaną pominięte.</label>
