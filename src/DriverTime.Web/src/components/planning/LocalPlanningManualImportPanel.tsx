@@ -29,7 +29,7 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
     useEffect(() => {
         let active = true;
         setHasPreparedMappings(false);
-        if (file) void file.text().then(text => {
+        if (file && file.size <= 16 * 1024 * 1024) void file.text().then(text => {
             if (active) setHasPreparedMappings(Boolean(JSON.parse(text)?.oneTimeMappings));
         }).catch(() => { /* The main preview reports invalid files. */ });
         return () => { active = false; };
