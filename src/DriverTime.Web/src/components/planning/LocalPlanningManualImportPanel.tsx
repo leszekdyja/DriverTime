@@ -30,7 +30,8 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
         let active = true;
         setHasPreparedMappings(false);
         if (file && file.size <= 16 * 1024 * 1024) void file.text().then(text => {
-            if (active) setHasPreparedMappings(Boolean(JSON.parse(text)?.oneTimeMappings));
+            const snapshot = JSON.parse(text);
+            if (active) setHasPreparedMappings(Boolean(snapshot?.preparedMappings ?? snapshot?.oneTimeMappings));
         }).catch(() => { /* The main preview reports invalid files. */ });
         return () => { active = false; };
     }, [file]);
@@ -70,7 +71,7 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
             const maps = readPreparedLocalPlanningMappings(JSON.parse(await file.text()), options);
             setDriverMaps(maps.driverMappings); setDutyMaps(maps.dutyMappings);
             setDecisions({}); setPlan(null); invalidate();
-            setNotice(`Wczytano dopasowania tylko dla tego pliku: kierowcy ${Object.keys(maps.driverMappings).length}, służby ${Object.keys(maps.dutyMappings).length}. Nie zapisano grafiku ani stałych reguł. Sprawdź je przed ręcznym zatwierdzeniem.`);
+            setNotice(`Wczytano zapamiętane dopasowania: kierowcy ${Object.keys(maps.driverMappings).length}, służby ${Object.keys(maps.dutyMappings).length}. Nie zapisano grafiku. Sprawdź je przed ręcznym zatwierdzeniem. ${maps.warnings.join(" ")}`);
         } catch (reason) { setError(reason instanceof Error ? reason.message : "Nie udało się wczytać dopasowań."); }
         finally { finish(); }
     }
@@ -152,7 +153,7 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
                     .map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
             </select></label>
             <button type="button" disabled={busy} onClick={suggestions}>Wstaw jednoznaczne propozycje — następnie sprawdź</button>
-            {hasPreparedMappings ? <button className="planning-primary-button" type="button" disabled={busy} onClick={() => void preparedMappings()}>Wczytaj jednorazowe dopasowania z tego pliku</button> : null}
+            {hasPreparedMappings ? <button className="planning-primary-button" type="button" disabled={busy} onClick={() => void preparedMappings()}>Wczytaj zapamiętane dopasowania</button> : null}
             {mapping("Kierowcy", preview.driverSuggestions, driverMaps, "driver")}
             {mapping("Służby", preview.dutySuggestions, dutyMaps, "duty")}
             <label><input type="checkbox" disabled={busy} checked={allowSkipping} onChange={event => { setAllowSkipping(event.target.checked); invalidate(); }} /> Zgadzam się na import częściowy: wpisy bez dopasowania zostaną pominięte.</label>

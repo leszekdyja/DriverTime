@@ -30,11 +30,11 @@ and click **Sprawdź różnice bez zapisywania**.
 2. Fill driver and duty mappings. The proposal button is optional; even unique
    surnames must be reviewed. Missing records are not created automatically.
    Create them separately or explicitly acknowledge a partial import with skipped cells.
-   A specially prepared export can contain `oneTimeMappings` tied to its source ID,
-   export timestamp and destination scope. **Wczytaj jednorazowe dopasowania z tego
-   pliku** loads those choices only after a manual click and checks every target
-   against the currently visible options. It does not create permanent matching
-   rules, apply to a later export, resolve collisions or save assignments.
+   A prepared export can contain `preparedMappings` tied to its source ID,
+   export timestamp and destination scope (legacy `oneTimeMappings` remain supported).
+   **Wczytaj zapamiętane dopasowania** loads these choices only after a manual click
+   and checks every target against the currently visible options. It does not
+   resolve collisions or save assignments.
 3. Acknowledge that this imports cells using the selected VPS duty definitions
    (including their times and work minutes), not the local generator's settings.
 4. Click **Przelicz kolizje i przygotuj zapis**. Choose **Keep VPS** or **Use local**
@@ -74,6 +74,23 @@ There is no automatic rollback or background application of a snapshot.
 The source ID is stable for the same computer and database path. Record it from the
 export if the master database is moved; pass the same UUID using `--source-id` on
 the new computer. Do not treat a relocated database as a new synchronization source.
+
+### Remembered fixed driver and duty mappings
+
+The manually started exporter reads `local_planning_mappings.json` next to the
+source SQLite database, or an explicit `--mappings` file. This local configuration
+contains `sourceId`, `operatingCompanyId`, `driverMappings`, `dutyMappings`,
+`driverKeys` (source `name` and `employee_no`) and `dutyKeys` (source `code`).
+Mappings use source row IDs and VPS UUIDs. They do not need card numbers.
+Each new export embeds the verified mappings with its own current timestamp.
+The SQLite database and mapping configuration are never modified by exporting.
+
+A different source ID, invalid UUID or duplicate driver target stops the export.
+Changed source identities are omitted with a warning; removed rows are ignored,
+and new rows are not guessed. The browser rechecks destination scope and current
+visible records. Move this configuration with the master database and preserve
+the source ID when relocating it. Saving or uploading a schedule remains manual;
+there is no watcher, timer or automatic VPS synchronization.
 
 ## Preserved data
 

@@ -93,6 +93,64 @@ class LocalPlanningExportTests(unittest.TestCase):
         self.assertEqual(1, snapshot['schemaVersion'])
         self.assertEqual(1, len(snapshot['tables']['planned_schedule']))
 
+    def save_profile(self):
+        profile = {
+            'sourceId': exporter.export_snapshot(self.database)['sourceId'],
+            'operatingCompanyId': None,
+            'driverMappings': {'1': str(uuid.uuid4())},
+            'dutyMappings': {'2': str(uuid.uuid4())},
+            'driverKeys': {'1': {'name': 'Łukasiewicz', 'employee_no': '012'}},
+            'dutyKeys': {'2': {'code': 'RN'}},
+        }
+        path = self.database.parent / 'local_planning_mappings.json'
+        path.write_text(json.dumps(profile), encoding='utf-8')
+        return profile, path
+
+    def test_remembers_mappings_for_each_export_without_writing_sources(self):
+        profile, path = self.save_profile()
+        before = (self.database.read_bytes(), path.read_bytes())
+        for _ in range(2):
+            snapshot = exporter.export_snapshot(self.database)
+            prepared = snapshot['preparedMappings']
+            self.assertEqual(profile['driverMappings'], prepared['driverMappings'])
+            self.assertEqual(profile['dutyMappings'], prepared['dutyMappings'])
+            self.assertEqual(snapshot['exportedAtUtc'], prepared['exportedAtUtc'])
+            self.assertEqual('remembered', prepared['mode'])
+            self.assertEqual([], prepared['warnings'])
+        self.assertEqual(before, (self.database.read_bytes(), path.read_bytes()))
+
+    def test_different_source_profile_is_rejected(self):
+        self.save_profile()
+        with self.assertRaises(ValueError):
+            exporter.export_snapshot(self.database, uuid.uuid4())
+
+    def test_changed_identity_is_omitted_and_new_rows_are_not_guessed(self):
+        self.save_profile()
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("UPDATE drivers SET employee_no='013'")
+            connection.execute("INSERT INTO drivers VALUES (5,'Nowy','014')")
+            connection.execute("UPDATE duties SET code='R'")
+            connection.commit()
+        prepared = exporter.export_snapshot(self.database)['preparedMappings']
+        self.assertEqual({}, prepared['driverMappings'])
+        self.assertEqual({}, prepared['dutyMappings'])
+        self.assertEqual(2, len(prepared['warnings']))
+
+    def test_duplicate_driver_target_is_rejected_case_insensitively(self):
+        profile, path = self.save_profile()
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("INSERT INTO drivers VALUES (5,'Nowy','014')")
+            connection.commit()
+        profile['driverMappings']['5'] = profile['driverMappings']['1'].upper()
+        profile['driverKeys']['5'] = {'name': 'Nowy', 'employee_no': '014'}
+        path.write_text(json.dumps(profile), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            exporter.export_snapshot(self.database)
+
+    def test_explicit_missing_profile_is_not_silently_ignored(self):
+        with self.assertRaises(ValueError):
+            exporter.export_snapshot(self.database, mappings_path=self.database.parent / 'missing.json')
+
 
 if __name__ == '__main__':
     unittest.main()
