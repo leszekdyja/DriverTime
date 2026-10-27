@@ -41,6 +41,7 @@ public class DriverTimeDbContext : DbContext
         Set<ComplianceRunViolation>();
 
     public DbSet<CardReadSession> CardReadSessions => Set<CardReadSession>();
+    public DbSet<LocalPlanningSyncBatch> LocalPlanningSyncBatches => Set<LocalPlanningSyncBatch>();
 
     public DbSet<PlanningDuty> PlanningDuties => Set<PlanningDuty>();
 
@@ -417,6 +418,15 @@ public class DriverTimeDbContext : DbContext
             entity.Property(x => x.TripGroup).HasMaxLength(100);
             entity.Property(x => x.LineCode).HasMaxLength(50);
             entity.Property(x => x.Km).HasPrecision(10, 2);
+        });
+
+        modelBuilder.Entity<LocalPlanningSyncBatch>(entity =>
+        {
+            entity.ToTable("LocalPlanningSyncBatches");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CompanyId, x.OperatingCompanyId, x.SourceId, x.Year, x.Month });
+            entity.Property(x => x.RequestHash).HasMaxLength(64);
+            entity.HasIndex(x => x.PlanningScheduleId);
         });
 
         modelBuilder.Entity<PlanningSchedule>(entity =>
