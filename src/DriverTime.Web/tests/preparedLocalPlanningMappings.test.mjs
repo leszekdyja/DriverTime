@@ -14,7 +14,7 @@ function fixture() {
 test("loads mappings for the same snapshot without modifying input", () => {
     const { file, scope } = fixture(); const before = JSON.stringify(file);
     const result = readPreparedLocalPlanningMappings(file, scope);
-    assert.deepEqual(result, { driverMappings: { 1: "driver-a" }, dutyMappings: { 3: "duty-a" } });
+    assert.deepEqual(result, { driverMappings: { 1: "driver-a" }, dutyMappings: { 3: "duty-a" }, warnings: [] });
     assert.equal(JSON.stringify(file), before);
 });
 test("rejects another source", () => {
@@ -42,4 +42,12 @@ test("rejects malformed or missing profiles", () => {
     assert.throws(() => readPreparedLocalPlanningMappings(null, scope));
     delete file.oneTimeMappings;
     assert.throws(() => readPreparedLocalPlanningMappings(file, scope));
+});
+test("supports remembered profiles and source identity warnings", () => {
+    const { file, scope } = fixture();
+    file.preparedMappings = { ...file.oneTimeMappings, mode: "remembered", warnings: ["Source row changed", 123] };
+    delete file.oneTimeMappings;
+    const result = readPreparedLocalPlanningMappings(file, scope);
+    assert.equal(result.driverMappings[1], "driver-a");
+    assert.deepEqual(result.warnings, ["Source row changed"]);
 });

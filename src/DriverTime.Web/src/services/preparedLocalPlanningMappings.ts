@@ -9,7 +9,7 @@ function record(value: unknown): RecordValue {
 
 export function readPreparedLocalPlanningMappings(value: unknown, scope: PreparedMappingScope) {
     const snapshot = record(value);
-    const profile = record(snapshot.oneTimeMappings);
+    const profile = record(snapshot.preparedMappings ?? snapshot.oneTimeMappings);
     if (typeof snapshot.sourceId !== "string" || profile.sourceId !== snapshot.sourceId
         || typeof snapshot.exportedAtUtc !== "string" || profile.exportedAtUtc !== snapshot.exportedAtUtc)
         throw new Error("Dopasowania nie dotyczą tego eksportu. Nie można ich zastosować do innego pliku.");
@@ -32,5 +32,6 @@ export function readPreparedLocalPlanningMappings(value: unknown, scope: Prepare
     const dutyMappings = mappings("dutyMappings", tables.duties, scope.duties);
     if (new Set(Object.values(driverMappings)).size !== Object.keys(driverMappings).length)
         throw new Error("Dwóch kierowców wskazuje tę samą osobę. Nie zastosowano zmian.");
-    return { driverMappings, dutyMappings };
+    const warnings = Array.isArray(profile.warnings) ? profile.warnings.filter((value): value is string => typeof value === "string") : [];
+    return { driverMappings, dutyMappings, warnings };
 }
