@@ -26,6 +26,9 @@ jobs:
       - name: Validate desktop planner Python syntax
         run: python3 -m py_compile planowanie_sluzb_tkinter_v450.py
 
+      - name: Test read-only local planning export
+        run: python3 -m unittest discover -s tests -p test_local_planning_export.py -v
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
