@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IPlanningDutyService, PlanningDutyService>();
 
         services.AddScoped<IPlanningScheduleService, PlanningScheduleService>();
+        services.AddScoped<ILocalPlanningSyncPreviewService, LocalPlanningSyncPreviewService>();
 
         services.AddScoped<IPlanningScheduleValidationService, PlanningScheduleValidationService>();
 

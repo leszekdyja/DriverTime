@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import PlanningSchedulesTab from "../components/planning/PlanningSchedulesTab";
+import LocalPlanningSyncPreviewPanel from "../components/planning/LocalPlanningSyncPreviewPanel";
 import { EmptyState, TableSkeleton } from "../components/UiStates";
 import {
     confirmPlanningDutiesPdfImport,
@@ -596,6 +597,7 @@ export default function PlanningPage() {
             </section>
 
             <PlanningSchedulesTab />
+            <LocalPlanningSyncPreviewPanel />
 
             <div className="planning-grid">
                 <section className="drivers-panel">
