@@ -105,7 +105,7 @@ export default function LocalPlanningManualImportPanel({ file, preview, onBusyCh
                         onChange={event => { const next = { ...values }; if (event.target.value) next[row.sourceId] = event.target.value; else delete next[row.sourceId];
                             if (kind === "driver") setDriverMaps(next); else setDutyMaps(next); setDecisions({}); setPlan(null); invalidate(); }}>
                         <option value="">Pomiń — nie dopasowano</option>
-                        {available?.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                        {available?.map(option => <option key={option.id} value={option.id}>{option.label} — ID {option.id.slice(0, 8)}</option>)}
                     </select></td></tr>)}</tbody>
             </table></div></details>;
     }
