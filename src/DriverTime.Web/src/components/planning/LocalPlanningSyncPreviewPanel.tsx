@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { previewLocalPlanningSync, type LocalPlanningSyncPreview, type LocalPlanningMatch } from "../../services/localPlanningSyncService";
+import LocalPlanningManualImportPanel from "./LocalPlanningManualImportPanel";
 
 const statusLabels = { Missing: "Brak dopasowania", Suggested: "Propozycja — do potwierdzenia", Ambiguous: "Niejednoznaczne" };
 
@@ -8,6 +9,7 @@ export default function LocalPlanningSyncPreviewPanel() {
     const [preview, setPreview] = useState<LocalPlanningSyncPreview | null>(null);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [manualBusy, setManualBusy] = useState(false);
     const request = useRef<AbortController | null>(null);
     useEffect(() => () => request.current?.abort(), []);
 
@@ -44,12 +46,12 @@ export default function LocalPlanningSyncPreviewPanel() {
 
     return <section className="planning-panel" aria-labelledby="local-sync-title">
         <h3 id="local-sync-title">Synchronizacja z komputerem — podgląd</h3>
-        <p>Główna baza pozostaje na komputerze. Ten etap wyłącznie porównuje eksport z danymi bieżącej firmy na VPS. Nie zapisuje ani nie usuwa danych.</p>
+        <p>Główna baza pozostaje na komputerze. Podgląd tylko porównuje dane; zapis wymaga osobnego ręcznego zatwierdzenia poniżej. Nie ma synchronizacji automatycznej.</p>
         <p>Wybierz eksport JSON przygotowany narzędziem <code>tools/export_local_planning.py</code>. Nie przesyłaj tu pliku SQLite.</p>
         <label>Eksport planera lokalnego (JSON, do 16 MB)
-            <input type="file" accept=".json,application/json" onChange={event => resetFile(event.target.files?.[0] ?? null)} />
+            <input disabled={manualBusy} type="file" accept=".json,application/json" onChange={event => resetFile(event.target.files?.[0] ?? null)} />
         </label>
-        <button className="planning-primary-button" type="button" disabled={!file || loading} onClick={() => void loadPreview()}>
+        <button className="planning-primary-button" type="button" disabled={!file || loading || manualBusy} onClick={() => void loadPreview()}>
             {loading ? "Porównywanie..." : "Sprawdź różnice bez zapisywania"}
         </button>
         {error ? <p role="alert">{error}</p> : null}
@@ -65,5 +67,6 @@ export default function LocalPlanningSyncPreviewPanel() {
                 <ul>{Object.entries(preview.settingsCounts).map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul>
             </details>
         </div> : null}
+        <LocalPlanningManualImportPanel key={file ? `${file.name}-${file.lastModified}` : "history"} file={file} preview={preview} onBusyChange={setManualBusy} />
     </section>;
 }

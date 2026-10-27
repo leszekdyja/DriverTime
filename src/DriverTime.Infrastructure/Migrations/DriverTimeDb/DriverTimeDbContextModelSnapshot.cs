@@ -606,6 +606,65 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.ToTable("ImportFile");
                 });
 
+            modelBuilder.Entity("DriverTime.Domain.Entities.LocalPlanningSyncBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackupJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("OperatingCompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PlanningScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RequestJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevertedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanningScheduleId");
+
+                    b.HasIndex("CompanyId", "OperatingCompanyId", "SourceId", "Year", "Month");
+
+                    b.ToTable("LocalPlanningSyncBatches", (string)null);
+                });
+
             modelBuilder.Entity("DriverTime.Domain.Entities.MobileAppInvite", b =>
                 {
                     b.Property<Guid>("Id")

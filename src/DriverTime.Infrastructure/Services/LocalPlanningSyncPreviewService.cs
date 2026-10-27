@@ -108,7 +108,7 @@ public sealed class LocalPlanningSyncPreviewService(DriverTimeDbContext db, ICur
 
         result.Warnings.Add("Tylko podgląd. Nie zapisano ani nie usunięto danych. Główna baza pozostaje na komputerze.");
         result.Warnings.Add("Dopasowania są propozycjami, także przy zgodnym nazwisku. Wymagają potwierdzenia i wyboru docelowego grafiku przed importem.");
-        result.Warnings.Add("Ustawienia dodatkowe są zachowane w eksporcie, ale nie są jeszcze stosowane na VPS. Zapis synchronizacji jest niedostępny w tym etapie.");
+        result.Warnings.Add("Ustawienia dodatkowe są zachowane w eksporcie, ale nie są jeszcze stosowane na VPS. Ręczny zapis komórek wymaga dopasowań i osobnego zatwierdzenia poniżej.");
         if (suggestedDrivers.Values.Distinct().Count() != suggestedDrivers.Count)
             result.Warnings.Add("Kilku lokalnych kierowców wskazuje tę samą osobę na VPS. Nie wolno ich automatycznie łączyć.");
         if (result.PossibleManualConflicts > 0)
