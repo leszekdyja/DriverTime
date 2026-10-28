@@ -258,6 +258,14 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("CardReadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CardReadDateSource")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<Guid>("CompanyId")
                         .HasColumnType("uuid");
 

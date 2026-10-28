@@ -29,6 +29,9 @@ jobs:
       - name: Test read-only local planning export
         run: python3 -m unittest discover -s tests -p test_local_planning_export.py -v
 
+      - name: Test driver card download timestamps
+        run: python3 -m unittest discover -s tests/parser -p test_card_download_time.py -v
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

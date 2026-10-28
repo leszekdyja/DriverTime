@@ -7,6 +7,7 @@ export type DriverDownload = {
     firstName: string;
     lastName: string;
     cardNumber: string;
+    lastDownloadSource?: string;
     lastDownloadUtc: string | null;
     nextRequiredDownloadUtc: string | null;
     daysUntilDue: number | null;

@@ -1347,6 +1347,21 @@ def _activities_from_daily_record(record_date: dt.datetime, payload: bytes, sour
     return activities
 
 
+def parse_card_download_time(raw: bytes) -> Optional[dt.datetime]:
+    """Read LastCardDownload (EF 050E, TimeReal); never use filesystem time.
+
+    G1/G2 data blocks have generation bytes 00/02; 01/03 are signatures.
+    """
+    dates = []
+    for offset, payload in _find_tlv_blocks(raw, b"\x05\x0e"):
+        if raw[offset + 2] not in (0, 2) or len(payload) != 4:
+            continue
+        value = _safe_time_real(_be32(payload, 0))
+        if value is not None and value <= dt.datetime.now(dt.timezone.utc).replace(tzinfo=None):
+            dates.append(value)
+    return max(dates) if dates else None
+
+
 def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
     """Parse driver-card .DDD activities with the embedded parser.
 
@@ -1380,8 +1395,11 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
     country_entries = parse_ddd_country_code_entries_embedded(ddd_path)
     driver = parse_ddd_driver_identification_embedded(ddd_path)
     file_modified = _file_modified_date(ddd_path)
+    card_download = parse_card_download_time(raw)
     return {
         "driver": driver,
+        "card_read_date": card_download.isoformat() + "Z" if card_download else "",
+        "card_read_date_source": "CardDownload" if card_download else "",
         "parser": {
             "name": EMBEDDED_PARSER_NAME,
             "version": "0.5-card-vehicle-odometer",
