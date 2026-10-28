@@ -86,11 +86,11 @@ public class ReplacedDriverCardDownloadTests
     {
         var company = Guid.NewGuid(); var old = Card(company, true); var current = Card(company, false);
         current.CardNumber = "9999999999999902";
-        Assert.IsFalse(DownloadScheduleService.IsReplacedExpiredCard(old, current, DateTime.UtcNow));
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
         current.CardNumber = "1234567890123402"; current.FirstName = "Adam";
-        Assert.IsFalse(DownloadScheduleService.IsReplacedExpiredCard(old, current, DateTime.UtcNow));
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
         current.FirstName = "Jan"; current.CardExpiryDate = DateTime.UtcNow.AddDays(-1);
-        Assert.IsFalse(DownloadScheduleService.IsReplacedExpiredCard(old, current, DateTime.UtcNow));
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
     }
 
     [TestMethod]
@@ -102,5 +102,54 @@ public class ReplacedDriverCardDownloadTests
         var row = (await new DownloadScheduleService(db).GetDriverDownloadsAsync(current.CompanyId, null)).Single();
         Assert.AreEqual(DownloadStatus.Overdue, row.Status);
         Assert.IsTrue(row.LastDownloadUtc < DateTime.UtcNow.AddDays(-39));
+    }
+
+    [TestMethod]
+    public async Task ConfirmedSameExpiryReplacementSuppressesObsoleteCardNotHistory()
+    {
+        await using var db = Database();
+        var company = Guid.NewGuid(); var old = Card(company, false); var current = Card(company, false);
+        old.CardNumber = "1691022063120003"; current.CardNumber = "1691022063120013";
+        old.CardExpiryDate = current.CardExpiryDate;
+        db.Drivers.AddRange(old, current); Readout(db, old, 90); Readout(db, current, 12);
+        await db.SaveChangesAsync();
+        var service = new DownloadScheduleService(db);
+        var row = (await service.GetDriverDownloadsAsync(company, null)).Single();
+        Assert.AreEqual(current.Id, row.DriverId); Assert.AreEqual(DownloadStatus.Ok, row.Status);
+        Assert.AreEqual(0, (await service.GetDashboardAsync(company, null)).OverdueDrivers);
+        Assert.AreEqual(2, await db.Drivers.CountAsync()); Assert.AreEqual(2, await db.DddFiles.CountAsync());
+    }
+
+    [TestMethod]
+    public async Task SameExpiryReplacementStillRequiresImportedEvidenceAndKeepsRealOverdueAlert()
+    {
+        await using var db = Database();
+        var company = Guid.NewGuid(); var old = Card(company, false); var current = Card(company, false);
+        old.CardNumber = "1691022063120003"; current.CardNumber = "1691022063120013";
+        old.CardExpiryDate = current.CardExpiryDate;
+        db.Drivers.AddRange(old, current); Readout(db, old, 90); await db.SaveChangesAsync();
+        var service = new DownloadScheduleService(db);
+        Assert.AreEqual(2, (await service.GetDriverDownloadsAsync(company, null)).Count);
+        Readout(db, current, 40); await db.SaveChangesAsync();
+        var row = (await service.GetDriverDownloadsAsync(company, null)).Single();
+        Assert.AreEqual(current.Id, row.DriverId); Assert.AreEqual(DownloadStatus.Overdue, row.Status);
+    }
+
+    [TestMethod]
+    public void SameExpiryReplacementRequiresSamePersonScopeAndForwardReplacementIndex()
+    {
+        var company = Guid.NewGuid(); var old = Card(company, false); var current = Card(company, false);
+        old.CardNumber = "1691022063120003"; current.CardNumber = "1691022063120013";
+        old.CardExpiryDate = current.CardExpiryDate;
+        Assert.IsTrue(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(current, old, DateTime.UtcNow));
+        current.CardNumber = "1691022063120014";
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
+        current.CardNumber = "1691022063120013"; current.FirstName = "Adam";
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
+        current.FirstName = old.FirstName; current.OperatingCompanyId = Guid.NewGuid();
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
+        current.OperatingCompanyId = null; current.CompanyId = Guid.NewGuid();
+        Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
     }
 }
