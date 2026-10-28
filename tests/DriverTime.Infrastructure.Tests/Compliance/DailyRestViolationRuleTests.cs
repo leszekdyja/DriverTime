@@ -12,6 +12,35 @@ public class DailyRestViolationRuleTests
     private readonly DailyRestViolationRule _rule = new(NullLogger<DailyRestViolationRule>.Instance);
 
     [TestMethod]
+    public void Evaluate_PreviousWeeklyRestDoesNotStopLaterCompleteWindows()
+    {
+        var id = Guid.NewGuid();
+        var timeline = new[] {
+            Activity(id, ActivityTypeNormalizer.Rest, "2026-08-30T14:31:25Z", "2026-09-04T01:44:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-09-04T01:44:00Z", "2026-09-04T10:00:00Z"),
+            Activity(id, ActivityTypeNormalizer.Rest, "2026-09-04T10:00:00Z", "2026-09-20T09:11:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-09-20T09:11:00Z", "2026-09-22T05:06:00Z"),
+            Activity(id, ActivityTypeNormalizer.Rest, "2026-09-22T05:06:00Z", "2026-09-26T03:58:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-09-26T03:58:00Z", "2026-09-26T04:11:00Z")
+        };
+        var result = _rule.Evaluate(id, timeline);
+        Assert.IsTrue(result.Violations.Any(x => x.Severity == "HIGH" &&
+            x.PeriodStartUtc == DateTime.Parse("2026-09-20T09:11:00Z").ToUniversalTime()));
+        Assert.IsFalse(result.Violations.Any(x => x.PeriodStartUtc.Day == 4));
+    }
+
+    [TestMethod]
+    public void Evaluate_ContinuousWorkCrossingFullWindow_IsEvidenceWithoutLaterActivityStart()
+    {
+        var id = Guid.NewGuid();
+        var result = _rule.Evaluate(id, [
+            Activity(id, ActivityTypeNormalizer.Rest, "2026-09-19T00:00:00Z", "2026-09-20T00:00:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-09-20T00:00:00Z", "2026-09-21T06:00:00Z")
+        ]);
+        Assert.IsTrue(result.Violations.Any(x => x.Severity == "HIGH"));
+    }
+
+    [TestMethod]
     public void Evaluate_WithSeventeenHourRestBetweenActivities_ReturnsNoViolation()
     {
         var driverId = Guid.NewGuid();

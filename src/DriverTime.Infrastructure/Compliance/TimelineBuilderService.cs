@@ -43,6 +43,10 @@ public class TimelineBuilderService : ITimelineBuilderService
                 x.DddFile.CompanyId == companyId &&
                 x.DddFile.DriverId == driverId);
 
+        var sourceCoverage = await activitiesQuery.GroupBy(x => x.DddFileId)
+            .Select(group => new { FileId = group.Key, EndUtc = group.Max(x => x.EndUtc) })
+            .ToDictionaryAsync(x => x.FileId, x => x.EndUtc, cancellationToken);
+
         if (queryStartUtc.HasValue)
         {
             var startUtc = EnsureUtc(queryStartUtc.Value);
@@ -62,7 +66,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                 x.Id,
                 x.ActivityType,
                 x.StartUtc,
-                x.EndUtc
+                x.EndUtc,
+                x.DddFileId
             })
             .ToListAsync(cancellationToken);
 
@@ -82,6 +87,8 @@ public class TimelineBuilderService : ITimelineBuilderService
             normalizedActivities.Add(new TimelineActivity
             {
                 SourceActivityId = activity.Id,
+                SourceCoverageEndUtc = sourceCoverage.TryGetValue(activity.DddFileId, out var coverageEnd)
+                    ? EnsureUtc(coverageEnd) : null,
                 DriverId = driverId,
                 ActivityType = normalizedType,
                 StartUtc = EnsureUtc(activity.StartUtc),
@@ -175,7 +182,8 @@ public class TimelineBuilderService : ITimelineBuilderService
     {
         var ordered = rawActivities
             .Where(x => x.StartUtc < x.EndUtc)
-            .OrderByDescending(x => GetActivityPriority(x.ActivityType))
+            .OrderByDescending(x => x.SourceCoverageEndUtc ?? DateTime.MinValue)
+            .ThenByDescending(x => GetActivityPriority(x.ActivityType))
             .ThenBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
@@ -187,6 +195,7 @@ public class TimelineBuilderService : ITimelineBuilderService
             AddResolvedActivity(resolved, new TimelineActivity
             {
                 SourceActivityId = activity.SourceActivityId,
+                SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
                 StartUtc = activity.StartUtc,
@@ -234,7 +243,9 @@ public class TimelineBuilderService : ITimelineBuilderService
                 var existingPriority = GetActivityPriority(existing.ActivityType);
                 var segmentPriority = GetActivityPriority(segment.ActivityType);
 
-                if (existingPriority >= segmentPriority)
+                var coverageComparison = existing.SourceCoverageEndUtc.HasValue && segment.SourceCoverageEndUtc.HasValue
+                    ? DateTime.Compare(existing.SourceCoverageEndUtc.Value, segment.SourceCoverageEndUtc.Value) : 0;
+                if (coverageComparison > 0 || (coverageComparison == 0 && existingPriority >= segmentPriority))
                 {
                     next.AddRange(SubtractOverlap(segment, existing));
                     continue;
@@ -287,6 +298,7 @@ public class TimelineBuilderService : ITimelineBuilderService
             merged.Add(new TimelineActivity
             {
                 SourceActivityId = activity.SourceActivityId,
+                SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
                 StartUtc = activity.StartUtc,
@@ -306,6 +318,7 @@ public class TimelineBuilderService : ITimelineBuilderService
             yield return new TimelineActivity
             {
                 SourceActivityId = activity.SourceActivityId,
+                SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
                 StartUtc = activity.StartUtc,
@@ -318,6 +331,7 @@ public class TimelineBuilderService : ITimelineBuilderService
             yield return new TimelineActivity
             {
                 SourceActivityId = activity.SourceActivityId,
+                SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
                 StartUtc = overlap.EndUtc,

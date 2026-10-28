@@ -8,6 +8,33 @@ namespace DriverTime.Infrastructure.Tests.Compliance;
 public class TimelineBuilderServiceTests
 {
     [TestMethod]
+    public void NormalizeTimeline_LaterDownloadSupersedesOlderTrailingRest()
+    {
+        var id = Guid.NewGuid();
+        var older = Activity(id, ActivityTypeNormalizer.Rest, "2026-09-20T11:38:02Z", "2026-09-21T00:00:00Z");
+        older.SourceCoverageEndUtc = DateTime.Parse("2026-09-21T00:00:00Z").ToUniversalTime();
+        var newer = Activity(id, ActivityTypeNormalizer.Driving, "2026-09-20T12:31:00Z", "2026-09-20T12:42:00Z");
+        newer.SourceCoverageEndUtc = DateTime.Parse("2026-10-17T00:00:00Z").ToUniversalTime();
+        var timeline = Normalize([older, newer]);
+        Assert.AreEqual(11, timeline.Where(x => x.ActivityType == ActivityTypeNormalizer.Driving).Sum(x => x.Duration.TotalMinutes));
+        Assert.IsTrue(timeline.All(x => x.SourceCoverageEndUtc.HasValue));
+    }
+
+    [TestMethod]
+    public void NormalizeTimeline_LaterRestSupersedesOlderWorkAndKeepsSplitProvenance()
+    {
+        var id = Guid.NewGuid();
+        var older = Activity(id, ActivityTypeNormalizer.Work, "2026-09-20T10:00:00Z", "2026-09-20T18:00:00Z");
+        older.SourceCoverageEndUtc = DateTime.Parse("2026-09-21T00:00:00Z").ToUniversalTime();
+        var newer = Activity(id, ActivityTypeNormalizer.Rest, "2026-09-20T12:00:00Z", "2026-09-20T16:00:00Z");
+        newer.SourceCoverageEndUtc = DateTime.Parse("2026-10-17T00:00:00Z").ToUniversalTime();
+        var timeline = Normalize([older, newer]);
+        Assert.AreEqual(3, timeline.Count);
+        Assert.AreEqual(newer.SourceCoverageEndUtc, timeline[1].SourceCoverageEndUtc);
+        Assert.AreEqual(older.SourceCoverageEndUtc, timeline[2].SourceCoverageEndUtc);
+    }
+
+    [TestMethod]
     public void NormalizeTimeline_SortsActivitiesByStart()
     {
         var driverId = Guid.NewGuid();
