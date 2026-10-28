@@ -47,6 +47,12 @@ def export_snapshot(database_path, source_id=None, mappings_path=None):
             "exportedAtUtc": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
             "tables": tables,
         }
+        if "app_meta" in available:
+            policy = connection.execute(
+                "SELECT value FROM app_meta WHERE key='global_planning_settings_v511'"
+            ).fetchone()
+            if policy:
+                snapshot["settingsPolicy"] = {"mode": "global", "sourceMonth": policy[0]}
     finally:
         connection.close()
     profile_path = Path(mappings_path) if mappings_path else database_path.parent / "local_planning_mappings.json"

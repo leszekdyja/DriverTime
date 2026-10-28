@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v510_continue_duties_across_month_boundary"
+APP_VERSION = "v511_global_planning_settings"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -6252,6 +6252,62 @@ class DutyPlannerApp(tk.Tk):
         self.repair_global_pair_print_orders_v292()
         self.unify_pair_no_and_print_order_v293()
         self.remove_version_info_from_business_data()
+        self.conn.commit()
+        self.ensure_global_planning_settings_v511()
+
+    def planning_settings_month_key(self, month_key: str) -> str:
+        """Wspólny klucz ustawień; daty i zapisane grafiki nie są przenoszone."""
+        return self.__dict__.get("_global_planning_settings_month", month_key)
+
+    def ensure_global_planning_settings_v511(self) -> None:
+        """Listopad 2026 jest stałym wzorcem ustawień, nie wzorcem komórek planu."""
+        source = "2026-11"
+        initialized = self.conn.execute(
+            "SELECT value FROM app_meta WHERE key='global_planning_settings_v511'"
+        ).fetchone()
+        database_path = self.__dict__.get("db_path")
+        if initialized is None and database_path:
+            backup_dir = Path(database_path).parent / "backups"
+            backup_dir.mkdir(exist_ok=True)
+            backup = backup_dir / f"before_global_settings_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}.sqlite"
+            destination = sqlite3.connect(backup)
+            try:
+                self.conn.backup(destination)
+            finally:
+                destination.close()
+        with self.conn:
+            initialized = self.conn.execute(
+                "SELECT value FROM app_meta WHERE key='global_planning_settings_v511'"
+            ).fetchone()
+            if initialized is None:
+                # Starsze globalne zakazy były częścią efektywnej konfiguracji listopada.
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO monthly_excluded_duties(month_key,duty_id) SELECT ?,duty_id FROM excluded_duties",
+                    (source,),
+                )
+                self.conn.execute(
+                    "INSERT INTO app_meta(key,value) VALUES ('global_planning_settings_v511',?)", (source,)
+                )
+            elif initialized[0] != source:
+                raise ValueError("Nieprawidłowy miesiąc globalnych ustawień planowania.")
+        self._global_planning_settings_month = source
+
+    def global_start_shift_info_map(self, month_key: str) -> dict[int, tuple[str, str, str, str, int]]:
+        """Zapamiętaj wybór z listopada, zachowując naprzemienność zmian."""
+        anchor = self.planning_settings_month_key(month_key)
+        delta = self.month_delta_between_keys(anchor, month_key)
+        if delta is None:
+            return {}
+        return {
+            int(row["driver_id"]): (
+                self.shift_after_month_delta(str(row["start_shift"]), delta),
+                "manual" if delta == 0 else "inherited", anchor, str(row["updated_at"] or ""), delta,
+            )
+            for row in self.rows(
+                "SELECT driver_id,start_shift,updated_at FROM driver_month_shift_preferences WHERE month_key=? AND start_shift IN ('morning','afternoon')",
+                (anchor,),
+            )
+        }
 
 
     @staticmethod
@@ -10380,10 +10436,10 @@ class DutyPlannerApp(tk.Tk):
         tab = self.create_scrollable_tab("Baza służb", padding=10)
         self.duties_tab = tab
 
-        month_bar = ttk.LabelFrame(tab, text="Zaznaczenia służb dla wybranego miesiąca", padding=8)
+        month_bar = ttk.LabelFrame(tab, text="Globalne wyłączenia służb — wzorzec: listopad 2026", padding=8)
         month_bar.pack(fill="x", pady=(0, 8))
         self.create_month_picker(month_bar)
-        ttk.Button(month_bar, text="Wyczyść zaznaczenia tego miesiąca", command=self.clear_month_exclusions).pack(side="left")
+        ttk.Button(month_bar, text="Wyczyść globalne wyłączenia", command=self.clear_month_exclusions).pack(side="left")
         self.exclusion_status_label = ttk.Label(month_bar, text="", style="Warn.TLabel")
         self.exclusion_status_label.pack(side="right")
 
@@ -10559,7 +10615,7 @@ class DutyPlannerApp(tk.Tk):
         ttk.Button(day_flags, text="Zapisz ustawienia kierowcy", command=self.save_driver_day_plan_exclusion_flags).grid(row=1, column=4, sticky="e", padx=(12, 0), pady=(6, 0))
         day_flags.columnconfigure(4, weight=1)
 
-        shift_frame = ttk.LabelFrame(form, text="Zmiana startowa kierowcy w wybranym miesiącu", padding=8)
+        shift_frame = ttk.LabelFrame(form, text="Globalna zmiana startowa — zachowana naprzemienność miesięcy", padding=8)
         shift_frame.grid(row=3, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
         self.driver_month_start_shift_var = tk.StringVar(value="auto")
         self.driver_month_start_shift_year_var = tk.StringVar(value=self.target_year_var.get())
@@ -10661,7 +10717,7 @@ class DutyPlannerApp(tk.Tk):
                 "Ta zakładka służy do blokowania konkretnej służby dla konkretnego kierowcy globalnie, do odwołania. "
                 "Zakaz służba-kierowca działa we wszystkich miesiącach: w zwykłym planowaniu, ratunkach, R/R2, propozycjach zmian i końcowych zamianach. "
                 "Możesz wpisać jedną służbę albo osobno służbę I zmiany i II zmiany, a program doda oba globalne zakazy dla tego samego kierowcy. "
-                "Dodatkowe ptaszki również są globalne dla kierowcy i blokują automatyczne planowanie w wybrane typy dni oraz RN. Zmiana startowa pozostaje zapisywana osobno dla wybranego miesiąca."
+                "Dodatkowe ptaszki również są globalne dla kierowcy i blokują automatyczne planowanie w wybrane typy dni oraz RN. Zmiana startowa jest zapamiętana globalnie z zachowaniem naprzemienności miesięcy."
             ),
             style="Hint.TLabel",
             wraplength=1180,
@@ -10886,7 +10942,7 @@ class DutyPlannerApp(tk.Tk):
         tab = self.create_scrollable_tab("Nie planuj kierowców", padding=10)
         self.excluded_drivers_tab = tab
 
-        month_bar = ttk.LabelFrame(tab, text="Kierowcy wyłączeni z planowania dla wybranego miesiąca", padding=8)
+        month_bar = ttk.LabelFrame(tab, text="Globalnie wyłączeni kierowcy — wzorzec: listopad 2026", padding=8)
         month_bar.pack(fill="x", pady=(0, 8))
         self.create_month_picker(month_bar)
         ttk.Button(month_bar, text="Wyczyść zaznaczenia kierowców", command=self.clear_driver_exclusions).pack(side="left")
@@ -10943,7 +10999,7 @@ class DutyPlannerApp(tk.Tk):
         tab = self.create_scrollable_tab("Stałe służby", padding=10)
         self.fixed_duties_tab = tab
 
-        month_bar = ttk.LabelFrame(tab, text="Stała służba kierowcy dla wybranego miesiąca", padding=8)
+        month_bar = ttk.LabelFrame(tab, text="Globalne stałe służby kierowcy — wzorzec: listopad 2026", padding=8)
         month_bar.pack(fill="x", pady=(0, 8))
         self.create_month_picker(month_bar)
         self.fixed_status_label = ttk.Label(month_bar, text="", style="Good.TLabel")
@@ -10984,7 +11040,7 @@ class DutyPlannerApp(tk.Tk):
         ttk.Label(
             hint,
             text=(
-                "Stała służba oznacza, że w wybranym miesiącu automat użyje wskazanej służby dla tego kierowcy "
+                "Stała służba jest zapamiętana globalnie: automat w każdym miesiącu użyje wskazanej służby dla kierowcy "
                 "zależnie od zmiany: osobno dla I zmiany i osobno dla II zmiany. Możesz wypełnić jedno pole albo oba. "
                 "Wykluczenia służb i kierowców mają pierwszeństwo."
             ),
@@ -12640,12 +12696,12 @@ class DutyPlannerApp(tk.Tk):
         monthly_excluded_count = str(len(self.excluded_duty_ids_for_month(month_key)))
         monthly_excluded_driver_count = self.one_value(
             "SELECT COUNT(*) FROM monthly_excluded_drivers WHERE month_key=?",
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
             default="0",
         )
         fixed_count = self.one_value(
             "SELECT COUNT(*) FROM fixed_driver_duties WHERE month_key=?",
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
             default="0",
         )
         pair_count = self.one_value(
@@ -12789,13 +12845,18 @@ class DutyPlannerApp(tk.Tk):
         table is also respected so older databases do not accidentally plan
         previously blocked duties.
         """
+        if self.__dict__.get("_global_planning_settings_month"):
+            return {int(row["duty_id"]) for row in self.rows(
+                "SELECT duty_id FROM monthly_excluded_duties WHERE month_key=?",
+                (self.planning_settings_month_key(month_key),),
+            )}
         rows = self.rows(
             """
             SELECT duty_id FROM monthly_excluded_duties WHERE month_key=?
             UNION
             SELECT duty_id FROM excluded_duties
             """,
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
         )
         return {int(row["duty_id"]) for row in rows}
 
@@ -12960,6 +13021,8 @@ class DutyPlannerApp(tk.Tk):
 
     def driver_month_start_shift_map(self, month_key: str) -> dict[int, str]:
         """Ręczne ustawienia zapisane dokładnie dla wskazanego miesiąca."""
+        if self.__dict__.get("_global_planning_settings_month"):
+            return {driver: info[0] for driver, info in self.global_start_shift_info_map(month_key).items()}
         result: dict[int, str] = {}
         for row in self.rows(
             """
@@ -12967,7 +13030,7 @@ class DutyPlannerApp(tk.Tk):
             FROM driver_month_shift_preferences
             WHERE month_key=?
             """,
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
         ):
             shift = str(row["start_shift"] or "").strip().lower()
             if shift in {"morning", "afternoon"}:
@@ -13009,6 +13072,8 @@ class DutyPlannerApp(tk.Tk):
         Jeżeli w danym miesiącu brak ręcznego wpisu, obowiązuje ostatni wcześniejszy
         ręczny punkt startowy z naprzemiennością miesiąc po miesiącu.
         """
+        if self.__dict__.get("_global_planning_settings_month"):
+            return self.global_start_shift_info_map(month_key).get(int(driver_id))
         if self.parse_month_key(month_key) is None:
             return None
         for row in self.rows(
@@ -13021,7 +13086,7 @@ class DutyPlannerApp(tk.Tk):
             ORDER BY month_key DESC
             LIMIT 12
             """,
-            (int(driver_id), month_key),
+            (int(driver_id), self.planning_settings_month_key(month_key)),
         ):
             anchor_month_key = str(row["month_key"] or "").strip()
             delta = self.month_delta_between_keys(anchor_month_key, month_key)
@@ -13037,6 +13102,8 @@ class DutyPlannerApp(tk.Tk):
 
     def driver_month_start_shift_effective_info_map(self, month_key: str) -> dict[int, tuple[str, str, str, str, int]]:
         """Efektywne zmiany startowe dla wszystkich kierowców w miesiącu."""
+        if self.__dict__.get("_global_planning_settings_month"):
+            return self.global_start_shift_info_map(month_key)
         result: dict[int, tuple[str, str, str, str, int]] = {}
         if self.parse_month_key(month_key) is None:
             return result
@@ -13048,7 +13115,7 @@ class DutyPlannerApp(tk.Tk):
               AND LOWER(TRIM(start_shift)) IN ('morning', 'afternoon')
             ORDER BY driver_id, month_key DESC
             """,
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
         ):
             driver_id = int(row["driver_id"])
             if driver_id in result:
@@ -13267,6 +13334,10 @@ class DutyPlannerApp(tk.Tk):
         if not month_key:
             return
         value = str(value or "auto").strip().lower()
+        selected_value = value
+        if value in {"morning", "afternoon"} and self.__dict__.get("_global_planning_settings_month"):
+            delta = self.month_delta_between_keys(self.planning_settings_month_key(month_key), month_key)
+            value = self.shift_after_month_delta(value, delta or 0)
         if value in {"morning", "afternoon"}:
             self.conn.execute(
                 """
@@ -13276,17 +13347,17 @@ class DutyPlannerApp(tk.Tk):
                     start_shift=excluded.start_shift,
                     updated_at=CURRENT_TIMESTAMP
                 """,
-                (month_key, int(driver_id), value),
+                (self.planning_settings_month_key(month_key), int(driver_id), value),
             )
-            label = "I zmiana" if value == "morning" else "II zmiana"
+            label = "I zmiana" if selected_value == "morning" else "II zmiana"
             msg = (
                 f"Zapisano punkt startowy: miesiąc {month_key}, {label}. "
-                "Kolejne miesiące bez ręcznej zmiany będą liczone naprzemiennie."
+                "Zapamiętano globalnie; kolejne miesiące będą liczone naprzemiennie."
             )
         else:
             self.conn.execute(
                 "DELETE FROM driver_month_shift_preferences WHERE month_key=? AND driver_id=?",
-                (month_key, int(driver_id)),
+                (self.planning_settings_month_key(month_key), int(driver_id)),
             )
             inherited = self.driver_month_start_shift_effective_info(int(driver_id), month_key)
             if inherited is not None:
@@ -13316,9 +13387,8 @@ class DutyPlannerApp(tk.Tk):
         driver_id = self.resolve_driver_id_from_text(self.duty_driver_exclusion_driver_var.get(), allow_none=False) if hasattr(self, "duty_driver_exclusion_driver_var") else None
         value = "auto"
         if month_key and driver_id is not None:
-            # Radio pokazuje wyłącznie zapis wykonany dokładnie dla wskazanego
-            # miesiąca. Wartość odziedziczona nadal jest widoczna w tabeli wraz
-            # ze źródłem, ale nie może wyglądać jak ręcznie zapisany wybór.
+            # W trybie globalnym mapa pokazuje zapamiętaną zmianę po rotacji.
+            # W starszych bazach nadal pokazuje wyłącznie wpis danego miesiąca.
             value = self.driver_month_start_shift_map(month_key).get(int(driver_id), "auto")
         self.driver_month_start_shift_var.set(value)
 
@@ -16568,14 +16638,14 @@ class DutyPlannerApp(tk.Tk):
         if excluded:
             cur.executemany(
                 "INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)",
-                [(month_key, duty_id) for duty_id in duty_ids],
+                [(self.planning_settings_month_key(month_key), duty_id) for duty_id in duty_ids],
             )
             removed_from_plan = self.remove_duties_from_plan_for_month(month_key, duty_ids)
             action = "zaznaczono jako 'nie planować'"
         else:
             cur.executemany(
                 "DELETE FROM monthly_excluded_duties WHERE month_key=? AND duty_id=?",
-                [(month_key, duty_id) for duty_id in duty_ids],
+                [(self.planning_settings_month_key(month_key), duty_id) for duty_id in duty_ids],
             )
             action = "odznaczono"
         self.conn.commit()
@@ -16601,10 +16671,10 @@ class DutyPlannerApp(tk.Tk):
         self.load_monthly_excluded_duty_ids()
         for duty_id in duty_ids:
             if duty_id in self.monthly_excluded_duty_ids:
-                cur.execute("DELETE FROM monthly_excluded_duties WHERE month_key=? AND duty_id=?", (month_key, duty_id))
+                cur.execute("DELETE FROM monthly_excluded_duties WHERE month_key=? AND duty_id=?", (self.planning_settings_month_key(month_key), duty_id))
                 unchecked += 1
             else:
-                cur.execute("INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)", (month_key, duty_id))
+                cur.execute("INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)", (self.planning_settings_month_key(month_key), duty_id))
                 newly_excluded_ids.append(duty_id)
                 checked += 1
         removed_from_plan = self.remove_duties_from_plan_for_month(month_key, newly_excluded_ids)
@@ -16620,10 +16690,10 @@ class DutyPlannerApp(tk.Tk):
         month_key = self.target_month_key()
         if not month_key:
             return
-        count = int(self.one_value("SELECT COUNT(*) FROM monthly_excluded_duties WHERE month_key=?", (month_key,), default="0"))
-        if count and not messagebox.askyesno("Wyczyść zaznaczenia", f"Usunąć {count} zaznaczeń 'nie planować' dla miesiąca {month_key}?"):
+        count = int(self.one_value("SELECT COUNT(*) FROM monthly_excluded_duties WHERE month_key=?", (self.planning_settings_month_key(month_key),), default="0"))
+        if count and not messagebox.askyesno("Wyczyść zaznaczenia", f"Usunąć {count} globalnych zaznaczeń służb 'nie planować' we wszystkich miesiącach?"):
             return
-        self.conn.execute("DELETE FROM monthly_excluded_duties WHERE month_key=?", (month_key,))
+        self.conn.execute("DELETE FROM monthly_excluded_duties WHERE month_key=?", (self.planning_settings_month_key(month_key),))
         self.conn.commit()
         self.load_reference_data(update_month=False)
         self.load_duties_tree()
@@ -16962,13 +17032,15 @@ class DutyPlannerApp(tk.Tk):
         if not month_key:
             self.monthly_excluded_driver_ids = set()
             return
-        self.monthly_excluded_driver_ids = {int(row["driver_id"]) for row in self.rows("SELECT driver_id FROM monthly_excluded_drivers WHERE month_key=?", (month_key,))}
+        self.monthly_excluded_driver_ids = {int(row["driver_id"]) for row in self.rows("SELECT driver_id FROM monthly_excluded_drivers WHERE month_key=?", (self.planning_settings_month_key(month_key),))}
 
     def excluded_driver_ids_for_month(self, month_key: str) -> set[int]:
-        return {int(row["driver_id"]) for row in self.rows("SELECT driver_id FROM monthly_excluded_drivers WHERE month_key=?", (month_key,))}
+        return {int(row["driver_id"]) for row in self.rows("SELECT driver_id FROM monthly_excluded_drivers WHERE month_key=?", (self.planning_settings_month_key(month_key),))}
 
     def excluded_driver_ids_for_date_range(self, start: str, end: str) -> set[int]:
         """Zwraca kierowców wyłączonych z planowania w miesiącach objętych zakresem wydruku/raportu."""
+        if self.__dict__.get("_global_planning_settings_month"):
+            return self.excluded_driver_ids_for_month(start[:7])
         month_keys = sorted({date_value[:7] for date_value in self.each_date(start, end)})
         if not month_keys:
             return set()
@@ -17101,11 +17173,11 @@ class DutyPlannerApp(tk.Tk):
         cur = self.conn.cursor()
         removed_from_plan = 0
         if excluded:
-            cur.executemany("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", [(month_key, driver_id) for driver_id in driver_ids])
+            cur.executemany("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", [(self.planning_settings_month_key(month_key), driver_id) for driver_id in driver_ids])
             removed_from_plan = self.remove_drivers_from_plan_for_month(month_key, driver_ids)
             action = "zaznaczono jako 'nie planować' wszystkich widocznych"
         else:
-            cur.executemany("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", [(month_key, driver_id) for driver_id in driver_ids])
+            cur.executemany("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", [(self.planning_settings_month_key(month_key), driver_id) for driver_id in driver_ids])
             action = "odznaczono wszystkich widocznych"
         self.conn.commit()
         self.load_monthly_excluded_driver_ids()
@@ -17129,11 +17201,11 @@ class DutyPlannerApp(tk.Tk):
         cur = self.conn.cursor()
         removed_from_plan = 0
         if excluded:
-            cur.executemany("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", [(month_key, driver_id) for driver_id in driver_ids])
+            cur.executemany("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", [(self.planning_settings_month_key(month_key), driver_id) for driver_id in driver_ids])
             removed_from_plan = self.remove_drivers_from_plan_for_month(month_key, driver_ids)
             action = "zaznaczono jako 'nie planować'"
         else:
-            cur.executemany("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", [(month_key, driver_id) for driver_id in driver_ids])
+            cur.executemany("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", [(self.planning_settings_month_key(month_key), driver_id) for driver_id in driver_ids])
             action = "odznaczono"
         self.conn.commit()
         self.load_monthly_excluded_driver_ids()
@@ -17158,9 +17230,9 @@ class DutyPlannerApp(tk.Tk):
         newly_excluded: list[int] = []
         for driver_id in driver_ids:
             if driver_id in self.monthly_excluded_driver_ids:
-                cur.execute("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", (month_key, driver_id))
+                cur.execute("DELETE FROM monthly_excluded_drivers WHERE month_key=? AND driver_id=?", (self.planning_settings_month_key(month_key), driver_id))
             else:
-                cur.execute("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", (month_key, driver_id))
+                cur.execute("INSERT OR IGNORE INTO monthly_excluded_drivers(month_key, driver_id) VALUES (?, ?)", (self.planning_settings_month_key(month_key), driver_id))
                 newly_excluded.append(driver_id)
         removed_from_plan = self.remove_drivers_from_plan_for_month(month_key, newly_excluded)
         self.conn.commit()
@@ -17183,7 +17255,7 @@ class DutyPlannerApp(tk.Tk):
         month_key = f"{year:04d}-{month:02d}"
         excluded_count = int(self.one_value(
             "SELECT COUNT(*) FROM monthly_excluded_drivers WHERE month_key=?",
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
             default="0",
         ))
         if not messagebox.askyesno(
@@ -17202,10 +17274,10 @@ class DutyPlannerApp(tk.Tk):
         month_key = self.target_month_key()
         if not month_key:
             return
-        count = int(self.one_value("SELECT COUNT(*) FROM monthly_excluded_drivers WHERE month_key=?", (month_key,), default="0"))
-        if count and not messagebox.askyesno("Wyczyść zaznaczenia", f"Usunąć {count} zaznaczeń kierowców 'nie planować' dla miesiąca {month_key}?"):
+        count = int(self.one_value("SELECT COUNT(*) FROM monthly_excluded_drivers WHERE month_key=?", (self.planning_settings_month_key(month_key),), default="0"))
+        if count and not messagebox.askyesno("Wyczyść zaznaczenia", f"Usunąć {count} globalnych zaznaczeń kierowców 'nie planować' we wszystkich miesiącach?"):
             return
-        self.conn.execute("DELETE FROM monthly_excluded_drivers WHERE month_key=?", (month_key,))
+        self.conn.execute("DELETE FROM monthly_excluded_drivers WHERE month_key=?", (self.planning_settings_month_key(month_key),))
         self.conn.commit()
         self.refresh_all()
 
@@ -17233,7 +17305,7 @@ class DutyPlannerApp(tk.Tk):
             WHERE f.month_key=?
             ORDER BY CAST(dr.lp AS INTEGER), dr.name
             """,
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
         ):
             iid = f"fixed-{row['driver_id']}"
             self.fixed_assignment_tree_ids[iid] = int(row["driver_id"])
@@ -17323,7 +17395,7 @@ class DutyPlannerApp(tk.Tk):
         excluded = self.excluded_duty_ids_for_month(month_key)
         excluded_selected = [duty_id for duty_id in (duty1_id, duty2_id) if duty_id is not None and int(duty_id) in excluded]
         if excluded_selected:
-            if not messagebox.askyesno("Służba wykluczona", "Jedna z wybranych służb jest oznaczona jako 'nie planować' w tym miesiącu. Zapisać mimo to jako stałą? Automat i tak jej nie użyje, dopóki jest wykluczona."):
+            if not messagebox.askyesno("Służba wykluczona", "Jedna z wybranych służb jest globalnie oznaczona jako 'nie planować'. Zapisać mimo to jako stałą? Automat i tak jej nie użyje, dopóki jest wykluczona."):
                 return
         main_duty_id = int(duty1_id if duty1_id is not None else duty2_id)
         self.conn.execute(
@@ -17336,11 +17408,11 @@ class DutyPlannerApp(tk.Tk):
                 duty2_id=excluded.duty2_id,
                 updated_at=CURRENT_TIMESTAMP
             """,
-            (month_key, int(driver_id), main_duty_id, int(duty1_id) if duty1_id is not None else None, int(duty2_id) if duty2_id is not None else None),
+            (self.planning_settings_month_key(month_key), int(driver_id), main_duty_id, int(duty1_id) if duty1_id is not None else None, int(duty2_id) if duty2_id is not None else None),
         )
         self.conn.commit()
         self.refresh_all()
-        self.auto_status_label.configure(text=f"Miesiąc {month_key}: zapisano stałe służby I/II zmiany dla kierowcy.")
+        self.auto_status_label.configure(text="Zapisano globalne stałe służby I/II zmiany dla kierowcy — obowiązują w każdym miesiącu.")
 
     def delete_selected_fixed_driver_duty(self) -> None:
         month_key = self.target_month_key()
@@ -17353,7 +17425,7 @@ class DutyPlannerApp(tk.Tk):
         driver_id = self.fixed_assignment_tree_ids.get(selection[0])
         if not driver_id:
             return
-        self.conn.execute("DELETE FROM fixed_driver_duties WHERE month_key=? AND driver_id=?", (month_key, driver_id))
+        self.conn.execute("DELETE FROM fixed_driver_duties WHERE month_key=? AND driver_id=?", (self.planning_settings_month_key(month_key), driver_id))
         self.conn.commit()
         self.refresh_all()
 
@@ -17371,7 +17443,7 @@ class DutyPlannerApp(tk.Tk):
                    COALESCE(duty2_id, duty_id) AS duty2_id
             FROM fixed_driver_duties WHERE month_key=? AND driver_id=?
             """,
-            (month_key, driver_id),
+            (self.planning_settings_month_key(month_key), driver_id),
         ).fetchone()
         if not row:
             return
@@ -17402,7 +17474,7 @@ class DutyPlannerApp(tk.Tk):
             FROM fixed_driver_duties
             WHERE month_key=?
             """,
-            (month_key,),
+            (self.planning_settings_month_key(month_key),),
         ):
             per_shift: dict[str, int] = {}
             if row["duty1_id"] is not None:
@@ -32818,7 +32890,7 @@ class DutyPlannerApp(tk.Tk):
         manual_month_key = f"{plan_dt.year:04d}-{plan_dt.month:02d}"
         is_excluded = int(self.one_value(
             "SELECT COUNT(*) FROM monthly_excluded_duties WHERE month_key=? AND duty_id=?",
-            (manual_month_key, duty_id),
+            (self.planning_settings_month_key(manual_month_key), duty_id),
             default="0",
         )) > 0
         if is_excluded:
@@ -35618,7 +35690,7 @@ class DutyPlannerApp(tk.Tk):
             if duty_id is not None:
                 self.conn.execute(
                     "INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)",
-                    (month_key, int(duty_id)),
+                    (self.planning_settings_month_key(month_key), int(duty_id)),
                 )
                 self.conn.commit()
             self.auto_plan_all_drivers()
@@ -35799,7 +35871,7 @@ class DutyPlannerApp(tk.Tk):
         buttons.pack(fill="x", side="bottom")
         ttk.Button(
             buttons,
-            text="Wyłącz tę służbę na cały miesiąc",
+            text="Wyłącz tę służbę globalnie",
             command=lambda: self.apply_monthly_handover_exclusion(report, best, window),
         ).pack(side="left")
         ttk.Button(buttons, text="Zamknij", command=window.destroy).pack(side="right")
@@ -35815,13 +35887,13 @@ class DutyPlannerApp(tk.Tk):
         code = str(candidate["code"])
         if not messagebox.askyesno(
             "Wyłącz służbę",
-            f"Wyłączyć służbę {code} na cały miesiąc {month_key}?\n\nWpisy ręczne pozostaną nietknięte.",
+            f"Wyłączyć służbę {code} globalnie dla wszystkich miesięcy?\n\nUsunięte zostaną tylko automatyczne wpisy wybranego miesiąca {month_key}. Wpisy ręczne pozostaną nietknięte.",
         ):
             return
         try:
             self.conn.execute(
                 "INSERT OR IGNORE INTO monthly_excluded_duties(month_key, duty_id) VALUES (?, ?)",
-                (month_key, duty_id),
+                (self.planning_settings_month_key(month_key), duty_id),
             )
             removed = self.remove_duties_from_plan_for_month(month_key, {duty_id})
             self.conn.commit()

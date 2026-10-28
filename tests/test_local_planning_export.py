@@ -151,6 +151,13 @@ class LocalPlanningExportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             exporter.export_snapshot(self.database, mappings_path=self.database.parent / 'missing.json')
 
+    def test_exports_global_policy_without_unrelated_app_metadata(self):
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.executescript("CREATE TABLE app_meta(key TEXT,value TEXT); INSERT INTO app_meta VALUES ('global_planning_settings_v511','2026-11'),('secret','do-not-export');")
+        snapshot = exporter.export_snapshot(self.database)
+        self.assertEqual({'mode': 'global', 'sourceMonth': '2026-11'}, snapshot['settingsPolicy'])
+        self.assertNotIn('do-not-export', json.dumps(snapshot))
+
 
 if __name__ == '__main__':
     unittest.main()
