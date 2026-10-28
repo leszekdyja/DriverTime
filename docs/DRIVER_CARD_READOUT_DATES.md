@@ -27,3 +27,8 @@ only, never another driver's/company's card or an old replacement card. Existing
 confirmed-expired-replacement filtering is retained. Alerts and dashboard counters
 use the same schedule service. This does not alter activity dates, violations,
 historical imports or saved schedules.
+
+Dashboard expiry alerts use the same backend-filtered active card IDs, so an
+expired historical card cannot still produce a separate card-expiry warning.
+If the active-card request fails, expiry alerts remain visible rather than being
+silently suppressed.

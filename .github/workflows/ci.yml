@@ -87,3 +87,6 @@ jobs:
 
       - name: Test one-time planning mappings
         run: node --experimental-strip-types --test tests/preparedLocalPlanningMappings.test.mjs
+
+      - name: Test dashboard replacement card expiry filtering
+        run: node --experimental-strip-types --test tests/cardExpiryAlertDrivers.test.mjs
