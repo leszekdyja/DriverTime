@@ -60,12 +60,16 @@ public class DailyRestViolationRule : IComplianceRule
         var periodsBelowReducedRest = 0;
         var maxLongestRest = TimeSpan.Zero;
         var currentPeriodStart = dutyActivities[0].StartUtc;
+        var timelineEndUtc = ordered.Max(x => x.EndUtc);
 
         while (true)
         {
             dutyPeriods++;
             var windowEnd = currentPeriodStart.AddHours(24);
-            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd);
+            // A previous rest may protect an incomplete download boundary, but
+            // must not satisfy a later fully observed duty period or stop the scan.
+            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd,
+                allowPreviousBoundaryRest: timelineEndUtc < windowEnd);
             var splitRegularRest = FindSplitRegularDailyRestInWindow(restPeriods, currentPeriodStart, windowEnd);
             var restMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
             maxLongestRest = Max(maxLongestRest, longestRest.Duration);
@@ -538,11 +542,12 @@ public class DailyRestViolationRule : IComplianceRule
     private static RestPeriod FindLongestRestInWindow(
         IReadOnlyList<RestPeriod> restPeriods,
         DateTime windowStart,
-        DateTime windowEnd)
+        DateTime windowEnd,
+        bool allowPreviousBoundaryRest)
     {
         var boundaryRest = restPeriods
             .Where(x =>
-                x.StartUtc < windowStart &&
+                allowPreviousBoundaryRest && x.StartUtc < windowStart &&
                 x.EndUtc >= windowStart.Subtract(BoundaryRestTolerance) &&
                 x.Duration >= ReducedDailyRest)
             .OrderByDescending(x => x.Duration)
@@ -621,7 +626,7 @@ public class DailyRestViolationRule : IComplianceRule
         DateTime windowEnd,
         RestPeriod longestRest)
     {
-        if (dutyActivities.Any(x => x.StartUtc >= windowEnd))
+        if (dutyActivities.Any(x => x.EndUtc >= windowEnd))
         {
             return true;
         }
