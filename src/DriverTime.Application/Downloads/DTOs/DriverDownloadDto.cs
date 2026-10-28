@@ -12,6 +12,8 @@ public class DriverDownloadDto
 
     public DateTime? LastDownloadUtc { get; set; }
 
+    public string LastDownloadSource { get; set; } = string.Empty;
+
     public DateTime? NextRequiredDownloadUtc { get; set; }
 
     public int? DaysUntilDue { get; set; }

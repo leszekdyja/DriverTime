@@ -26,6 +26,9 @@ public class DddParseResultDto
     [JsonPropertyName("card_read_date")]
     public string CardReadDate { get; set; } = string.Empty;
 
+    [JsonPropertyName("card_read_date_source")]
+    public string CardReadDateSource { get; set; } = string.Empty;
+
     [JsonPropertyName("activities")]
     public List<ParsedDriverActivityDto> Activities { get; set; } = new();
 

@@ -318,7 +318,15 @@ function DriversTable({ drivers }: { drivers: DriverDownload[] }) {
                                     </Link>
                                 </td>
                                 <td data-label="Numer karty">{driver.cardNumber || "Brak"}</td>
-                                <td data-label="Ostatni odczyt">{formatDate(driver.lastDownloadUtc)}</td>
+                                <td data-label="Ostatni odczyt">
+                                    {formatDate(driver.lastDownloadUtc)}
+                                    <small style={{ display: "block" }}>
+                                        {driver.lastDownloadSource === "CardDownload" ? "Data zapisana na karcie"
+                                            : driver.lastDownloadSource === "OriginalFileName" ? "Data z oryginalnej nazwy pliku"
+                                            : driver.lastDownloadUtc ? "Szacunek z aktywności — brak daty odczytu"
+                                                : "Brak daty odczytu"}
+                                    </small>
+                                </td>
                                 <td data-label="Następny odczyt">{formatDate(driver.nextRequiredDownloadUtc)}</td>
                                 <td data-label="Dni do terminu">{formatDays(driver.daysUntilDue)}</td>
                                 <td data-label="Status">

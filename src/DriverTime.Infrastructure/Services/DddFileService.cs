@@ -352,6 +352,8 @@ public class DddFileService : IDddFileService
             AdoptNewerDriverCard(driver, parseResult.Driver, cardNumber);
         }
 
+        var cardRead = CardReadDateResolver.FromParser(parseResult.CardReadDate,
+            parseResult.CardReadDateSource, originalFileName, DateTime.UtcNow);
         var dddFile = new DddFile
         {
             Id = Guid.NewGuid(),
@@ -360,6 +362,8 @@ public class DddFileService : IDddFileService
             FileName = originalFileName,
             FileHash = fileHash,
             UploadedAtUtc = DateTime.UtcNow,
+            CardReadAtUtc = cardRead?.AtUtc,
+            CardReadDateSource = cardRead?.Source ?? string.Empty,
             DriverCardNumber = cardNumber,
             DriverFirstName = driver.FirstName,
             DriverLastName = driver.LastName,

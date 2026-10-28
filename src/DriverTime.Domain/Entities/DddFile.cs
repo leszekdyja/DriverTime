@@ -32,6 +32,10 @@ public class DddFile
 
     public DateTime UploadedAtUtc { get; set; }
 
+    public DateTime? CardReadAtUtc { get; set; }
+
+    public string CardReadDateSource { get; set; } = string.Empty;
+
     public string DriverCardNumber { get; set; } = string.Empty;
 
     public string DriverFirstName { get; set; } = string.Empty;

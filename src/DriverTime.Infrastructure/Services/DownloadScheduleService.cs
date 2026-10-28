@@ -1,5 +1,6 @@
 using DriverTime.Application.Downloads;
 using DriverTime.Application.Downloads.DTOs;
+using DriverTime.Application.DDD.DTOs;
 using DriverTime.Domain.Entities;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -25,16 +26,26 @@ public class DownloadScheduleService : IDownloadScheduleService
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId
                 && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value))
-            .Select(x => new
-            {
-                x.Id,
-                x.FirstName,
-                x.LastName,
-                x.CardNumber
-            })
             .OrderBy(x => x.LastName)
             .ThenBy(x => x.FirstName)
             .ToListAsync(cancellationToken);
+
+        var importedCards = await _dbContext.DddFiles.AsNoTracking()
+            .Where(x => x.CompanyId == companyId && x.DriverId.HasValue
+                && x.Driver != null
+                && (!operatingCompanyId.HasValue || x.Driver.OperatingCompanyId == operatingCompanyId.Value))
+            .Select(x => new { DriverId = x.DriverId!.Value, x.DriverCardNumber,
+                x.FileName, x.CardReadAtUtc, x.CardReadDateSource })
+            .Distinct().ToListAsync(cancellationToken);
+        var confirmedCards = importedCards.Select(x => (x.DriverId, x.DriverCardNumber)).ToHashSet();
+        var activeDrivers = drivers.Where(old => !drivers.Any(replacement =>
+            IsReplacedExpiredCard(old, replacement, nowUtc)
+            && confirmedCards.Contains((replacement.Id, replacement.CardNumber)))).ToList();
+        var readDates = importedCards.Select(file => new { File = file,
+                Read = CardReadDateResolver.Resolve(file.CardReadAtUtc, file.CardReadDateSource, file.FileName, nowUtc) })
+            .Where(x => x.Read is not null)
+            .GroupBy(x => (x.File.DriverId, x.File.DriverCardNumber))
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(x => x.Read!.AtUtc).First().Read!);
 
         var lastActivities = await _dbContext.DriverActivities
             .AsNoTracking()
@@ -42,7 +53,9 @@ public class DownloadScheduleService : IDownloadScheduleService
                 x.DddFile.CompanyId == companyId
                 && (!operatingCompanyId.HasValue
                     || (x.DddFile.Driver != null && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value))
-                && x.DddFile.DriverId.HasValue)
+                && x.DddFile.DriverId.HasValue
+                && x.DddFile.Driver != null
+                && x.DddFile.DriverCardNumber == x.DddFile.Driver.CardNumber)
             .GroupBy(x => x.DddFile.DriverId!.Value)
             .Select(x => new
             {
@@ -51,33 +64,48 @@ public class DownloadScheduleService : IDownloadScheduleService
             })
             .ToDictionaryAsync(x => x.DriverId, x => x.LastActivityUtc, cancellationToken);
 
-        return drivers
-            .Select(x => new DriverDownloadDto
+        return activeDrivers
+            .Select(x =>
             {
-                DriverId = x.Id,
-                FirstName = x.FirstName,
-                LastName = x.LastName,
-                CardNumber = x.CardNumber,
-                LastDownloadUtc = lastActivities.GetValueOrDefault(x.Id),
-                NextRequiredDownloadUtc = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                    lastActivities.GetValueOrDefault(x.Id),
-                    DownloadScheduleCalculator.DriverDownloadIntervalDays),
-                DaysUntilDue = DownloadScheduleCalculator.GetDaysUntilDue(
-                    DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                        lastActivities.GetValueOrDefault(x.Id),
-                        DownloadScheduleCalculator.DriverDownloadIntervalDays),
-                    nowUtc),
-                Status = DownloadScheduleCalculator.GetStatus(
-                    DownloadScheduleCalculator.GetDaysUntilDue(
-                        DownloadScheduleCalculator.GetNextRequiredDownloadUtc(
-                            lastActivities.GetValueOrDefault(x.Id),
-                            DownloadScheduleCalculator.DriverDownloadIntervalDays),
-                        nowUtc))
+                var read = readDates.GetValueOrDefault((x.Id, x.CardNumber));
+                var lastRead = read?.AtUtc ?? lastActivities.GetValueOrDefault(x.Id);
+                var nextRead = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(lastRead,
+                    DownloadScheduleCalculator.DriverDownloadIntervalDays);
+                var days = DownloadScheduleCalculator.GetDaysUntilDue(nextRead, nowUtc);
+                return new DriverDownloadDto
+                {
+                    DriverId = x.Id,
+                    FirstName = x.FirstName,
+                    LastName = x.LastName,
+                    CardNumber = x.CardNumber,
+                    LastDownloadUtc = lastRead,
+                    LastDownloadSource = read?.Source ?? (lastRead.HasValue ? "ActivityEstimate" : "Unknown"),
+                    NextRequiredDownloadUtc = nextRead,
+                    DaysUntilDue = days,
+                    Status = DownloadScheduleCalculator.GetStatus(days)
+                };
             })
             .OrderBy(x => x.DaysUntilDue ?? int.MinValue)
             .ThenBy(x => x.LastName)
             .ThenBy(x => x.FirstName)
             .ToList();
+    }
+
+    internal static bool IsReplacedExpiredCard(Driver old, Driver replacement, DateTime nowUtc)
+    {
+        if (old.Id == replacement.Id || old.CompanyId != replacement.CompanyId
+            || old.OperatingCompanyId != replacement.OperatingCompanyId
+            || !old.CardExpiryDate.HasValue || old.CardExpiryDate.Value.Date >= nowUtc.Date
+            || !replacement.CardExpiryDate.HasValue || replacement.CardExpiryDate.Value.Date < nowUtc.Date
+            || replacement.CardExpiryDate <= old.CardExpiryDate || old.CardNumber == replacement.CardNumber)
+            return false;
+        var identity = DddFileService.GetCardIdentity(old.CardNumber);
+        return identity is not null && identity == DddFileService.GetCardIdentity(replacement.CardNumber)
+            && !string.IsNullOrWhiteSpace(old.FirstName) && !string.IsNullOrWhiteSpace(old.LastName)
+            && DddFileService.IsSameDriverPerson(old, new ParsedDriverDto {
+                FirstName = replacement.FirstName, LastName = replacement.LastName,
+                CardIssuingCountry = replacement.CardIssuingCountry
+            });
     }
 
     public async Task<IReadOnlyList<VehicleDownloadDto>> GetVehicleDownloadsAsync(

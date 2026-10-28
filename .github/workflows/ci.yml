@@ -29,6 +29,12 @@ jobs:
       - name: Test read-only local planning export
         run: python3 -m unittest discover -s tests -p test_local_planning_export.py -v
 
+      - name: Test driver card download timestamps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-tk
+          python3 -m unittest discover -s tests/parser -p test_card_download_time.py -v
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -84,3 +90,6 @@ jobs:
 
       - name: Test one-time planning mappings
         run: node --experimental-strip-types --test tests/preparedLocalPlanningMappings.test.mjs
+
+      - name: Test dashboard replacement card expiry filtering
+        run: node --experimental-strip-types --test tests/cardExpiryAlertDrivers.test.mjs

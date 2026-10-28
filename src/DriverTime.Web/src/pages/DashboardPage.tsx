@@ -30,6 +30,7 @@ import {
 } from "../services/downloadsService";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
+import { cardExpiryAlertDrivers } from "../services/cardExpiryAlertDrivers";
 import "../styles/dashboard.css";
 
 const maxOperationalAlerts = 8;
@@ -272,6 +273,7 @@ export default function DashboardPage() {
     const [downloadStats, setDownloadStats] = useState<DownloadDashboard | null>(null);
     const [drivers, setDrivers] = useState<DashboardDriver[]>([]);
     const [driverDownloads, setDriverDownloads] = useState<DriverDownload[]>([]);
+    const [hasDriverDownloadData, setHasDriverDownloadData] = useState(false);
     const [vehicleDownloads, setVehicleDownloads] = useState<VehicleDownload[]>([]);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -322,7 +324,8 @@ export default function DashboardPage() {
                             : "Wystąpił błąd podczas pobierania terminów odczytów.",
                     })),
                 getDashboardDrivers().catch(() => []),
-                getDriverDownloads().catch(() => []),
+                getDriverDownloads().then(data => ({ data, available: true }))
+                    .catch(() => ({ data: [], available: false })),
                 getVehicleDownloads().catch(() => []),
             ]);
 
@@ -334,7 +337,8 @@ export default function DashboardPage() {
             setDownloadStats(downloadResult.data);
             setDownloadStatsError(downloadResult.error);
             setDrivers(driversResult);
-            setDriverDownloads(driverDownloadsResult);
+            setDriverDownloads(driverDownloadsResult.data);
+            setHasDriverDownloadData(driverDownloadsResult.available);
             setVehicleDownloads(vehicleDownloadsResult);
             setLastRefreshedAt(new Date());
             setError("");
@@ -454,7 +458,7 @@ export default function DashboardPage() {
             });
         });
 
-        drivers.forEach((driver) => {
+        cardExpiryAlertDrivers(drivers, hasDriverDownloadData ? driverDownloads : null).forEach((driver) => {
             if (!driver.cardExpiryDate) {
                 return;
             }
@@ -514,7 +518,7 @@ export default function DashboardPage() {
                 return leftTime - rightTime;
             })
             .slice(0, maxOperationalAlerts);
-    }, [driverDownloads, drivers, vehicleDownloads, violations]);
+    }, [driverDownloads, drivers, hasDriverDownloadData, vehicleDownloads, violations]);
 
     const realtimeWidgets = useMemo(() => {
         const latestImport = dashboard?.latestImports[0] ?? null;

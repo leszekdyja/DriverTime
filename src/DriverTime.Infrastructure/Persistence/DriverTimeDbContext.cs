@@ -119,6 +119,7 @@ public class DriverTimeDbContext : DbContext
         modelBuilder.Entity<DddFile>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.CardReadDateSource).HasMaxLength(32);
             entity.HasIndex(x => new { x.CompanyId, x.FileHash }).IsUnique();
 
             entity.Property(x => x.FileName)
