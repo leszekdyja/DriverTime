@@ -39,7 +39,7 @@ public class DownloadScheduleService : IDownloadScheduleService
             .Distinct().ToListAsync(cancellationToken);
         var confirmedCards = importedCards.Select(x => (x.DriverId, x.DriverCardNumber)).ToHashSet();
         var activeDrivers = drivers.Where(old => !drivers.Any(replacement =>
-            IsReplacedExpiredCard(old, replacement, nowUtc)
+            IsSupersededDriverCard(old, replacement, nowUtc)
             && confirmedCards.Contains((replacement.Id, replacement.CardNumber)))).ToList();
         var readDates = importedCards.Select(file => new { File = file,
                 Read = CardReadDateResolver.Resolve(file.CardReadAtUtc, file.CardReadDateSource, file.FileName, nowUtc) })
@@ -91,14 +91,24 @@ public class DownloadScheduleService : IDownloadScheduleService
             .ToList();
     }
 
-    internal static bool IsReplacedExpiredCard(Driver old, Driver replacement, DateTime nowUtc)
+    internal static bool IsSupersededDriverCard(Driver old, Driver replacement, DateTime nowUtc)
     {
         if (old.Id == replacement.Id || old.CompanyId != replacement.CompanyId
             || old.OperatingCompanyId != replacement.OperatingCompanyId
-            || !old.CardExpiryDate.HasValue || old.CardExpiryDate.Value.Date >= nowUtc.Date
+            || !old.CardExpiryDate.HasValue
             || !replacement.CardExpiryDate.HasValue || replacement.CardExpiryDate.Value.Date < nowUtc.Date
-            || replacement.CardExpiryDate <= old.CardExpiryDate || old.CardNumber == replacement.CardNumber)
+            || old.CardNumber == replacement.CardNumber)
             return false;
+        var expiredRenewal = old.CardExpiryDate.Value.Date < nowUtc.Date
+            && replacement.CardExpiryDate > old.CardExpiryDate;
+        var oldNumber = old.CardNumber.Trim().ToUpperInvariant();
+        var newNumber = replacement.CardNumber.Trim().ToUpperInvariant();
+        // A replacement (lost/damaged card) retains its expiry and renewal index.
+        var sameExpiryReplacement = replacement.CardExpiryDate.Value.Date == old.CardExpiryDate.Value.Date
+            && oldNumber.Length == 16 && newNumber.Length == 16
+            && oldNumber.All(char.IsAsciiLetterOrDigit) && newNumber.All(char.IsAsciiLetterOrDigit)
+            && oldNumber[15] == newNumber[15] && newNumber[14] > oldNumber[14];
+        if (!expiredRenewal && !sameExpiryReplacement) return false;
         var identity = DddFileService.GetCardIdentity(old.CardNumber);
         return identity is not null && identity == DddFileService.GetCardIdentity(replacement.CardNumber)
             && !string.IsNullOrWhiteSpace(old.FirstName) && !string.IsNullOrWhiteSpace(old.LastName)
