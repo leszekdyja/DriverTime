@@ -150,6 +150,12 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         var contextDateTo = options.IncludeAssignmentsOutsideGeneratedRangeForRestChecks
             ? request.DateTo.AddDays(8)
             : request.DateTo;
+        if (request.DateFrom <= new DateOnly(request.DateTo.Year, 12, 26)
+            && request.DateTo >= new DateOnly(request.DateTo.Year, 12, 24))
+        {
+            contextDateTo = DateOnly.FromDayNumber(Math.Max(contextDateTo.DayNumber,
+                new DateOnly(request.DateTo.Year, 12, 26).DayNumber));
+        }
 
         // Pobieramy jeden bufor kontekstowy dla odpoczynku dobowego, kolejnych dni pracy,
         // tygodniowego odpoczynku i pełnego poprzedniego miesiąca (rotacja RN). Dalej wszystkie oceny kandydatów
@@ -414,6 +420,15 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         RecordTiming("Walidacja odpoczynku i podsumowania", restSummaryStopwatch.ElapsedMilliseconds);
 
         result.ProposedAssignments = BuildProposedAssignments(generatedAssignments, drivers);
+
+        foreach (var assignment in generatedAssignments.Where(PlanningWorkloadCalculator.IsWorkAssignment)
+                     .Where(x => x.Date.Month == 12 && x.Date.Day is >= 24 and <= 26))
+        {
+            if (assignmentContext.Any(x => x.DriverId == assignment.DriverId && x.Date.Year == assignment.Date.Year
+                && x.Date.Month == 12 && x.Date.Day is >= 24 and <= 26 && x.Date != assignment.Date
+                && PlanningWorkloadCalculator.IsWorkAssignment(x)))
+                throw new InvalidOperationException("Automat nie może zaplanować więcej niż jednego dnia pracy 24–26 grudnia.");
+        }
 
         var saveStopwatch = Stopwatch.StartNew();
         if (isPreview)

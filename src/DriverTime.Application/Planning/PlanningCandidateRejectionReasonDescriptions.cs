@@ -4,6 +4,7 @@ public static class PlanningCandidateRejectionReasonDescriptions
 {
     public static string ToPolishDescription(PlanningCandidateRejectionReason reason) => reason switch
     {
+        PlanningCandidateRejectionReason.ChristmasWorkdayLimit => "Limit jednego dnia pracy 24–26 grudnia; dodatkowa praca wymaga wpisu ręcznego.",
         PlanningCandidateRejectionReason.DriverNotFound => "Nie znaleziono kierowcy.",
         PlanningCandidateRejectionReason.DutyMissingStartOrEndTime => "Służba nie ma godziny rozpoczęcia albo zakończenia.",
         PlanningCandidateRejectionReason.AlreadyAssignedOnDate => "Kierowca ma już przydział w tym dniu.",

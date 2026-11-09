@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v512_christmas_sunday_duties"
+APP_VERSION = "v513_christmas_one_workday"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -14155,6 +14155,13 @@ class DutyPlannerApp(tk.Tk):
     def is_planning_workday(self, day: date) -> bool:
         return self.planning_weekday(day) <= 4
 
+    @staticmethod
+    def christmas_work_limit_exceeded(day: date, worked_dates: set[date]) -> bool:
+        return day.month == 12 and 24 <= day.day <= 26 and any(
+            worked.year == day.year and worked.month == 12 and 24 <= worked.day <= 26
+            and worked != day for worked in worked_dates
+        )
+
     def is_planning_saturday(self, day: date) -> bool:
         return self.planning_weekday(day) == 5
 
@@ -19486,7 +19493,7 @@ class DutyPlannerApp(tk.Tk):
             day_obj = date(int(year), int(month), day_no)
             if day_obj in seen:
                 continue
-            if self.is_rn_single_coverage_day(day_obj):
+            if self.is_rn_single_coverage_day(day_obj) or (day_obj.month == 12 and 24 <= day_obj.day <= 26):
                 block = [day_obj]
             else:
                 block_start = self.rn_continuity_block_start(day_obj)
@@ -19495,6 +19502,7 @@ class DutyPlannerApp(tk.Tk):
                     for offset in range(6)
                     if (block_start + timedelta(days=offset)).year == int(year)
                     and (block_start + timedelta(days=offset)).month == int(month)
+                    and not (month == 12 and 24 <= (block_start + timedelta(days=offset)).day <= 26)
                 ]
             seen.update(block)
             blocks.append(block or [day_obj])
@@ -21192,6 +21200,8 @@ class DutyPlannerApp(tk.Tk):
                 samego weekendu, kolejnego weekendu z rzedu ani trzeciego weekendu
                 w miesiacu.
                 """
+                if self.christmas_work_limit_exceeded(day_obj, driver_work_dates.get(int(driver_id), set())):
+                    return "limit jednego dnia pracy 24-26 grudnia (wyjatek: wpis reczny)"
                 if not is_monthly_weekend_limit_day(day_obj):
                     return None
                 if driver_has_adjacent_calendar_weekend_day(int(driver_id), day_obj):
@@ -21437,6 +21447,8 @@ class DutyPlannerApp(tk.Tk):
                 if self.is_day_off_duty(duty):
                     return True
                 target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                if self.christmas_work_limit_exceeded(target_day_obj, driver_work_dates.get(int(driver_id), set())):
+                    return False
                 inherited_duty_id = month_boundary_duties.get(int(driver_id))
                 if (
                     inherited_duty_id is not None and int(duty_id) not in {inherited_duty_id, int(rn_duty_id or -1)}
@@ -21578,6 +21590,8 @@ class DutyPlannerApp(tk.Tk):
                 if self.is_day_off_duty(duty):
                     return None
                 target_day_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                if self.christmas_work_limit_exceeded(target_day_obj, driver_work_dates.get(int(driver_id), set())):
+                    return "limit jednego dnia pracy 24-26 grudnia (wyjatek: wpis reczny)"
                 start_shift_reason = direct_month_start_shift_block_reason(
                     int(driver_id), int(duty_id), target_day_obj
                 )
@@ -22460,6 +22474,8 @@ class DutyPlannerApp(tk.Tk):
                 return []
 
             def rn_block_key_for_date(target_date_obj: date) -> tuple[str, str]:
+                if target_date_obj.month == 12 and 24 <= target_date_obj.day <= 26:
+                    return ("boze-narodzenie", target_date_obj.isoformat())
                 if self.is_rn_single_coverage_day(target_date_obj):
                     return ("sobota", target_date_obj.isoformat())
                 block_start = self.rn_continuity_block_start(target_date_obj)
@@ -30580,6 +30596,20 @@ class DutyPlannerApp(tk.Tk):
             # v501: po wszystkich zamianach końcowych odtwórz ręcznie wymaganą
             # liczbę R/R2 z pustych pól albo z automatycznego WG/W.
             ensure_exact_weekend_reserve_counts_before_save()
+            # Ostatnia kontrola obejmuje rowniez zamiany i awaryjne uzupelnianie RN.
+            if month == 12:
+                christmas_dates_by_driver: dict[int, set[date]] = defaultdict(set)
+                for context_entry in planned_context_entries:
+                    context_day = date.fromisoformat(str(context_entry[0]))
+                    context_duty = duty_rows_by_id.get(int(context_entry[2]))
+                    if context_duty is not None and not self.is_day_off_duty(context_duty):
+                        christmas_dates_by_driver[int(context_entry[1])].add(context_day)
+                for auto_entry in entries:
+                    auto_day = date.fromisoformat(str(auto_entry[0]))
+                    auto_duty = duty_rows_by_id.get(int(auto_entry[2]))
+                    if (auto_duty is not None and not self.is_day_off_duty(auto_duty)
+                            and self.christmas_work_limit_exceeded(auto_day, christmas_dates_by_driver[int(auto_entry[1])])):
+                        raise ValueError("Automat nie moze zaplanowac kierowcy wiecej niz jednego dnia pracy 24-26 grudnia.")
             # v302/v303/v306: diagnostyka RBH musi być liczona po ostatnim dobiciu R/R2 i po
             # ostatecznym wypełnieniu pustych pól, a nie przed finałowymi filtrami.
             drivers_below_nominal_rbh.clear()

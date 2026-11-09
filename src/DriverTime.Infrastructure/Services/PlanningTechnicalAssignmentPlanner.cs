@@ -241,7 +241,7 @@ public class PlanningTechnicalAssignmentPlanner
                 continue;
             }
 
-            if (IsSingleNightDutyDay(day))
+            if (IsSingleNightDutyDay(day) || (day.Month == 12 && day.Day is >= 24 and <= 26))
             {
                 blocks.Add(new List<DateOnly> { day });
                 continue;
@@ -253,7 +253,8 @@ public class PlanningTechnicalAssignmentPlanner
             for (var offset = 0; offset < 6; offset++)
             {
                 var candidate = start.AddDays(offset);
-                if (candidate >= dateFrom && candidate <= dateTo && !IsSingleNightDutyDay(candidate))
+                if (candidate >= dateFrom && candidate <= dateTo && !IsSingleNightDutyDay(candidate)
+                    && !(candidate.Month == 12 && candidate.Day is >= 24 and <= 26))
                 {
                     block.Add(candidate);
                     seen.Add(candidate);

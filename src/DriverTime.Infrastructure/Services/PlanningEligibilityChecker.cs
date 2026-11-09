@@ -60,6 +60,15 @@ public class PlanningEligibilityChecker
             .Where(x => x.DriverId == driver.Id)
             .ToList();
 
+        if (PlanningEntryClassifier.Classify(duty).IsRealWork
+            && date.Month == 12 && date.Day is >= 24 and <= 26
+            && driverAssignments.Any(x => x.Date.Year == date.Year && x.Date.Month == 12
+                && x.Date.Day is >= 24 and <= 26 && x.Date != date
+                && PlanningWorkloadCalculator.IsWorkAssignment(x)))
+        {
+            evaluation.RejectionReasons.Add(PlanningCandidateRejectionReason.ChristmasWorkdayLimit);
+        }
+
         var constraintEvaluation = PlanningAssignmentConstraintEvaluator.Evaluate(driver.CompanyId, driver, duty, date, options.AssignmentRules);
         evaluation.MatchesPreference = constraintEvaluation.IsPreferred;
         evaluation.PreferenceScore = constraintEvaluation.PreferenceScore;
