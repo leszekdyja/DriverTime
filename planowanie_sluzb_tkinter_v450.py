@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v511_global_planning_settings"
+APP_VERSION = "v512_christmas_sunday_duties"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -14143,11 +14143,13 @@ class DutyPlannerApp(tk.Tk):
         return day in self.polish_public_holidays(day.year)
 
     def planning_weekday(self, day: date) -> int:
-        """Dzień tygodnia do planowania: święta traktujemy jak soboty.
+        """25 i 26 grudnia mają służby niedzielne, inne święta sobotnie.
 
         0-4 = pon.-pt., 5 = sobota, 6 = niedziela.
-        Zasada v159: każde święto z kalendarza programu ma reguły soboty.
+        Wyjątek v512: pierwszy i drugi dzień Bożego Narodzenia to niedziela.
         """
+        if day.month == 12 and day.day in (25, 26):
+            return 6
         return 5 if self.is_public_holiday(day) else day.weekday()
 
     def is_planning_workday(self, day: date) -> bool:

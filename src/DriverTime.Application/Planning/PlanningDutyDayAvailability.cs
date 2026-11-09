@@ -22,6 +22,11 @@ public static class PlanningDutyDayAvailability
 
     public static bool IsActiveOn(PlanningDuty duty, DateOnly date, bool isHoliday = false)
     {
+        if (date.Month == 12 && date.Day is 25 or 26)
+        {
+            return (NormalizeMask(duty.ActiveDaysMask) & Sunday) != 0;
+        }
+
         if (isHoliday && duty.IncludeHolidays)
         {
             return true;
