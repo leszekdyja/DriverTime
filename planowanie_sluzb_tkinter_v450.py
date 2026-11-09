@@ -30,7 +30,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v513_christmas_one_workday"
+APP_VERSION = "v514_correct_holiday_working_hours"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -14234,8 +14234,10 @@ class DutyPlannerApp(tk.Tk):
         hours = 0.0
         for offset in range(days):
             day = start_date + timedelta(days=offset)
-            if self.is_calendar_workday_for_norm(day):
+            if day.weekday() <= 4:
                 hours += 8.0
+            if day.weekday() != 6 and self.is_public_holiday(day):
+                hours -= 8.0
         return max(0.0, hours)
 
     def monthly_work_norm_hours(self, year: int, month: int) -> float:

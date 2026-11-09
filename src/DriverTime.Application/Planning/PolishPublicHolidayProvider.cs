@@ -5,7 +5,7 @@ public class PolishPublicHolidayProvider : IPolishPublicHolidayProvider
     public IReadOnlyCollection<PolishPublicHoliday> GetHolidays(int year)
     {
         var easter = CalculateEasterSunday(year);
-        return new List<PolishPublicHoliday>
+        var holidays = new List<PolishPublicHoliday>
         {
             new(new DateOnly(year, 1, 1), "Nowy Rok"),
             new(new DateOnly(year, 1, 6), "Trzech Króli"),
@@ -19,6 +19,11 @@ public class PolishPublicHolidayProvider : IPolishPublicHolidayProvider
             new(new DateOnly(year, 12, 25), "Boże Narodzenie - pierwszy dzień"),
             new(new DateOnly(year, 12, 26), "Boże Narodzenie - drugi dzień")
         };
+        if (year >= 2025)
+        {
+            holidays.Add(new(new DateOnly(year, 12, 24), "Wigilia Bożego Narodzenia"));
+        }
+        return holidays;
     }
 
     private static DateOnly CalculateEasterSunday(int year)
