@@ -43,16 +43,17 @@ public class DriverActivityService : IDriverActivityService
         {
             query = query.Where(x => x.DddFile.Driver != null
                 && x.DddFile.Driver.OperatingCompanyId == operatingCompanyId.Value);
-
-            if (driverIds is { Count: > 0 })
-            {
-                query = query.Where(x => x.DddFile.DriverId.HasValue
-                    && driverIds.Contains(x.DddFile.DriverId.Value));
-            }
         }
-        else if (driverId.HasValue)
+
+        // A company scope restricts access; it must not replace the selected driver.
+        if (driverId.HasValue)
         {
             query = query.Where(x => x.DddFile.DriverId == driverId.Value);
+        }
+        else if (driverIds is { Count: > 0 })
+        {
+            query = query.Where(x => x.DddFile.DriverId.HasValue
+                && driverIds.Contains(x.DddFile.DriverId.Value));
         }
         else if (!string.IsNullOrWhiteSpace(driverCardNumber))
         {
