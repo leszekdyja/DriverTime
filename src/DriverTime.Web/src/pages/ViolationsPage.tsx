@@ -22,6 +22,7 @@ import {
 } from "../services/violationsService";
 import { getComplianceRuleLabel, getSeverityLabel } from "../utils/complianceLabels";
 import { formatDriverNameOrFallback } from "../utils/driverName";
+import { drivingBreakExplanation } from "../utils/drivingBreakExplanation";
 import "../styles/violations.css";
 
 type SeverityLevel = "info" | "warning" | "critical";
@@ -1710,6 +1711,7 @@ function ViolationDetailsModal({
     const dispatcherKpis = useMemo(() => getDispatcherKpis(violation), [violation]);
     const dispatcherNextSteps = useMemo(() => getDispatcherNextSteps(violation), [violation]);
     const dispatcherScaleBadge = useMemo(() => getDispatcherScaleBadge(violation), [violation]);
+    const breakExplanation = useMemo(() => drivingBreakExplanation(violation), [violation]);
 
     useEffect(() => {
         async function loadTimelineActivities() {
@@ -1780,11 +1782,11 @@ function ViolationDetailsModal({
                                 {getDispatcherStatusIcon(violation.dispatcherRecommendation.status)}
                             </span>
                             <div>
-                                <span>Asystent Dyspozytora</span>
-                                <h4>{getDispatcherStatusLabel(violation.dispatcherRecommendation.status)}</h4>
+                                <span>{breakExplanation ? "Wyjaśnienie naruszenia" : "Asystent Dyspozytora"}</span>
+                                <h4>{breakExplanation ? "Przerwa po jeździe — zapisany wynik" : getDispatcherStatusLabel(violation.dispatcherRecommendation.status)}</h4>
                             </div>
                             <div className="dispatcher-assistant-statusmeta">
-                                {dispatcherScaleBadge && (
+                                {!breakExplanation && dispatcherScaleBadge && (
                                     <span className={`dispatcher-scale-badge ${dispatcherScaleBadge.tone}`}>
                                         Skala: {dispatcherScaleBadge.label}
                                     </span>
@@ -1792,14 +1794,21 @@ function ViolationDetailsModal({
                                 <strong>{violation.dispatcherRecommendation.plannerAttentionRequired ? "Wymaga uwagi" : "Informacyjnie"}</strong>
                             </div>
                         </div>
-                        <p>{violation.dispatcherRecommendation.summary}</p>
-                        {getDispatcherReason(violation) && (
+                        <p>{breakExplanation ? "Przekroczono czas jazdy przed ukończeniem wymaganej przerwy. Poniżej pokazujemy, co wynika z zapisanego obliczenia." : violation.dispatcherRecommendation.summary}</p>
+                        {breakExplanation && <div className="dispatcher-break-explanation">
+                            <h5>Co dokładnie oznacza ten komunikat?</h5>
+                            {breakExplanation.lines.slice(0, 2).map((line) => <p key={line}>{line}</p>)}
+                            <details><summary>Jak jest liczona jazda i wymagana przerwa?</summary>{breakExplanation.lines.slice(2).map((line) => <p key={line}>{line}</p>)}</details>
+                            {breakExplanation.breaks.length > 0 ? <details><summary>Przerwy uwzględnione w zapisanej analizie</summary><ul>{breakExplanation.breaks.map((line, index) => <li key={index}>{line}</li>)}</ul></details> : <p>Brak listy przerw w zapisanej analizie — nie oznacza to, że kierowca nie robił przerw.</p>}
+                            <p>{breakExplanation.note}</p>
+                        </div>}
+                        {!breakExplanation && getDispatcherReason(violation) && (
                             <div className="dispatcher-assistant-reason">
                                 <span>Powód</span>
                                 <strong>{getDispatcherReason(violation)}</strong>
                             </div>
                         )}
-                        {dispatcherKpis.length > 0 && (
+                        {!breakExplanation && dispatcherKpis.length > 0 && (
                             <div className="dispatcher-assistant-kpis" aria-label="Wartości biznesowe">
                                 {dispatcherKpis.map((kpi) => (
                                     <div className={`dispatcher-assistant-kpi ${kpi.tone}`} key={kpi.label}>
