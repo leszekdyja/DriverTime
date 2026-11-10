@@ -2,6 +2,7 @@
 
 public class UpdateDriverPlanningDto
 {
+    public bool? IsActive { get; set; }
     public bool IncludeInPlanning { get; set; }
     public bool PlanningNoNightDuty { get; set; }
     public bool PlanningNoWeekends { get; set; }

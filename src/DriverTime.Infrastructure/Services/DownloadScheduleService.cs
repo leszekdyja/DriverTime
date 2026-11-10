@@ -24,7 +24,7 @@ public class DownloadScheduleService : IDownloadScheduleService
         var nowUtc = DateTime.UtcNow;
         var drivers = await _dbContext.Drivers
             .AsNoTracking()
-            .Where(x => x.CompanyId == companyId
+            .Where(x => x.CompanyId == companyId && x.IsActive
                 && (!operatingCompanyId.HasValue || x.OperatingCompanyId == operatingCompanyId.Value))
             .OrderBy(x => x.LastName)
             .ThenBy(x => x.FirstName)

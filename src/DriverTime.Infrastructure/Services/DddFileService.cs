@@ -307,9 +307,25 @@ public class DddFileService : IDddFileService
         var companyId = companyIdOverride ?? await ResolveImportCompanyIdAsync();
         var fileHash = await CalculateHashAsync(filePath);
 
-        if (await _dbContext.DddFiles.AnyAsync(x =>
-            x.CompanyId == companyId && x.FileHash == fileHash))
+        var existingImport = await _dbContext.DddFiles.Include(x => x.Driver)
+            .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.FileHash == fileHash);
+        if (existingImport is not null)
         {
+            if (existingImport.Driver is not null && (!_currentUser.OperatingCompanyId.HasValue
+                || existingImport.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId))
+            {
+                var identityData = await _dddParserGateway.ParseAsync(filePath);
+                var vinUses = identityData.VehicleUses.Where(x => IsValidVehicleUse(x, DateTime.UtcNow)).ToList();
+                await AddMissingVehiclesAsync(companyId, existingImport.Driver.OperatingCompanyId, vinUses);
+                var previousUses = await _dbContext.VehicleUses.Where(x => x.DddFileId == existingImport.Id).ToListAsync();
+                foreach (var use in previousUses.Where(x => string.IsNullOrWhiteSpace(x.Vin)))
+                {
+                    var evidence = vinUses.Where(x => ParseDateTime(x.Start) == use.StartUtc && ParseDateTime(x.End) == use.EndUtc);
+                    use.Vin = VehicleVinMatcher.UniqueEvidence(evidence)
+                        .GetValueOrDefault(VehicleVinMatcher.RegistrationKey(use.RegistrationNumber), string.Empty);
+                }
+                await _dbContext.SaveChangesAsync();
+            }
             throw new DuplicateDddFileException();
         }
 
@@ -935,6 +951,7 @@ public class DddFileService : IDddFileService
                 StartUtc = start.Value,
                 EndUtc = end.Value,
                 RegistrationNumber = vehicleUse.VehicleRegistration,
+                Vin = VehicleVinMatcher.NormalizeVin(vehicleUse.VehicleIdentificationNumber),
                 StartOdometerKm = vehicleUse.StartOdometerKm,
                 EndOdometerKm = vehicleUse.EndOdometerKm,
                 DistanceKm = vehicleUse.DistanceKm
@@ -966,6 +983,16 @@ public class DddFileService : IDddFileService
         }
 
         var vehicles = _dbContext.Set<Vehicle>();
+        var vinEvidence = VehicleVinMatcher.UniqueEvidence(vehicleUses);
+        var vehiclesForVin = await vehicles.Where(x => x.CompanyId == companyId
+            && (x.OperatingCompanyId == operatingCompanyId || x.OperatingCompanyId == null)).ToListAsync();
+        foreach (var vehicle in vehiclesForVin)
+        {
+            var key = VehicleVinMatcher.RegistrationKey(vehicle.RegistrationNumber);
+            if (string.IsNullOrWhiteSpace(vehicle.Vin) && vinEvidence.TryGetValue(key, out var confirmedVin)
+                && !vehiclesForVin.Any(x => x.Id != vehicle.Id && x.Vin == confirmedVin))
+                vehicle.Vin = confirmedVin;
+        }
         var existingRegistrationNumbers = await vehicles
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId)
@@ -1010,7 +1037,8 @@ public class DddFileService : IDddFileService
                 CompanyId = companyId,
                 OperatingCompanyId = operatingCompanyId,
                 RegistrationNumber = registrationNumber,
-                Vin = string.Empty,
+                Vin = vinEvidence.TryGetValue(VehicleVinMatcher.RegistrationKey(registrationNumber), out var newVin)
+                    && !vehiclesForVin.Any(x => x.Vin == newVin) ? newVin : string.Empty,
                 Active = true
             });
 

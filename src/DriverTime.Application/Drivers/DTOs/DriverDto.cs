@@ -19,6 +19,7 @@ public class DriverDto
     public string? OperatingCompanyName { get; set; }
 
     public bool IncludeInPlanning { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public bool PlanningNoNightDuty { get; set; }
     public bool PlanningNoWeekends { get; set; }

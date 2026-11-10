@@ -19,7 +19,6 @@ import ImportMonitoringPage from "./pages/ImportMonitoringPage";
 import ImportsPage from "./pages/ImportsPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
-import MobileSetupPage from "./pages/MobileSetupPage";
 import PlanningPage from "./pages/PlanningPage";
 import OperatingCompaniesPage from "./pages/OperatingCompaniesPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -36,7 +35,7 @@ export default function App() {
                     <Routes>
                         <Route path="/welcome" element={<LandingPage />} />
                         <Route path="/login" element={<LoginPage />} />
-                        <Route path="/mobile/setup" element={<MobileSetupPage />} />
+                        <Route path="/mobile/setup" element={<Navigate to="/login" replace />} />
                         <Route element={<ProtectedRoute />}>
                             <Route path="/" element={<AppLayout />}>
                                 <Route index element={<DashboardPage />} />

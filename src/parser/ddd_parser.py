@@ -44,7 +44,7 @@ import tempfile
 import textwrap
 import webbrowser
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -192,6 +192,7 @@ class VehicleUse:
     source: str = ""
     start_odometer_km: Optional[int] = None
     end_odometer_km: Optional[int] = None
+    vin: str = ""
 
     @property
     def distance_km(self) -> Optional[int]:
@@ -1143,19 +1144,21 @@ def _parse_card_vehicle_record(record: bytes, source: str) -> Optional[VehicleUs
         source=source,
         start_odometer_km=start_odometer,
         end_odometer_km=end_odometer,
+        vin=(record[31:48].decode("ascii", errors="ignore").strip("\x00\xff ").upper()
+             if len(record) == 48 else ""),
     )
 
 
-def _parse_vehicle_uses_from_block(block: bytes, block_offset: int) -> list[VehicleUse]:
+def _parse_vehicle_uses_from_block(block: bytes, block_offset: int, record_size: int = 31) -> list[VehicleUse]:
     """Parse CardVehiclesUsed EF 0x0505 as fixed CardVehicleRecord entries."""
     result: list[VehicleUse] = []
-    seen: set[tuple[dt.datetime, dt.datetime, str]] = set()
-    if len(block) < CARD_VEHICLE_RECORD_OFFSET + CARD_VEHICLE_RECORD_SIZE:
+    seen: set[tuple[dt.datetime, dt.datetime, str, str]] = set()
+    if record_size not in (31, 48) or len(block) < CARD_VEHICLE_RECORD_OFFSET + record_size:
         return result
 
     record_area = block[CARD_VEHICLE_RECORD_OFFSET:]
-    for offset in range(0, len(record_area) - CARD_VEHICLE_RECORD_SIZE + 1, CARD_VEHICLE_RECORD_SIZE):
-        record = record_area[offset:offset + CARD_VEHICLE_RECORD_SIZE]
+    for offset in range(0, len(record_area) - record_size + 1, record_size):
+        record = record_area[offset:offset + record_size]
         absolute_offset = CARD_VEHICLE_RECORD_OFFSET + offset
         vehicle_use = _parse_card_vehicle_record(
             record,
@@ -1163,7 +1166,7 @@ def _parse_vehicle_uses_from_block(block: bytes, block_offset: int) -> list[Vehi
         )
         if not vehicle_use:
             continue
-        key = (vehicle_use.start, vehicle_use.end, vehicle_use.registration)
+        key = (vehicle_use.start, vehicle_use.end, vehicle_use.registration, vehicle_use.vin)
         if key in seen:
             continue
         seen.add(key)
@@ -1175,11 +1178,23 @@ def parse_ddd_vehicle_uses_embedded(ddd_path: Path) -> list[VehicleUse]:
     raw = ddd_path.read_bytes()
     vehicles: list[VehicleUse] = []
     for block_offset, block in _find_tlv_blocks(raw, DDD_DRIVER_VEHICLES_TAG):
-        vehicles.extend(_parse_vehicle_uses_from_block(block, block_offset))
+        generation = raw[block_offset + 2]
+        if generation not in (0, 2):
+            continue  # Signature blocks are not vehicle records.
+        vehicles.extend(_parse_vehicle_uses_from_block(block, block_offset, 48 if generation == 2 else 31))
     # Deduplicate overlapping duplicate scans of the same EF record.
     unique: dict[tuple[dt.datetime, dt.datetime, str], VehicleUse] = {}
+    vin_conflicts: set[tuple[dt.datetime, dt.datetime, str]] = set()
     for item in vehicles:
-        unique.setdefault((item.start, item.end, item.registration), item)
+        key = (item.start, item.end, item.registration)
+        if key in vin_conflicts:
+            continue
+        if key in unique and unique[key].vin and item.vin and unique[key].vin != item.vin:
+            unique[key] = replace(unique[key], vin="")
+            vin_conflicts.add(key)
+            continue
+        if key not in unique or (item.vin and not unique[key].vin):
+            unique[key] = item
     return sorted(unique.values(), key=lambda x: (x.start, x.end, x.registration))
 
 
@@ -1415,6 +1430,7 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
                 "start": v.start.isoformat(sep=" "),
                 "end": v.end.isoformat(sep=" "),
                 "vehicle_registration": v.registration,
+                "vehicle_identification_number": v.vin,
                 "source": v.source,
                 "start_odometer_km": v.start_odometer_km,
                 "end_odometer_km": v.end_odometer_km,

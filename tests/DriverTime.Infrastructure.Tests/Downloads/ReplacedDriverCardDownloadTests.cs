@@ -58,6 +58,17 @@ public class ReplacedDriverCardDownloadTests
     }
 
     [TestMethod]
+    public async Task InactiveDriverRetainsHistoryButHasNoReadoutAlertsOrPlanning()
+    {
+        await using var db = Database();
+        var driver = Card(Guid.NewGuid(), false); driver.IsActive = false;
+        db.Drivers.Add(driver); Readout(db, driver, 90); await db.SaveChangesAsync();
+        Assert.AreEqual(0, (await new DownloadScheduleService(db).GetDriverDownloadsAsync(driver.CompanyId, null)).Count);
+        Assert.IsFalse(PlanningAutoGeneratorService.IsDriverEligibleForAutoPlanning(driver, driver.CompanyId, Array.Empty<Guid>()));
+        Assert.AreEqual(1, await db.Drivers.CountAsync()); Assert.AreEqual(1, await db.DddFiles.CountAsync());
+    }
+
+    [TestMethod]
     public async Task UnconfirmedReplacementDoesNotSilenceOldCard()
     {
         await using var db = Database();

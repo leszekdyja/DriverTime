@@ -9,6 +9,7 @@ public class VehicleUse
     public DddFile DddFile { get; set; } = null!;
 
     public string RegistrationNumber { get; set; } = string.Empty;
+    public string Vin { get; set; } = string.Empty;
 
     public DateTime StartUtc { get; set; }
 

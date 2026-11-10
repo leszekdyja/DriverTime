@@ -434,6 +434,11 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1400,6 +1405,10 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<DateTime>("StartUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Vin")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

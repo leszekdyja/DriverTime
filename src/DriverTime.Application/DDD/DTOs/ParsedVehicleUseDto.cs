@@ -13,6 +13,9 @@ public class ParsedVehicleUseDto
     [JsonPropertyName("vehicle_registration")]
     public string VehicleRegistration { get; set; } = string.Empty;
 
+    [JsonPropertyName("vehicle_identification_number")]
+    public string VehicleIdentificationNumber { get; set; } = string.Empty;
+
     [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
 

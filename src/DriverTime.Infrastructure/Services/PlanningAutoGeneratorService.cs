@@ -88,7 +88,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         var forbiddenCandidateRejectionCount = 0;
 
         var requestedDriverIds = request.DriverIds.Where(x => x != Guid.Empty).Distinct().ToList();
-        var driversQuery = _dbContext.Drivers.Where(x => x.CompanyId == companyId && x.IncludeInPlanning);
+        var driversQuery = _dbContext.Drivers.Where(x => x.CompanyId == companyId && x.IncludeInPlanning && x.IsActive);
         if (_currentUser.OperatingCompanyId.HasValue)
         {
             driversQuery = driversQuery.Where(x => x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value);
@@ -638,7 +638,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         IReadOnlyCollection<Guid> requestedDriverIds)
     {
         return driver.CompanyId == companyId
-            && driver.IncludeInPlanning
+            && driver.IncludeInPlanning && driver.IsActive
             && (requestedDriverIds.Count == 0 || requestedDriverIds.Contains(driver.Id));
     }
     internal static IReadOnlyCollection<PlanningAssignmentRule> BuildAssignmentRules(PlanningAutoGenerateRequestDto request, Guid companyId)
