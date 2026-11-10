@@ -21,6 +21,7 @@ import {
 import {
     getVehicle,
     getVehicleAnalytics,
+    updateVehicleVin,
     type VehicleActivity,
     type VehicleAnalytics,
     type VehicleDetails,
@@ -177,6 +178,10 @@ export default function VehicleDetailsPage() {
     const [error, setError] = useState("");
     const [analyticsError, setAnalyticsError] = useState("");
     const [downloadError, setDownloadError] = useState("");
+    const [vinDraft, setVinDraft] = useState("");
+    const [isSavingVin, setIsSavingVin] = useState(false);
+    const [vinMessage, setVinMessage] = useState("");
+    const [vinError, setVinError] = useState("");
     const [timelineRangeDays, setTimelineRangeDays] = useState<VehicleTimelineRangeDays>(56);
 
     const chartData = useMemo(
@@ -189,6 +194,37 @@ export default function VehicleDetailsPage() {
     );
 
     const timelineActivities = details?.activities ?? [];
+
+    useEffect(() => {
+        setVinDraft(details?.vin ?? "");
+    }, [details?.id, details?.vin]);
+
+    useEffect(() => {
+        setVinMessage("");
+        setVinError("");
+    }, [details?.id]);
+
+    async function saveVin() {
+        if (!details || isSavingVin) return;
+        setVinMessage("");
+        setVinError("");
+        const vin = vinDraft.trim().toUpperCase();
+        if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+            setVinError("VIN musi zawierać 17 liter i cyfr, bez liter I, O i Q.");
+            return;
+        }
+
+        setIsSavingVin(true);
+        try {
+            const updated = await updateVehicleVin(details.id, vin);
+            setDetails((current) => current?.id === updated.id ? { ...current, vin: updated.vin } : current);
+            setVinMessage("VIN został zapisany.");
+        } catch (saveError) {
+            setVinError(saveError instanceof Error ? saveError.message : "Nie udało się zapisać VIN-u.");
+        } finally {
+            setIsSavingVin(false);
+        }
+    }
 
     const timelineDays = useMemo(
         () => buildTimelineDays(timelineActivities),
@@ -314,6 +350,24 @@ export default function VehicleDetailsPage() {
                             <Info label="Liczba kierowców" value={String(details.drivers.length)} />
                         </dl>
                     </header>
+
+                    <section className="driver-details-section" aria-labelledby="vehicle-properties-title">
+                        <h3 id="vehicle-properties-title">Właściwości pojazdu</h3>
+                        <form className="vehicle-vin-form" onSubmit={(event) => { event.preventDefault(); void saveVin(); }}>
+                            <label htmlFor="vehicle-vin">VIN pojazdu</label>
+                            <input id="vehicle-vin" value={vinDraft} maxLength={17} required
+                                pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}"
+                                onChange={(event) => setVinDraft(event.target.value.toUpperCase())}
+                                disabled={isSavingVin} autoComplete="off" spellCheck={false}
+                                placeholder="Wpisz 17-znakowy VIN" aria-describedby="vehicle-vin-help" />
+                            <span id="vehicle-vin-help">Możesz wpisać lub poprawić VIN ręcznie. Zapis nie zmienia danych źródłowych DDD.</span>
+                            <button className="driver-report-button" type="submit" disabled={isSavingVin}>
+                                {isSavingVin ? "Zapisywanie…" : "Zapisz VIN"}
+                            </button>
+                        </form>
+                        {vinError ? <p role="alert">{vinError}</p> : null}
+                        {vinMessage ? <p role="status">{vinMessage}</p> : null}
+                    </section>
 
                     <section className="driver-time-grid" aria-label="Podsumowanie pojazdu">
                         <article>
