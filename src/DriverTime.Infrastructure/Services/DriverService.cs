@@ -77,6 +77,7 @@ public class DriverService : IDriverService
                 OperatingCompanyId = x.OperatingCompanyId,
                 OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : null,
                 IncludeInPlanning = x.IncludeInPlanning,
+                IsActive = x.IsActive,
                 PlanningNoNightDuty = x.PlanningNoNightDuty,
                 PlanningNoWeekends = x.PlanningNoWeekends,
                 PlanningNoSaturdays = x.PlanningNoSaturdays,
@@ -109,6 +110,7 @@ public class DriverService : IDriverService
                 OperatingCompanyId = x.OperatingCompanyId,
                 OperatingCompanyName = x.OperatingCompany != null ? x.OperatingCompany.Name : null,
                 IncludeInPlanning = x.IncludeInPlanning,
+                IsActive = x.IsActive,
                 PlanningNoNightDuty = x.PlanningNoNightDuty,
                 PlanningNoWeekends = x.PlanningNoWeekends,
                 PlanningNoSaturdays = x.PlanningNoSaturdays,
@@ -374,6 +376,7 @@ public class DriverService : IDriverService
             CardExpiryDate = driver.CardExpiryDate,
             CardIssuingCountry = driver.CardIssuingCountry,
             IncludeInPlanning = driver.IncludeInPlanning,
+            IsActive = driver.IsActive,
             CreatedAtUtc = driver.CreatedAtUtc
         };
     }
@@ -397,6 +400,7 @@ public class DriverService : IDriverService
         }
 
         driver.IncludeInPlanning = dto.IncludeInPlanning;
+        if (dto.IsActive.HasValue) driver.IsActive = dto.IsActive.Value;
         driver.PlanningNoNightDuty = dto.PlanningNoNightDuty;
         driver.PlanningNoWeekends = dto.PlanningNoWeekends;
         driver.PlanningNoSaturdays = dto.PlanningNoSaturdays;
@@ -415,6 +419,7 @@ public class DriverService : IDriverService
             OperatingCompanyId = driver.OperatingCompanyId,
             OperatingCompanyName = driver.OperatingCompany?.Name,
             IncludeInPlanning = driver.IncludeInPlanning,
+            IsActive = driver.IsActive,
             PlanningNoNightDuty = driver.PlanningNoNightDuty,
             PlanningNoWeekends = driver.PlanningNoWeekends,
             PlanningNoSaturdays = driver.PlanningNoSaturdays,
@@ -462,6 +467,7 @@ public class DriverService : IDriverService
             OperatingCompanyId = driver.OperatingCompanyId,
             OperatingCompanyName = operatingCompany?.Name,
             IncludeInPlanning = driver.IncludeInPlanning,
+            IsActive = driver.IsActive,
             PlanningNoNightDuty = driver.PlanningNoNightDuty,
             PlanningNoWeekends = driver.PlanningNoWeekends,
             PlanningNoSaturdays = driver.PlanningNoSaturdays,

@@ -23,6 +23,7 @@ public class Driver
     public string CardIssuingCountry { get; set; } = string.Empty;
 
     public bool IncludeInPlanning { get; set; } = true;
+    public bool IsActive { get; set; } = true;
 
     public bool PlanningNoNightDuty { get; set; }
 

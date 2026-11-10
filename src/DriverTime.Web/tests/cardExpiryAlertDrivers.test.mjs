@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cardExpiryAlertDrivers } from "../src/services/cardExpiryAlertDrivers.ts";
 
+test("inactive drivers have no expiry alerts even when download API fails", () => {
+    const drivers = [{ id: "inactive", isActive: false }, { id: "active", isActive: true }];
+    assert.deepEqual(cardExpiryAlertDrivers(drivers, null), [drivers[1]]);
+    assert.deepEqual(cardExpiryAlertDrivers(drivers, [{ driverId: "inactive" }, { driverId: "active" }]), [drivers[1]]);
+});
+
 test("confirmed retired cards cannot produce dashboard expiry alerts", () => {
     const drivers = [{ id: "expired-old", name: "Hendrykowski" }, { id: "current", name: "Hendrykowski" },
         { id: "expired-unreplaced", name: "Other" }];

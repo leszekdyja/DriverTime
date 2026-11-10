@@ -65,7 +65,7 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
             ?? throw new InvalidOperationException("JWT identity is unavailable.");
         if (identity.FindFirst("token_type")?.Value == "mobile_driver")
         {
-            return;
+            throw new InvalidOperationException("Mobile app integration is disabled.");
         }
 
         if (!Guid.TryParse(identity.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var userId))

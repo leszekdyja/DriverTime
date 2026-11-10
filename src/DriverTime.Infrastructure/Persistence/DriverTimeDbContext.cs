@@ -278,6 +278,7 @@ public class DriverTimeDbContext : DbContext
 
             entity.Property(x => x.IncludeInPlanning)
                 .HasDefaultValue(true);
+            entity.Property(x => x.IsActive).HasDefaultValue(true);
 
             entity.Property(x => x.PlanningNoNightDuty).HasDefaultValue(false);
             entity.Property(x => x.PlanningNoWeekends).HasDefaultValue(false);

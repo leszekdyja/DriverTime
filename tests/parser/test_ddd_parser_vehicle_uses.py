@@ -2,6 +2,7 @@ import calendar
 import datetime as dt
 import sys
 import unittest
+import tempfile
 from pathlib import Path
 
 
@@ -20,6 +21,32 @@ def _time_real(year: int, month: int, day: int, hour: int, minute: int) -> bytes
 
 
 class CardVehicleRecordTests(unittest.TestCase):
+    def test_generation_two_reads_vin_from_same_vehicle_record_and_skips_signatures(self):
+        def record(plate, vin):
+            return (_u24(1000) + _u24(1200) + _time_real(2026, 9, 1, 8, 0)
+                    + _time_real(2026, 9, 1, 16, 0) + b"\x28\x01"
+                    + plate.encode('ascii').ljust(13, b' ') + b"\x00\x01" + vin.encode('ascii'))
+        first = record('DTR12345', 'WVWZZZ1JZXW000001')
+        second = record('DTR54321', 'WVWZZZ1JZXW000002')
+        payload = b'\x00\x00' + first + second
+        def block(kind, content):
+            return b'\x05\x05' + bytes([kind]) + len(content).to_bytes(2, 'big') + content
+        raw = block(0, b'\x00\x00' + first[:31]) + block(2, payload) + block(3, payload)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'card.DDD'
+            path.write_bytes(raw)
+            uses = ddd_parser.parse_ddd_vehicle_uses_embedded(path)
+        self.assertEqual(2, len(uses))
+        self.assertEqual({'DTR12345': 'WVWZZZ1JZXW000001', 'DTR54321': 'WVWZZZ1JZXW000002'},
+                         {item.registration: item.vin for item in uses})
+        conflict_payload = b'\x00\x00' + first + record('DTR12345', 'WVWZZZ1JZXW000003')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'conflict.DDD'
+            path.write_bytes(block(2, conflict_payload))
+            ambiguous = ddd_parser.parse_ddd_vehicle_uses_embedded(path)
+        self.assertEqual(1, len(ambiguous))
+        self.assertEqual('', ambiguous[0].vin)
+
     def test_card_vehicle_record_returns_odometer_distance_and_registration(self) -> None:
         record = (
             _u24(123456)

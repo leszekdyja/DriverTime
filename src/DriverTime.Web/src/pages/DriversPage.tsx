@@ -24,20 +24,12 @@ type DriverDto = {
     operatingCompanyId: string | null;
     operatingCompanyName: string | null;
     includeInPlanning: boolean;
+    isActive: boolean;
     planningNoNightDuty: boolean;
     planningNoWeekends: boolean;
     planningNoSaturdays: boolean;
     planningNoHolidays: boolean;
     planningNoDaysOff: boolean;
-};
-
-type DriverMobileInviteDto = {
-    driverId: string;
-    driverFullName: string;
-    token: string;
-    apiBaseUrl: string;
-    inviteLink: string;
-    expiresAtUtc: string;
 };
 
 const driversApiUrl = `${API_URL}/api/drivers`;
@@ -53,8 +45,6 @@ export default function DriversPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [driverToDelete, setDriverToDelete] = useState<DriverDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [isCreatingInviteFor, setIsCreatingInviteFor] = useState<string | null>(null);
-    const [mobileInvite, setMobileInvite] = useState<DriverMobileInviteDto | null>(null);
     const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     const filteredDrivers = useMemo(() => {
@@ -116,7 +106,7 @@ export default function DriversPage() {
         }
     }
 
-    async function updateDriverPlanningSettings(driver: DriverDto, changes: Partial<Pick<DriverDto, "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">>) {
+    async function updateDriverPlanningSettings(driver: DriverDto, changes: Partial<Pick<DriverDto, "isActive" | "includeInPlanning" | "planningNoNightDuty" | "planningNoWeekends" | "planningNoSaturdays" | "planningNoHolidays" | "planningNoDaysOff">>) {
         setMessage("");
         setIsError(false);
         const updated = { ...driver, ...changes };
@@ -128,6 +118,7 @@ export default function DriversPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     includeInPlanning: updated.includeInPlanning,
+                    isActive: updated.isActive,
                     planningNoNightDuty: updated.planningNoNightDuty,
                     planningNoWeekends: updated.planningNoWeekends,
                     planningNoSaturdays: updated.planningNoSaturdays,
@@ -182,53 +173,6 @@ export default function DriversPage() {
         } finally {
             setIsDeleting(false);
         }
-    }
-
-    async function createMobileInvite(driver: DriverDto) {
-        setMessage("");
-        setIsError(false);
-        setIsCreatingInviteFor(driver.id);
-
-        try {
-            const response = await apiFetch(`${driversApiUrl}/${driver.id}/mobile-invite`, {
-                method: "POST",
-            });
-
-            if (!response.ok) {
-                throw new Error("Nie udało się utworzyć linku do aplikacji.");
-            }
-
-            const invite = (await response.json()) as DriverMobileInviteDto;
-            setMobileInvite(invite);
-
-            if (navigator.clipboard) {
-                await navigator.clipboard.writeText(invite.inviteLink);
-                setMessage("Link do aplikacji został utworzony i skopiowany do schowka.");
-            } else {
-                setMessage("Link do aplikacji został utworzony.");
-            }
-        } catch (error) {
-            setIsError(true);
-            setMessage(error instanceof Error ? error.message : "Nie udało się utworzyć linku do aplikacji.");
-        } finally {
-            setIsCreatingInviteFor(null);
-        }
-    }
-
-    async function shareMobileInvite() {
-        if (!mobileInvite) return;
-
-        const text = `DriverTime - konfiguracja aplikacji dla kierowcy ${mobileInvite.driverFullName}: ${mobileInvite.inviteLink}`;
-
-        if (navigator.share) {
-            await navigator.share({
-                title: "DriverTime - aplikacja kierowcy",
-                text,
-            });
-            return;
-        }
-
-        window.location.href = `mailto:?subject=${encodeURIComponent("DriverTime - aplikacja kierowcy")}&body=${encodeURIComponent(text)}`;
     }
 
     useEffect(() => {
@@ -311,7 +255,7 @@ export default function DriversPage() {
                                         <th>Firma</th>
                                         <th>Planowanie</th>
                                         <th>Blokady planowania</th>
-                                        <th>Aplikacja</th>
+                                        <th>Status kierowcy</th>
                                         <th></th>
                                     </tr>
                                 </thead>
@@ -353,14 +297,12 @@ export default function DriversPage() {
                                                 </div>
                                             </td>
                                             <td>
-                                                <button
-                                                    className="driver-details-link"
-                                                    type="button"
-                                                    onClick={() => void createMobileInvite(driver)}
-                                                    disabled={isCreatingInviteFor === driver.id}
-                                                >
-                                                    {isCreatingInviteFor === driver.id ? "Tworzenie..." : "Wyślij link"}
-                                                </button>
+                                                <label className="driver-table-toggle" title="Nieaktywny kierowca zachowuje historię, ale nie jest planowany automatycznie i nie generuje alertów odczytu ani ważności karty.">
+                                                    <input type="checkbox" checked={!driver.isActive}
+                                                        onChange={event => void updateDriverPlanningSettings(driver, { isActive: !event.target.checked })}
+                                                        aria-label={`Kierowca nieaktywny: ${driver.lastName} ${driver.firstName}`} />
+                                                    <span>Nieaktywny</span>
+                                                </label>
                                             </td>
                                             <td>
                                                 <div className="driver-row-actions">
@@ -419,41 +361,6 @@ export default function DriversPage() {
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? "Usuwanie..." : "Usuń kierowcę"}
-                            </button>
-                        </div>
-                    </section>
-                </div>
-            )}
-            {mobileInvite && (
-                <div className="driver-delete-modal-backdrop" role="presentation" onClick={() => setMobileInvite(null)}>
-                    <section
-                        className="driver-delete-modal driver-mobile-invite-modal"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="driver-mobile-invite-title"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <h3 id="driver-mobile-invite-title">Link do aplikacji kierowcy</h3>
-                        <p>
-                            Link zawiera jednorazową konfigurację aplikacji dla kierowcy {mobileInvite.driverFullName}.
-                            Wygasa {new Date(mobileInvite.expiresAtUtc).toLocaleString("pl-PL")}.
-                        </p>
-                        <label>
-                            Link konfiguracji
-                            <textarea readOnly value={mobileInvite.inviteLink} rows={4} />
-                        </label>
-                        <div className="driver-delete-modal-actions">
-                            <button
-                                type="button"
-                                onClick={() => void navigator.clipboard?.writeText(mobileInvite.inviteLink)}
-                            >
-                                Kopiuj
-                            </button>
-                            <button type="button" onClick={() => void shareMobileInvite()}>
-                                Wyślij
-                            </button>
-                            <button type="button" onClick={() => setMobileInvite(null)}>
-                                Zamknij
                             </button>
                         </div>
                     </section>
