@@ -126,6 +126,22 @@ export async function updateVehicleOperatingCompany(id: string, operatingCompany
 
     return response.json() as Promise<Vehicle>;
 }
+export async function updateVehicleVin(id: string, vin: string): Promise<Vehicle> {
+    const response = await apiFetch(`/api/vehicles/${id}/vin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vin: vin.trim().toUpperCase() }),
+    });
+
+    if (!response.ok) {
+        throw new Error(response.status === 404
+            ? "Nie znaleziono pojazdu w Twojej firmie."
+            : "Nie udało się zapisać VIN-u. Sprawdź, czy zawiera 17 znaków bez liter I, O i Q.");
+    }
+
+    return response.json() as Promise<Vehicle>;
+}
+
 export async function getVehicle(id: string, range?: VehicleDetailsDateRange): Promise<VehicleDetails> {
     const params = new URLSearchParams();
 

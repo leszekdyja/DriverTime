@@ -126,6 +126,31 @@ public class VehiclesController : ControllerBase
         return Ok(MapVehicle(vehicle));
     }
 
+    [HttpPatch("{id:guid}/vin")]
+    public async Task<ActionResult<VehicleDto>> UpdateVin(
+        Guid id,
+        [FromBody] UpdateVehicleVinDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var vehicle = await BuildCompanyVehiclesQuery()
+            .AsTracking()
+            .Include(x => x.OperatingCompany)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (vehicle is null)
+        {
+            return NotFound();
+        }
+
+        vehicle.Vin = request.Vin;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(MapVehicle(vehicle));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<VehicleDetailsDto>> GetById(
         Guid id,
