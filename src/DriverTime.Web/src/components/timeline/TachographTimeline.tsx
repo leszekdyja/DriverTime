@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { summarizeTimelineSelection } from "./timelineSelection";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -666,11 +667,40 @@ function getRestAnalysisRows(segment: Segment) {
 
 export default function TachographTimeline({ activities, day, days, label, countryEntries = [], vehicleUses = [], violations = [], cardReadings = [], onViolationClick }: TachographTimelineProps) {
     const [selectedSegmentKey, setSelectedSegmentKey] = useState<string | null>(null);
+    const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+    const drag = useRef<{ pointerId: number; start: number; x: number; y: number; moved: boolean } | null>(null);
+    const suppressClick = useRef(false);
     const rows = useMemo(() => buildRows(days, day, activities, violations), [activities, day, days, violations]);
     const rowModels = useMemo(() => rows.map((row) => ({ row, segments: buildSegmentsForDay(activities, row.date, countryEntries, vehicleUses, violations), markers: buildMarkersForDay(row.date, countryEntries, vehicleUses, violations, cardReadings) })), [activities, cardReadings, countryEntries, rows, vehicleUses, violations]);
 
     const selectedSegment = rowModels.flatMap((model) => model.segments).find((segment) => segment.key === selectedSegmentKey) ?? null;
     const dateRange = rows.length > 1 ? formatRangeLabel(rows) : rows[0]?.label ?? label ?? "";
+    const selectionSummary = useMemo(() => selection
+        ? summarizeTimelineSelection(rowModels.flatMap((model) => model.segments), selection.start, selection.end)
+        : null, [rowModels, selection]);
+
+    function pointerTime(event: PointerEvent<HTMLDivElement>, fallbackDay: string) {
+        const tracks = event.currentTarget.closest(".tachograph-week-rows")?.querySelectorAll<HTMLElement>("[data-selection-day]");
+        const track = [...(tracks ?? [])].find((element) => {
+            const rect = element.getBoundingClientRect();
+            return event.clientY >= rect.top && event.clientY <= rect.bottom;
+        }) ?? event.currentTarget;
+        const rect = track.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        return dayStart(track.dataset.selectionDay ?? fallbackDay).getTime() + Math.round(ratio * 24 * 60) * 60_000;
+    }
+
+    function moveSelection(event: PointerEvent<HTMLDivElement>, date: string) {
+        const current = drag.current;
+        if (!current || current.pointerId !== event.pointerId) return;
+        if ((event.buttons & 1) === 0 && event.type !== "pointerup") { drag.current = null; return; }
+        if (!current.moved && Math.hypot(event.clientX - current.x, event.clientY - current.y) < 5) return;
+        current.moved = true;
+        suppressClick.current = true;
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
+        setSelectedSegmentKey(null);
+        setSelection({ start: current.start, end: pointerTime(event, date) });
+    }
 
 
     if (rows.length === 0) {
@@ -683,6 +713,28 @@ export default function TachographTimeline({ activities, day, days, label, count
                 <div><span>Oś czasu tachografu</span><h4>{label ?? dateRange}</h4></div>
                 <div className="tachograph-pro-meta"><strong>{dateRange}</strong><span>{rows.length === 1 ? "1 dzień" : `${rows.length} dni`}</span></div>
             </header>
+            <p className="tachograph-selection-help">Kliknij aktywność lub przeciągnij po wykresie, aby zbadać dowolny zakres. Możesz przeciągać między dniami. Dokładność zaznaczenia: 1 minuta. Godziny osi: UTC.</p>
+            <details className="tachograph-manual-selection">
+                <summary>Wpisz dokładne godziny zaznaczenia</summary>
+                <form onInput={(event) => {
+                    (event.currentTarget.elements.namedItem("to") as HTMLInputElement).setCustomValidity("");
+                }} onSubmit={(event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    const data = new FormData(form);
+                    const start = Date.parse(`${data.get("from")}:00Z`);
+                    const end = Date.parse(`${data.get("to")}:00Z`);
+                    const endInput = form.elements.namedItem("to") as HTMLInputElement;
+                    endInput.setCustomValidity(end > start ? "" : "Koniec musi być późniejszy niż początek.");
+                    if (!form.reportValidity()) return;
+                    setSelectedSegmentKey(null);
+                    setSelection({ start, end });
+                }}>
+                    <label>Od (UTC)<input type="datetime-local" name="from" required defaultValue={`${rows[0].date}T00:00`} /></label>
+                    <label>Do (UTC)<input type="datetime-local" name="to" required defaultValue={`${rows[0].date}T23:59`} onChange={(event) => event.currentTarget.setCustomValidity("")} /></label>
+                    <button className="tachograph-rule-button" type="submit">Analizuj zakres</button>
+                </form>
+            </details>
             <div className="tachograph-analysis-layout">
                 <div className="tachograph-pro-scroll">
                     <div className="tachograph-pro-grid">
@@ -694,7 +746,31 @@ export default function TachographTimeline({ activities, day, days, label, count
                                 return (
                                     <div className="tachograph-day-row" key={row.date}>
                                         <div className="tachograph-day-label"><strong>{row.dayName}</strong><span>{row.shortDate}</span><small>Jazda {formatDuration(drivingSeconds)}</small></div>
-                                        <div className="tachograph-day-track">
+                                        <div className="tachograph-day-track" data-selection-day={row.date}
+                                            onPointerDownCapture={(event) => {
+                                                if (!event.isPrimary || event.button !== 0) return;
+                                                suppressClick.current = false;
+                                                drag.current = { pointerId: event.pointerId, start: pointerTime(event, row.date), x: event.clientX, y: event.clientY, moved: false };
+                                            }}
+                                            onPointerMove={(event) => moveSelection(event, row.date)}
+                                            onPointerUp={(event) => {
+                                                if (drag.current?.pointerId !== event.pointerId) return;
+                                                moveSelection(event, row.date);
+                                                drag.current = null;
+                                                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                                            }}
+                                            onPointerCancel={() => { drag.current = null; suppressClick.current = false; setSelection(null); }}
+                                            onLostPointerCapture={() => { drag.current = null; }}
+                                            onClickCapture={(event) => {
+                                                if (suppressClick.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); }
+                                                suppressClick.current = false;
+                                            }}>
+                                            {selectionSummary && (() => {
+                                                const base = dayStart(row.date).getTime();
+                                                const from = Math.max(base, selectionSummary.start);
+                                                const to = Math.min(base + 86_400_000, selectionSummary.end);
+                                                return to > from ? <div className="tachograph-range-highlight" aria-hidden="true" style={{ left: `${(from - base) / 864_000}%`, width: `${(to - from) / 864_000}%` }} /> : null;
+                                            })()}
                                             <div className="tachograph-grid-lines" aria-hidden="true">{gridHours.map((hour) => <i className={hour % 6 === 0 ? "major" : undefined} key={hour} style={{ left: `${(hour / 24) * 100}%` }} />)}</div>
                                             <div className="tachograph-segments-row">
                                                 {segments.length === 0 && <span className="tachograph-no-data">Brak danych</span>}
@@ -706,7 +782,7 @@ export default function TachographTimeline({ activities, day, days, label, count
                                                         title={buildTooltip(segment)}
                                                         aria-label={buildTooltip(segment)}
                                                         type="button"
-                                                        onClick={() => setSelectedSegmentKey(segment.key)}
+                                                        onClick={() => { setSelection(null); setSelectedSegmentKey(segment.key); }}
                                                     >
                                                         {segment.width >= 5.5 && <span>{formatDuration(segment.seconds)}</span>}
                                                     </button>
@@ -725,7 +801,26 @@ export default function TachographTimeline({ activities, day, days, label, count
                     </div>
                 </div>
                 <aside className="tachograph-segment-panel" aria-live="polite">
-                    {selectedSegment ? (
+                    {selectionSummary ? (
+                        <>
+                            <span>Analiza zaznaczenia</span>
+                            <h5>Wybrany zakres</h5>
+                            <dl>
+                                <div><dt>Od (UTC)</dt><dd>{dateTimeFormatter.format(new Date(selectionSummary.start))}</dd></div>
+                                <div><dt>Do (UTC)</dt><dd>{dateTimeFormatter.format(new Date(selectionSummary.end))}</dd></div>
+                                <div><dt>Łączny czas</dt><dd>{formatDuration(selectionSummary.durationSeconds)}</dd></div>
+                                {orderedActivityKinds.map((kind) => <div key={kind}><dt>{kind === "UNKNOWN" ? "Brak danych / niejednoznaczne" : activityMeta[kind].label}</dt><dd>{formatDuration(selectionSummary.seconds[kind])}</dd></div>)}
+                                <div><dt>Kierowcy</dt><dd>{selectionSummary.drivers.join(", ") || "Brak danych"}</dd></div>
+                                <div><dt>Pojazdy</dt><dd>{selectionSummary.vehicles.join(", ") || "Brak danych"}</dd></div>
+                            </dl>
+                            {selectionSummary.conflictingSeconds > 0 && <p>W części zakresu nakładają się różne aktywności. Ten czas oznaczono jako niejednoznaczny.</p>}
+                            <p className="tachograph-panel-note">Podsumowanie dotyczy tylko zaznaczenia. Nie jest oceną zgodności przerw z przepisami. Kilometry nie są dzielone proporcjonalnie do czasu.</p>
+                            <details><summary>Aktywności w zaznaczeniu ({selectionSummary.segments.length})</summary>
+                                <ul className="tachograph-selection-activities">{selectionSummary.segments.map((segment, index) => <li key={index}>{dateTimeFormatter.format(segment.start)} – {timeFormatter.format(segment.end)}: {activityMeta[segment.type].label}, {formatDuration((segment.end.getTime() - segment.start.getTime()) / 1000)}</li>)}</ul>
+                            </details>
+                            <button className="tachograph-rule-button" type="button" onClick={() => setSelection(null)}>Wyczyść zaznaczenie</button>
+                        </>
+                    ) : selectedSegment ? (
                         <>
                             <span>Analiza segmentu</span>
                             <h5>{selectedSegment.label}</h5>
@@ -744,7 +839,7 @@ export default function TachographTimeline({ activities, day, days, label, count
                     ) : (
                         <div className="tachograph-segment-panel-empty">
                             <span>Analiza segmentu</span>
-                            <p>Kliknij segment aktywności, aby zobaczyć szczegóły.</p>
+                            <p>Kliknij kolorowy odcinek, aby zobaczyć aktywność. Przeciągnij po wykresie, aby zsumować kilka odcinków.</p>
                         </div>
                     )}
                 </aside>

@@ -61,7 +61,7 @@
 
 .tachograph-analysis-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
     gap: 14px;
     align-items: start;
 }
@@ -141,7 +141,76 @@
     font-weight: 800;
 }
 
+.tachograph-selection-help {
+    color: #cbd5e1;
+    font-size: 12px;
+}
+
+.tachograph-manual-selection {
+    margin-bottom: 16px;
+    color: #e2e8f0;
+    font-size: 13px;
+}
+
+.tachograph-manual-selection summary,
+.tachograph-segment-panel summary {
+    cursor: pointer;
+    padding-block: 8px;
+    color: #bfdbfe;
+    font-weight: 700;
+}
+
+.tachograph-manual-selection form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+}
+
+.tachograph-manual-selection label { display: grid; gap: 6px; }
+.tachograph-manual-selection input {
+    padding: 8px;
+    background: #111c2f;
+    color: #f1f5f9;
+    color-scheme: dark;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+}
+
+.tachograph-segment-panel p,
+.tachograph-selection-activities {
+    color: #dbe4f0;
+    line-height: 1.6;
+}
+
+.tachograph-panel-note { font-size: 12px; border-left: 3px solid #64748b; padding-left: 10px; }
+
+.tachograph-segment-panel button:focus-visible,
+.tachograph-pro-segment:focus-visible,
+.tachograph-manual-selection summary:focus-visible {
+    outline: 3px solid #fbbf24;
+    outline-offset: 3px;
+}
+
+.tachograph-range-highlight {
+    position: absolute;
+    inset-block: 0;
+    z-index: 8;
+    border: 2px solid #fbbf24;
+    background: rgba(251, 191, 36, 0.18);
+    pointer-events: none;
+}
+
+.tachograph-selection-activities {
+    padding-left: 18px;
+    max-height: 260px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
 .tachograph-day-track {
+    touch-action: none;
+    user-select: none;
     position: relative;
     min-height: 86px;
     border: 1px solid rgba(148, 163, 184, 0.2);
