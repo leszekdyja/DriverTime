@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { summarizeTimelineSelection } from "./timelineSelection";
+import { drivingSecondsSinceBreak } from "./drivingBreakCounter";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -8,6 +9,8 @@ export type TachographActivity = {
     startUtc: string;
     endUtc: string;
     activityType: string;
+    isCrew?: boolean | null;
+    cardSlot?: number | null;
     durationSeconds?: number;
     vehicleRegistration?: string | null;
     vehicleRegistrationNumber?: string | null;
@@ -152,7 +155,6 @@ type Marker = {
 type ActivityKind = "DRIVING" | "REST" | "WORK" | "AVAILABILITY" | "UNKNOWN";
 
 const secondsInDay = 24 * 60 * 60;
-const breakResetSeconds = 45 * 60;
 const dailyRestSeconds = 9 * 60 * 60;
 const weeklyRestSeconds = 24 * 60 * 60;
 const regularWeeklyRestSeconds = 45 * 60 * 60;
@@ -606,28 +608,7 @@ function buildDayTotals(segments: Segment[]) {
 }
 
 function calculateDrivingSinceLastBreak(activities: TachographActivity[], selectedSegment: Segment) {
-    let counterSeconds = 0;
-    const ordered = activities
-        .map((activity) => ({ activity, start: parseDate(activity.startUtc), end: parseDate(activity.endUtc), type: getActivityKind(activity.activityType) }))
-        .filter((item): item is { activity: TachographActivity; start: Date; end: Date; type: ActivityKind } => Boolean(item.start && item.end && item.end > item.start && item.start <= selectedSegment.end))
-        .sort((left, right) => left.start.getTime() - right.start.getTime());
-
-    for (const item of ordered) {
-        const clippedEnd = item.end > selectedSegment.end ? selectedSegment.end : item.end;
-        if (clippedEnd <= item.start) continue;
-        const seconds = (clippedEnd.getTime() - item.start.getTime()) / 1000;
-
-        if ((item.type === "REST" || item.type === "AVAILABILITY") && seconds >= breakResetSeconds) {
-            counterSeconds = 0;
-            continue;
-        }
-
-        if (item.type === "DRIVING") {
-            counterSeconds += seconds;
-        }
-    }
-
-    return counterSeconds;
+    return drivingSecondsSinceBreak(activities, selectedSegment.end.getTime());
 }
 
 function getSegmentRows(segment: Segment) {
@@ -639,6 +620,12 @@ function getSegmentRows(segment: Segment) {
     ];
 
     rows.push(["Kierowca", segment.driverName || "Brak danych"]);
+    rows.push(["Obsada według tachografu", segment.sourceActivity.isCrew === true ? "Podwójna / załoga"
+        : segment.sourceActivity.isCrew === false ? "Jednoosobowa" : "Brak potwierdzonych danych"]);
+    if (segment.sourceActivity.cardSlot === 1 || segment.sourceActivity.cardSlot === 2)
+        rows.push(["Slot karty", segment.sourceActivity.cardSlot === 2 ? "2 — drugi kierowca" : "1 — prowadzący"]);
+    if (segment.type === "AVAILABILITY" && segment.sourceActivity.isCrew === true && segment.sourceActivity.cardSlot === 2)
+        rows.push(["Przerwa w załodze", "45 min bez pomocy prowadzącemu może stanowić przerwę. Dyspozycyjność nie jest odpoczynkiem dziennym."]);
 
     if (segment.vehicleRegistration) rows.push(["Pojazd", segment.vehicleRegistration]);
     if (segment.countryStart) rows.push(["Kraj rozpoczęcia", segment.countryStart]);

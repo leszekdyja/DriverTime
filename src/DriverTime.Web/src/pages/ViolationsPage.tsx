@@ -1476,7 +1476,7 @@ function isDrivingActivity(activityType: string) {
 function isRestLikeActivity(activityType: string) {
     const normalized = activityType.trim().toUpperCase();
 
-    return normalized.includes("REST") || normalized.includes("BREAK") || normalized.includes("AVAILABILITY");
+    return normalized.includes("REST") || normalized.includes("BREAK");
 }
 
 function getActivityVehicleLabel(activity: TimelineActivity) {
@@ -1605,7 +1605,11 @@ function buildComplianceAssistantEvents(
     });
 
     const nextRest = parsedActivities.find(
-        (item) => item.start > period.start! && isRestLikeActivity(item.activity.activityType),
+        (item) => item.start > period.start! && (isRestLikeActivity(item.activity.activityType)
+            || (violation.code.toUpperCase().includes("CONTINUOUS_DRIVING")
+                && item.activity.activityType.toUpperCase() === "AVAILABILITY"
+                && item.activity.isCrew === true && item.activity.cardSlot === 2
+                && (item.end.getTime() - item.start.getTime()) >= 45 * 60000)),
     );
 
     if (nextRest) {

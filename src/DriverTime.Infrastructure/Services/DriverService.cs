@@ -148,6 +148,8 @@ public class DriverService : IDriverService
             .OrderByDescending(x => x.StartUtc)
             .Select(x => new DriverDetailsActivityDto
             {
+                IsCrew = x.IsCrew,
+                CardSlot = x.CardSlot,
                 Id = x.Id,
                 ActivityType = x.ActivityType,
                 StartUtc = x.StartUtc,

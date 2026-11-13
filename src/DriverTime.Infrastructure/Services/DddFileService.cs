@@ -230,7 +230,9 @@ public class DddFileService : IDddFileService
                     Start = x.StartUtc.ToString("O"),
                     End = x.EndUtc.ToString("O"),
                     Activity = x.ActivityType,
-                    ActivityCode = x.ActivityType
+                    ActivityCode = x.ActivityType,
+                    IsCrew = x.IsCrew,
+                    CardSlot = x.CardSlot
                 })
                 .ToList(),
             CountryEntries = dddFile.CountryEntries
@@ -307,7 +309,7 @@ public class DddFileService : IDddFileService
         var companyId = companyIdOverride ?? await ResolveImportCompanyIdAsync();
         var fileHash = await CalculateHashAsync(filePath);
 
-        var existingImport = await _dbContext.DddFiles.Include(x => x.Driver)
+        var existingImport = await _dbContext.DddFiles.Include(x => x.Driver).Include(x => x.DriverActivities)
             .FirstOrDefaultAsync(x => x.CompanyId == companyId && x.FileHash == fileHash);
         if (existingImport is not null)
         {
@@ -315,6 +317,7 @@ public class DddFileService : IDddFileService
                 || existingImport.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId))
             {
                 var identityData = await _dddParserGateway.ParseAsync(filePath);
+                var updatedCrewActivities = EnrichCrewMetadata(existingImport, identityData.Activities);
                 var vinUses = identityData.VehicleUses.Where(x => IsValidVehicleUse(x, DateTime.UtcNow)).ToList();
                 await AddMissingVehiclesAsync(companyId, existingImport.Driver.OperatingCompanyId, vinUses);
                 var previousUses = await _dbContext.VehicleUses.Where(x => x.DddFileId == existingImport.Id).ToListAsync();
@@ -325,6 +328,15 @@ public class DddFileService : IDddFileService
                         .GetValueOrDefault(VehicleVinMatcher.RegistrationKey(use.RegistrationNumber), string.Empty);
                 }
                 await _dbContext.SaveChangesAsync();
+                if (updatedCrewActivities > 0)
+                {
+                    await EvaluateComplianceAfterImportAsync(companyId, existingImport.Driver.Id);
+                    identityData.ImportId = existingImport.Id;
+                    identityData.DriverCreated = false;
+                    identityData.ImportMessage = "Uzupełniono informacje o obsadzie istniejącego odczytu. Nie utworzono duplikatu kierowcy ani importu.";
+                    await _importMonitoringService.MarkCompletedAsync(monitoringId);
+                    return identityData;
+                }
             }
             throw new DuplicateDddFileException();
         }
@@ -925,9 +937,32 @@ public class DddFileService : IDddFileService
                 EndUtc = end.Value,
                 ActivityType = string.IsNullOrWhiteSpace(activity.ActivityCode)
                     ? activity.Activity
-                    : activity.ActivityCode
+                    : activity.ActivityCode,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot is 1 or 2 ? activity.CardSlot : null
             });
         }
+    }
+
+    internal static int EnrichCrewMetadata(DddFile file, IEnumerable<ParsedDriverActivityDto> parsed)
+    {
+        var evidence = parsed.Where(x => x.IsCrew.HasValue && x.CardSlot is 1 or 2)
+            .GroupBy(x => (Start: ParseDateTime(x.Start), End: ParseDateTime(x.End),
+                Type: DriverTime.Infrastructure.Compliance.ActivityTypeNormalizer.Normalize(
+                    string.IsNullOrWhiteSpace(x.ActivityCode) ? x.Activity : x.ActivityCode)))
+            .Where(group => group.Select(x => (x.IsCrew, x.CardSlot)).Distinct().Count() == 1)
+            .ToDictionary(group => group.Key, group => group.First());
+        var changed = 0;
+        foreach (var activity in file.DriverActivities.Where(x => !x.IsCrew.HasValue))
+        {
+            var key = ((DateTime?)activity.StartUtc, (DateTime?)activity.EndUtc,
+                DriverTime.Infrastructure.Compliance.ActivityTypeNormalizer.Normalize(activity.ActivityType));
+            if (!evidence.TryGetValue(key, out var match)) continue;
+            activity.IsCrew = match.IsCrew;
+            activity.CardSlot = match.CardSlot;
+            changed++;
+        }
+        return changed;
     }
 
     internal static void AddVehicleUses(

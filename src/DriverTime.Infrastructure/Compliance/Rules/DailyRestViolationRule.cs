@@ -55,6 +55,8 @@ public class DailyRestViolationRule : IComplianceRule
         }
 
         var restPeriods = BuildContinuousRestPeriods(ordered);
+        var recordedRestPeriods = MergeRestPeriods(ordered.Where(IsRestCompatible)
+            .Select(x => new RestPeriod(x.StartUtc, x.EndUtc)));
         var dutyPeriods = 0;
         var periodsBelowRegularRest = 0;
         var periodsBelowReducedRest = 0;
@@ -65,18 +67,26 @@ public class DailyRestViolationRule : IComplianceRule
         while (true)
         {
             dutyPeriods++;
-            var windowEnd = currentPeriodStart.AddHours(24);
+            var dutyEnd = recordedRestPeriods.FirstOrDefault(x => x.StartUtc >= currentPeriodStart
+                && x.Duration >= ReducedDailyRest)?.StartUtc ?? timelineEndUtc;
+            var crewStatus = MultiManningHelper.GetStatus(ordered, currentPeriodStart, dutyEnd);
+            var isCrew = crewStatus == MultiManningHelper.CrewStatus.Confirmed;
+            var windowEnd = currentPeriodStart.AddHours(isCrew ? 30 : 24);
+            var periodRests = crewStatus != MultiManningHelper.CrewStatus.Single
+                ? recordedRestPeriods : restPeriods;
             // A previous rest may protect an incomplete download boundary, but
             // must not satisfy a later fully observed duty period or stop the scan.
-            var longestRest = FindLongestRestInWindow(restPeriods, currentPeriodStart, windowEnd,
+            var longestRest = FindLongestRestInWindow(periodRests, currentPeriodStart, windowEnd,
                 allowPreviousBoundaryRest: timelineEndUtc < windowEnd);
-            var splitRegularRest = FindSplitRegularDailyRestInWindow(restPeriods, currentPeriodStart, windowEnd);
+            var splitRegularRest = FindSplitRegularDailyRestInWindow(periodRests, currentPeriodStart, windowEnd);
             var restMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
             maxLongestRest = Max(maxLongestRest, longestRest.Duration);
 
-            if (longestRest.Duration >= RegularDailyRest || splitRegularRest is not null)
+            if (longestRest.Duration >= (isCrew ? ReducedDailyRest : RegularDailyRest)
+                || (!isCrew && splitRegularRest is not null))
             {
-                var restEndUtc = splitRegularRest?.SecondRest.EndUtc ?? longestRest.EndUtc;
+                var restEndUtc = !isCrew && splitRegularRest is not null
+                    ? splitRegularRest.SecondRest.EndUtc : longestRest.EndUtc;
                 if (restEndUtc <= currentPeriodStart)
                 {
                     break;
@@ -111,7 +121,8 @@ public class DailyRestViolationRule : IComplianceRule
                     analysisWindowEndUtc: windowEnd,
                     longestRest: longestRest,
                     reason: "ReducedDailyRest",
-                    orderedActivities: ordered));
+                    orderedActivities: ordered,
+                    crewStatus: crewStatus));
 
                 var nextDuty = longestRest.EndUtc <= currentPeriodStart
                     ? GetNextDutyAfterPeriodStart(dutyActivities, currentPeriodStart)
@@ -125,7 +136,8 @@ public class DailyRestViolationRule : IComplianceRule
                 continue;
             }
 
-            if (!ShouldReportMissingReducedRest(dutyActivities, restPeriods, currentPeriodStart, windowEnd, longestRest))
+            if (!(timelineEndUtc >= windowEnd)
+                && !ShouldReportMissingReducedRest(dutyActivities, periodRests, currentPeriodStart, windowEnd, longestRest))
             {
                 break;
             }
@@ -140,7 +152,8 @@ public class DailyRestViolationRule : IComplianceRule
                 analysisWindowEndUtc: windowEnd,
                 longestRest: longestRest,
                 reason: "MissingContinuousReducedDailyRest",
-                orderedActivities: ordered));
+                orderedActivities: ordered,
+                crewStatus: crewStatus));
 
             var nextPeriodStart = dutyActivities
                 .FirstOrDefault(x => x.StartUtc >= windowEnd);
@@ -174,7 +187,8 @@ public class DailyRestViolationRule : IComplianceRule
         DateTime analysisWindowEndUtc,
         RestPeriod longestRest,
         string reason,
-        IReadOnlyList<TimelineActivity> orderedActivities)
+        IReadOnlyList<TimelineActivity> orderedActivities,
+        MultiManningHelper.CrewStatus crewStatus)
     {
         var longestRestMinutes = (long)Math.Round(longestRest.Duration.TotalMinutes);
         var requiredRestMinutes = reason == "MissingContinuousReducedDailyRest"
@@ -184,10 +198,13 @@ public class DailyRestViolationRule : IComplianceRule
         var finalDescription = BuildDescription(reason, startUtc, analysisWindowEndUtc, longestRest.Duration);
         var hasUnknown = orderedActivities.Any(x => x.StartUtc < analysisWindowEndUtc && x.EndUtc > startUtc
             && ActivityTypeNormalizer.Normalize(x.ActivityType) == ActivityTypeNormalizer.Unknown);
-        if (hasUnknown)
+        var uncertainCrew = crewStatus == MultiManningHelper.CrewStatus.Uncertain;
+        if (hasUnknown || uncertainCrew)
         {
             severity = "WARNING";
             finalDescription = "Niepełne dane do oceny odpoczynku dziennego. Niepotwierdzony okres nie jest ani pracą, ani odpoczynkiem. Wymagana weryfikacja pliku DDD i wpisów ręcznych, bez przesądzania naruszenia.";
+            if (uncertainCrew)
+                finalDescription = "Wymaga weryfikacji podwójnej obsady: część okresu ma oznaczenie załogi, ale dane nie potwierdzają jej pełnego przebiegu. Wynik dla okna 24h nie jest potwierdzonym naruszeniem; należy sprawdzić możliwość zastosowania okna 30h.";
         }
         var trace = BuildRuleExecutionTrace(
             orderedActivities,
@@ -199,7 +216,7 @@ public class DailyRestViolationRule : IComplianceRule
             missingRestMinutes,
             reason);
 
-        if (hasUnknown) trace.IsEstimated = true;
+        if (hasUnknown || uncertainCrew) trace.IsEstimated = true;
         return new ComplianceViolationCandidate
         {
             Code = RuleCode,
@@ -209,12 +226,14 @@ public class DailyRestViolationRule : IComplianceRule
             PeriodStartUtc = startUtc,
             PeriodEndUtc = endUtc,
             ActualMinutes = longestRestMinutes,
-            LimitMinutes = RegularDailyRestMinutes,
+            LimitMinutes = requiredRestMinutes,
             ExecutionTrace = trace,
             Metadata = new Dictionary<string, object>
             {
                 ["restMinutes"] = longestRestMinutes,
-                ["requiresVerification"] = hasUnknown ? "true" : "false",
+                ["requiresVerification"] = hasUnknown || uncertainCrew ? "true" : "false",
+                ["multiManning"] = crewStatus.ToString(),
+                ["analysisWindowHours"] = (long)(analysisWindowEndUtc - startUtc).TotalHours,
                 ["actualRestMinutes"] = longestRestMinutes,
                 ["requiredRestMinutes"] = requiredRestMinutes,
                 ["missingRestMinutes"] = missingRestMinutes,
@@ -253,7 +272,7 @@ public class DailyRestViolationRule : IComplianceRule
             AnalysisWindowEndUtc = analysisWindowEndUtc,
             DetectedAtUtc = detectedAtUtc,
             IsEstimated = false,
-            Summary = $"W analizowanym oknie 24h najd?u?szy odpoczynek wyni?s? {FormatDuration(longestRest.Duration)}. Wymagane minimum to {FormatDuration(TimeSpan.FromMinutes(requiredRestMinutes))}. Brakuje {FormatDuration(TimeSpan.FromMinutes(missingRestMinutes))}.",
+            Summary = $"W analizowanym oknie {(int)(analysisWindowEndUtc - analysisWindowStartUtc).TotalHours}h najd?u?szy odpoczynek wyni?s? {FormatDuration(longestRest.Duration)}. Wymagane minimum to {FormatDuration(TimeSpan.FromMinutes(requiredRestMinutes))}. Brakuje {FormatDuration(TimeSpan.FromMinutes(missingRestMinutes))}.",
             Metrics = new Dictionary<string, string>
             {
                 ["Okno analizy"] = $"{FormatDateTime(analysisWindowStartUtc)} - {FormatDateTime(analysisWindowEndUtc)}",
@@ -270,7 +289,7 @@ public class DailyRestViolationRule : IComplianceRule
             trace,
             ref stepOrder,
             analysisWindowStartUtc,
-            "Start okna analizy 24h dla odpoczynku dziennego.",
+            $"Start okna analizy {(int)(analysisWindowEndUtc - analysisWindowStartUtc).TotalHours}h dla odpoczynku dziennego.",
             counterMinutes: 0,
             isResetPoint: false,
             isViolationPoint: false,
@@ -670,6 +689,7 @@ public class DailyRestViolationRule : IComplianceRule
 
     private static bool IsDutyActivity(TimelineActivity activity) =>
         activity.ActivityType.Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase) ||
+        activity.ActivityType.Equals(ActivityTypeNormalizer.Availability, StringComparison.OrdinalIgnoreCase) ||
         activity.ActivityType.Equals(ActivityTypeNormalizer.Work, StringComparison.OrdinalIgnoreCase);
 
     private static string FormatDuration(TimeSpan duration) =>
@@ -681,11 +701,12 @@ public class DailyRestViolationRule : IComplianceRule
         DateTime analysisWindowEndUtc,
         TimeSpan longestRest)
     {
-        var window = $"od {FormatDateTime(analysisWindowStartUtc)} do {FormatDateTime(analysisWindowEndUtc)}";
+        var hours = (int)(analysisWindowEndUtc - analysisWindowStartUtc).TotalHours;
+        var window = $"{hours}h od {FormatDateTime(analysisWindowStartUtc)} do {FormatDateTime(analysisWindowEndUtc)}";
 
         return reason == "ReducedDailyRest"
-            ? $"Wykryto skrócony odpoczynek dzienny w wymaganym oknie 24h {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)} zamiast regularnych 11 godzin."
-            : $"Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie 24h {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)}.";
+            ? $"Wykryto skrócony odpoczynek dzienny w wymaganym oknie {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)} zamiast regularnych 11 godzin."
+            : $"Nie znaleziono ciągłego odpoczynku minimum 9 godzin w wymaganym oknie {window}. Najdłuższy ciągły odpoczynek wyniósł {FormatDuration(longestRest)}.";
     }
 
     private static string FormatDateTime(DateTime value) =>

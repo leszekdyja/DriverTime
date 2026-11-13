@@ -8,6 +8,8 @@ export type DriverImport = {
 };
 
 export type DriverActivity = {
+    isCrew?: boolean | null;
+    cardSlot?: number | null;
     id: string;
     activityType: string;
     startUtc: string;

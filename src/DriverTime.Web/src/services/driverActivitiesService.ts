@@ -9,6 +9,8 @@ export type DriverActivity = {
     startUtc: string;
     endUtc: string;
     activityType: string;
+    isCrew?: boolean | null;
+    cardSlot?: number | null;
     durationSeconds: number;
     vehicleRegistration?: string;
     vehicleRegistrationNumber?: string;

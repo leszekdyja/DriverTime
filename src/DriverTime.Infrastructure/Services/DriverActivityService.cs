@@ -90,7 +90,9 @@ public class DriverActivityService : IDriverActivityService
                 DriverCardNumber = x.DddFile.DriverCardNumber,
                 StartUtc = x.StartUtc,
                 EndUtc = x.EndUtc,
-                ActivityType = x.ActivityType
+                ActivityType = x.ActivityType,
+                IsCrew = x.IsCrew,
+                CardSlot = x.CardSlot
             })
             .ToListAsync();
 
@@ -138,6 +140,8 @@ public class DriverActivityService : IDriverActivityService
                 StartUtc = clippedStart,
                 EndUtc = clippedEnd,
                 ActivityType = activity.ActivityType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 DurationSeconds = durationSeconds > int.MaxValue
                     ? int.MaxValue
                     : (int)durationSeconds,
@@ -194,7 +198,8 @@ public class DriverActivityService : IDriverActivityService
                 x.EndUtc,
                 ActivityType = x.ActivityType.ToUpperInvariant()
             })
-            .Select(x => x.OrderBy(activity => activity.Id).First())
+            .Select(x => x.OrderByDescending(activity => activity.IsCrew.HasValue)
+                .ThenBy(activity => activity.Id).First())
             .OrderBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
@@ -278,6 +283,10 @@ public class DriverActivityService : IDriverActivityService
         public DateTime EndUtc { get; set; }
 
         public string ActivityType { get; set; } = string.Empty;
+
+        public bool? IsCrew { get; set; }
+
+        public int? CardSlot { get; set; }
     }
 
     private sealed class VehicleUseReportSource

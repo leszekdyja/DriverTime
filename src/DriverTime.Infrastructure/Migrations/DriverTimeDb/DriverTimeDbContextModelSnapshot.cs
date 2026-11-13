@@ -498,6 +498,9 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("CardSlot")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("DddFileId")
                         .HasColumnType("uuid");
 
@@ -506,6 +509,9 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
 
                     b.Property<Guid?>("ImportFileId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool?>("IsCrew")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("StartUtc")
                         .HasColumnType("timestamp with time zone");

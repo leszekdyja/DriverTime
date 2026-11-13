@@ -11,6 +11,10 @@ public class TimelineActivity
 
     public string ActivityType { get; set; } = string.Empty;
 
+    public bool? IsCrew { get; set; }
+
+    public int? CardSlot { get; set; }
+
     public DateTime StartUtc { get; set; }
 
     public DateTime EndUtc { get; set; }

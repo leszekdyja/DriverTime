@@ -1,6 +1,8 @@
 import { apiFetch } from "./apiClient";
 
 export type DriverActivity = {
+    is_crew?: boolean | null;
+    card_slot?: number | null;
     start: string;
     end: string;
     activity: string;

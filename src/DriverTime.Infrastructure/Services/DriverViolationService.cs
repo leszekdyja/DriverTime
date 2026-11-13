@@ -1,21 +1,19 @@
 using System.Globalization;
+using DriverTime.Application.Compliance;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
+using DriverTime.Domain.Compliance;
 using DriverTime.Infrastructure.Compliance;
+using DriverTime.Infrastructure.Compliance.Rules;
 using DriverTime.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DriverTime.Infrastructure.Services;
 
 public class DriverViolationService : IDriverViolationService
 {
-    private static readonly TimeSpan ContinuousDrivingLimit = TimeSpan.FromHours(4.5);
-    private static readonly TimeSpan FullBreak = TimeSpan.FromMinutes(45);
-    private static readonly TimeSpan FirstSplitBreak = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan SecondSplitBreak = TimeSpan.FromMinutes(30);
-    private static readonly TimeSpan DailyDrivingLimit = TimeSpan.FromHours(9);
-    private static readonly TimeSpan ExtendedDailyDrivingLimit = TimeSpan.FromHours(10);
     private static readonly TimeSpan ReducedDailyRest = TimeSpan.FromHours(9);
     private static readonly TimeSpan RegularDailyRest = TimeSpan.FromHours(11);
     private static readonly TimeSpan WeeklyDrivingLimit = TimeSpan.FromHours(56);
@@ -99,9 +97,7 @@ public class DriverViolationService : IDriverViolationService
 
             var restBlocks = BuildRestBlocks(ordered);
 
-            AddContinuousDrivingViolations(ordered, violations);
-            AddDailyDrivingViolations(ordered, violations);
-            AddDailyRestViolations(ordered, restBlocks, violations);
+            AddDrivingAndDailyRestViolations(ordered, violations);
             AddWeeklyDrivingViolations(ordered, violations);
             AddWeeklyRestViolations(ordered, restBlocks, violations);
             AddWeeklyRestCompensationViolations(ordered, restBlocks, violations);
@@ -114,261 +110,63 @@ public class DriverViolationService : IDriverViolationService
             .ToList();
     }
 
-    private static void AddContinuousDrivingViolations(
+    private static void AddDrivingAndDailyRestViolations(
         IReadOnlyList<DriverActivity> activities,
         ICollection<DriverViolationDto> violations)
     {
-        var driving = TimeSpan.Zero;
-        var firstSplitTaken = false;
-        DateTime? periodStart = null;
-        DriverActivity? lastDriving = null;
-
-        foreach (var activity in activities)
+        var driverId = activities[0].DddFile.DriverId ?? Guid.Empty;
+        var coverage = activities.GroupBy(x => x.DddFileId)
+            .ToDictionary(x => x.Key, x => x.Max(activity => activity.EndUtc));
+        var timeline = TimelineBuilderService.NormalizeTimeline(activities.Select(x => new TimelineActivity
         {
-            var duration = GetDuration(activity);
-
-            if (IsActivity(activity, "DRIVING"))
-            {
-                periodStart ??= activity.StartUtc;
-                driving += duration;
-                lastDriving = activity;
-                continue;
-            }
-
-            if (!IsBreakActivity(activity))
-            {
-                if (IsActivity(activity, "WORK"))
-                {
-                    firstSplitTaken = false;
-                }
-
-                continue;
-            }
-
-            var completesBreak = duration >= FullBreak
-                || (firstSplitTaken && duration >= SecondSplitBreak);
-
-            if (completesBreak)
-            {
-                AddContinuousDrivingViolation(
-                    lastDriving,
-                    periodStart,
-                    driving,
-                    violations);
-
-                driving = TimeSpan.Zero;
-                periodStart = null;
-                lastDriving = null;
-                firstSplitTaken = false;
-            }
-            else if (!firstSplitTaken && duration >= FirstSplitBreak)
-            {
-                firstSplitTaken = true;
-            }
-        }
-
-        AddContinuousDrivingViolation(lastDriving, periodStart, driving, violations);
-    }
-
-    private static void AddContinuousDrivingViolation(
-        DriverActivity? activity,
-        DateTime? periodStart,
-        TimeSpan driving,
-        ICollection<DriverViolationDto> violations)
-    {
-        if (activity is null || driving <= ContinuousDrivingLimit)
+            SourceActivityId = x.Id, DriverId = driverId,
+            SourceCoverageEndUtc = coverage[x.DddFileId],
+            ActivityType = ActivityTypeNormalizer.Normalize(x.ActivityType),
+            StartUtc = x.StartUtc, EndUtc = x.EndUtc,
+            IsCrew = x.IsCrew, CardSlot = x.CardSlot
+        }));
+        IComplianceRule[] rules =
+        [
+            new ContinuousDrivingBreakRule(NullLogger<ContinuousDrivingBreakRule>.Instance),
+            new DailyDrivingLimitRule(NullLogger<DailyDrivingLimitRule>.Instance),
+            new DailyRestViolationRule(NullLogger<DailyRestViolationRule>.Instance),
+            new ReducedDailyRestCounterRule(NullLogger<ReducedDailyRestCounterRule>.Instance)
+        ];
+        foreach (var candidate in rules.SelectMany(rule => rule.Evaluate(driverId, timeline).Violations))
         {
-            return;
-        }
+            // A permitted 9-11h rest is information, not a confirmed infringement.
+            if (candidate.Metadata.TryGetValue("reason", out var reason)
+                && Equals(reason, "ReducedDailyRest")
+                && candidate.Severity != "WARNING") continue;
 
-        violations.Add(CreateViolation(
-            activity,
-            "CONTINUOUS_DRIVING_OVER_4H30",
-            "Brak prawidlowej pauzy po 4h30 jazdy",
-            periodStart ?? activity.StartUtc,
-            activity.EndUtc,
-            driving,
-            ContinuousDrivingLimit,
-            $"Jazda trwala {FormatDuration(driving)} bez pauzy 45 minut lub prawidlowej sekwencji 15 + 30 minut.",
-            "high"));
-    }
-
-    private static void AddDailyDrivingViolations(
-        IReadOnlyList<DriverActivity> activities,
-        ICollection<DriverViolationDto> violations)
-    {
-        foreach (var week in activities
-                     .Where(x => IsActivity(x, "DRIVING"))
-                     .GroupBy(x => GetWeekStart(x.StartUtc)))
-        {
-            var extendedDaysUsed = 0;
-
-            foreach (var day in week.GroupBy(x => x.StartUtc.Date).OrderBy(x => x.Key))
+            var reference = activities.FirstOrDefault(x => x.Id == timeline
+                .FirstOrDefault(t => t.StartUtc >= candidate.PeriodStartUtc)?.SourceActivityId) ?? activities[0];
+            var code = candidate.Code switch
             {
-                var driving = SumDuration(day);
-                var firstActivity = day.OrderBy(x => x.StartUtc).First();
-
-                if (driving > DailyDrivingLimit)
-                {
-                    extendedDaysUsed++;
-                }
-
-                if (driving > ExtendedDailyDrivingLimit)
-                {
-                    violations.Add(CreateViolation(
-                        firstActivity,
-                        "DAILY_DRIVING_OVER_10H",
-                        "Przekroczony dzienny czas jazdy 10h",
-                        day.Key,
-                        day.Max(x => x.EndUtc),
-                        driving,
-                        ExtendedDailyDrivingLimit,
-                        $"Dzienny czas jazdy wyniosl {FormatDuration(driving)} i przekroczyl bezwzgledny limit 10 godzin.",
-                        "high"));
-                    continue;
-                }
-
-                if (driving <= DailyDrivingLimit)
-                {
-                    continue;
-                }
-
-                if (extendedDaysUsed <= 2)
-                {
-                    continue;
-                }
-
-                violations.Add(CreateViolation(
-                    firstActivity,
-                    "DAILY_DRIVING_EXTENSION_OVER_TWO_PER_WEEK",
-                    "Trzecie wydluzenie jazdy do 10h w tygodniu",
-                    day.Key,
-                    day.Max(x => x.EndUtc),
-                    driving,
-                    DailyDrivingLimit,
-                    $"To {extendedDaysUsed}. dzien w tygodniu z jazda powyzej 9 godzin. Dozwolone sa najwyzej dwa takie wydluzenia.",
-                    "medium"));
-            }
-        }
-    }
-
-    private static void AddDailyRestViolations(
-        IReadOnlyList<DriverActivity> activities,
-        IReadOnlyList<RestBlock> restBlocks,
-        ICollection<DriverViolationDto> violations)
-    {
-        var qualifyingRests = restBlocks
-            .Where(x => x.RestDuration >= ReducedDailyRest)
-            .OrderBy(x => x.StartUtc)
-            .ToList();
-
-        if (qualifyingRests.Count == 0)
-        {
-            AddNoDailyRestViolation(activities, violations);
-            return;
-        }
-
-        var reducedRestsSinceWeeklyRest = 0;
-
-        for (var index = 0; index < qualifyingRests.Count; index++)
-        {
-            var current = qualifyingRests[index];
-
-            if (current.RestDuration >= ReducedWeeklyRest)
+                "CONTINUOUS_DRIVING_BREAK" => "CONTINUOUS_DRIVING_OVER_4H30",
+                "DAILY_DRIVING_LIMIT" => candidate.ActualMinutes > 600
+                    ? "DAILY_DRIVING_OVER_10H" : "DAILY_DRIVING_EXTENSION_OVER_TWO_PER_WEEK",
+                "DAILY_REST" => candidate.Metadata.TryGetValue("multiManning", out var crew)
+                    && Equals(crew, "Confirmed") ? "MULTI_MANNING_DAILY_REST_OVER_30H" : "DAILY_REST_NOT_COMPLETED_IN_24H",
+                "REDUCED_DAILY_REST_COUNTER" => "DAILY_REST_REDUCTIONS_OVER_THREE",
+                _ => candidate.Code
+            };
+            var title = candidate.Code switch
             {
-                reducedRestsSinceWeeklyRest = 0;
-            }
-            else if (current.RestDuration < RegularDailyRest)
-            {
-                var previousQualifyingEnd = index > 0
-                    ? qualifyingRests[index - 1].EndUtc
-                    : activities[0].StartUtc;
-                var isSplitRegularRest = restBlocks.Any(x =>
-                    x.StartUtc >= previousQualifyingEnd
-                    && x.EndUtc <= current.StartUtc
-                    && x.RestDuration >= TimeSpan.FromHours(3)
-                    && x.RestDuration < ReducedDailyRest
-                    && x.RestDuration + current.RestDuration >= TimeSpan.FromHours(12));
-
-                if (!isSplitRegularRest)
-                {
-                    reducedRestsSinceWeeklyRest++;
-
-                    if (reducedRestsSinceWeeklyRest > 3)
-                    {
-                        violations.Add(CreateViolation(
-                            current.ReferenceActivity,
-                            "DAILY_REST_REDUCTIONS_OVER_THREE",
-                            "Zbyt wiele skroconych odpoczynkow dziennych",
-                            current.StartUtc,
-                            current.EndUtc,
-                            current.RestDuration,
-                            RegularDailyRest,
-                            "Wykryto wiecej niz trzy odpoczynki dzienne trwajace od 9 do 11 godzin pomiedzy odpoczynkami tygodniowymi.",
-                            "medium"));
-                    }
-                }
-            }
-
-            var anchor = current.EndUtc;
-            var next = qualifyingRests.Skip(index + 1).FirstOrDefault();
-            var multiManning = HasMarkerBetween(activities, anchor, next?.EndUtc, IsMultiManningMarker);
-            var window = multiManning ? TimeSpan.FromHours(30) : TimeSpan.FromHours(24);
-            var deadline = anchor + window;
-
-            if (next is not null && next.EndUtc <= deadline)
-            {
-                continue;
-            }
-
-            var dataEnd = activities[^1].EndUtc;
-
-            if (dataEnd <= deadline)
-            {
-                continue;
-            }
-
-            var actualEnd = next?.EndUtc ?? dataEnd;
-            violations.Add(CreateViolation(
-                current.ReferenceActivity,
-                multiManning
-                    ? "MULTI_MANNING_DAILY_REST_OVER_30H"
-                    : "DAILY_REST_NOT_COMPLETED_IN_24H",
-                multiManning
-                    ? "Brak odpoczynku 9h w okresie 30h przy zalodze"
-                    : "Odpoczynek dzienny nieodbyty w okresie 24h",
-                anchor,
-                actualEnd,
-                actualEnd - anchor,
-                window,
-                multiManning
-                    ? "Przy zalodze kilkuosobowej odpoczynek co najmniej 9 godzin nie zostal zakonczony w okresie 30 godzin."
-                    : "Odpoczynek co najmniej 9 godzin nie zostal zakonczony w ciagu 24 godzin od konca poprzedniego odpoczynku.",
-                "high"));
+                "CONTINUOUS_DRIVING_BREAK" => "Przerwa po 4 godz. 30 min jazdy",
+                "DAILY_DRIVING_LIMIT" => "Dzienny czas jazdy",
+                "DAILY_REST" => "Odpoczynek dzienny",
+                "REDUCED_DAILY_REST_COUNTER" => "Liczba skróconych odpoczynków dziennych",
+                _ => candidate.RuleName
+            };
+            var violation = CreateViolation(reference, code, title,
+                candidate.PeriodStartUtc, candidate.PeriodEndUtc,
+                TimeSpan.FromMinutes(candidate.ActualMinutes),
+                TimeSpan.FromMinutes(candidate.LimitMinutes),
+                candidate.Description, candidate.Severity.ToLowerInvariant());
+            violation.Metadata = candidate.Metadata;
+            violations.Add(violation);
         }
-    }
-
-    private static void AddNoDailyRestViolation(
-        IReadOnlyList<DriverActivity> activities,
-        ICollection<DriverViolationDto> violations)
-    {
-        var span = activities[^1].EndUtc - activities[0].StartUtc;
-
-        if (span < TimeSpan.FromHours(24))
-        {
-            return;
-        }
-
-        violations.Add(CreateViolation(
-            activities[0],
-            "DAILY_REST_BELOW_9H",
-            "Brak minimalnego odpoczynku dziennego 9h",
-            activities[0].StartUtc,
-            activities[^1].EndUtc,
-            TimeSpan.Zero,
-            ReducedDailyRest,
-            "W analizowanym okresie nie znaleziono ciaglego odpoczynku dziennego trwajacego co najmniej 9 godzin.",
-            "high"));
     }
 
     private static void AddWeeklyDrivingViolations(
@@ -701,21 +499,6 @@ public class DriverViolationService : IDriverViolationService
             ISOWeek.ToDateTime(year, week, DayOfWeek.Monday),
             DateTimeKind.Utc);
     }
-
-    private static bool HasMarkerBetween(
-        IEnumerable<DriverActivity> activities,
-        DateTime start,
-        DateTime? end,
-        Func<DriverActivity, bool> predicate) =>
-        activities.Any(x => x.StartUtc >= start && (!end.HasValue || x.StartUtc < end) && predicate(x));
-
-    private static bool IsBreakActivity(DriverActivity activity) =>
-        IsActivity(activity, "REST")
-        || IsActivity(activity, "AVAILABILITY")
-        || (IsMultiManningMarker(activity) && GetDuration(activity) >= FullBreak);
-
-    private static bool IsMultiManningMarker(DriverActivity activity) =>
-        IsAnyActivity(activity, "MULTI_MANNING", "MULTI_MANNING_AVAILABILITY", "CREW", "TEAM");
 
     private static bool IsFerryTrainMarker(DriverActivity activity) =>
         IsAnyActivity(activity, "FERRY", "TRAIN", "FERRY_TRAIN", "FERRY/TRAIN");

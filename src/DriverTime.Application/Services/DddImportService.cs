@@ -31,7 +31,9 @@ public class DddImportService : IDddImportService
                     ? end
                     : DateTime.UtcNow,
 
-                ActivityType = activity.Activity
+                ActivityType = activity.Activity,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot is 1 or 2 ? activity.CardSlot : null
             });
         }
 

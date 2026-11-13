@@ -46,7 +46,9 @@ public class DddImportService : IDddImportService
                 DddFileId = dddFile.Id,
                 StartUtc = startUtc,
                 EndUtc = endUtc,
-                ActivityType = activity.Activity
+                ActivityType = activity.Activity,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot is 1 or 2 ? activity.CardSlot : null
             };
 
             _dbContext.DriverActivities.Add(driverActivity);

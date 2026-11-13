@@ -65,6 +65,8 @@ public class TimelineBuilderService : ITimelineBuilderService
             {
                 x.Id,
                 x.ActivityType,
+                x.IsCrew,
+                x.CardSlot,
                 x.StartUtc,
                 x.EndUtc,
                 x.DddFileId
@@ -90,6 +92,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                     ? EnsureUtc(coverageEnd) : null,
                 DriverId = driverId,
                 ActivityType = normalizedType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 StartUtc = EnsureUtc(activity.StartUtc),
                 EndUtc = EnsureUtc(activity.EndUtc)
             });
@@ -176,13 +180,14 @@ public class TimelineBuilderService : ITimelineBuilderService
             timelineRestMinutes);
     }
 
-    private static IReadOnlyList<TimelineActivity> NormalizeTimeline(
+    internal static IReadOnlyList<TimelineActivity> NormalizeTimeline(
         IEnumerable<TimelineActivity> rawActivities)
     {
         var ordered = rawActivities
             .Where(x => x.StartUtc < x.EndUtc)
             .OrderByDescending(x => x.SourceCoverageEndUtc ?? DateTime.MinValue)
             .ThenByDescending(x => GetActivityPriority(x.ActivityType))
+            .ThenByDescending(x => x.IsCrew.HasValue)
             .ThenBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
             .ToList();
@@ -197,6 +202,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                 SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 StartUtc = activity.StartUtc,
                 EndUtc = activity.EndUtc
             });
@@ -244,7 +251,9 @@ public class TimelineBuilderService : ITimelineBuilderService
 
                 var coverageComparison = existing.SourceCoverageEndUtc.HasValue && segment.SourceCoverageEndUtc.HasValue
                     ? DateTime.Compare(existing.SourceCoverageEndUtc.Value, segment.SourceCoverageEndUtc.Value) : 0;
-                if (coverageComparison > 0 || (coverageComparison == 0 && existingPriority >= segmentPriority))
+                var preferExistingMetadata = existing.IsCrew.HasValue || !segment.IsCrew.HasValue;
+                if (coverageComparison > 0 || (coverageComparison == 0
+                    && (existingPriority > segmentPriority || (existingPriority == segmentPriority && preferExistingMetadata))))
                 {
                     next.AddRange(SubtractOverlap(segment, existing));
                     continue;
@@ -287,6 +296,7 @@ public class TimelineBuilderService : ITimelineBuilderService
                 var previous = merged[^1];
 
                 if (previous.ActivityType == activity.ActivityType &&
+                    previous.IsCrew == activity.IsCrew && previous.CardSlot == activity.CardSlot &&
                     previous.EndUtc == activity.StartUtc)
                 {
                     previous.EndUtc = activity.EndUtc;
@@ -300,6 +310,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                 SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 StartUtc = activity.StartUtc,
                 EndUtc = activity.EndUtc
             });
@@ -320,6 +332,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                 SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 StartUtc = activity.StartUtc,
                 EndUtc = overlap.StartUtc
             };
@@ -333,6 +347,8 @@ public class TimelineBuilderService : ITimelineBuilderService
                 SourceCoverageEndUtc = activity.SourceCoverageEndUtc,
                 DriverId = activity.DriverId,
                 ActivityType = activity.ActivityType,
+                IsCrew = activity.IsCrew,
+                CardSlot = activity.CardSlot,
                 StartUtc = overlap.EndUtc,
                 EndUtc = activity.EndUtc
             };
