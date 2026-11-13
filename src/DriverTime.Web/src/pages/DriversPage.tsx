@@ -289,8 +289,8 @@ export default function DriversPage() {
                                         <th>Wazna do</th>
                                         <th>Kraj wydania</th>
                                         <th>Firma</th>
-                                        <th>Planowanie</th>
-                                        <th>Blokady planowania</th>
+                                        <th className="desktop-planning-setting">Planowanie</th>
+                                        <th className="desktop-planning-setting">Blokady planowania</th>
                                         <th>Status kierowcy</th>
                                         <th></th>
                                     </tr>
@@ -298,22 +298,22 @@ export default function DriversPage() {
                                 <tbody>
                                     {visibleDrivers.map((driver) => (
                                         <tr key={driver.id}>
-                                            <td>{driver.lastName}</td>
-                                            <td>{driver.firstName}</td>
-                                            <td>{driver.cardNumber}</td>
-                                            <td>
+                                            <td data-label="Nazwisko">{driver.lastName}</td>
+                                            <td data-label="Imię">{driver.firstName}</td>
+                                            <td data-label="Numer karty">{driver.cardNumber}</td>
+                                            <td data-label="Ważna do">
                                                 {driver.cardExpiryDate
                                                     ? new Date(driver.cardExpiryDate).toLocaleDateString("pl-PL")
                                                     : "Brak danych"}
                                             </td>
-                                            <td>{driver.cardIssuingCountry || "Brak danych"}</td>
-                                            <td>
-                                                <select value={driver.operatingCompanyId ?? ""} onChange={event => void assignCompany(driver, event.target.value || null)}>
+                                            <td data-label="Kraj wydania">{driver.cardIssuingCountry || "Brak danych"}</td>
+                                            <td data-label="Firma">
+                                                <select aria-label={`Firma kierowcy ${driver.lastName} ${driver.firstName}`} value={driver.operatingCompanyId ?? ""} onChange={event => void assignCompany(driver, event.target.value || null)}>
                                                     <option value="">Bez przypisania</option>
                                                     {companies.filter(company => company.active || company.id === driver.operatingCompanyId).map(company => <option key={company.id} value={company.id}>{company.name}{company.active ? "" : " (nieaktywna)"}</option>)}
                                                 </select>
                                             </td>
-                                            <td>
+                                            <td data-label="Planowanie" className="desktop-planning-setting">
                                                 <label className="driver-table-toggle">
                                                     <input
                                                         type="checkbox"
@@ -323,7 +323,7 @@ export default function DriversPage() {
                                                     <span>{driver.includeInPlanning ? "Tak" : "Nie"}</span>
                                                 </label>
                                             </td>
-                                            <td>
+                                            <td data-label="Blokady planowania" className="desktop-planning-setting">
                                                 <div className="driver-row-actions">
                                                     <label><input type="checkbox" checked={driver.planningNoNightDuty} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoNightDuty: event.target.checked })} /> Nie RN</label>
                                                     <label><input type="checkbox" checked={driver.planningNoWeekends} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoWeekends: event.target.checked })} /> Bez weekendów</label>
@@ -332,7 +332,7 @@ export default function DriversPage() {
                                                     <label><input type="checkbox" checked={driver.planningNoDaysOff} onChange={(event) => void updateDriverPlanningSettings(driver, { planningNoDaysOff: event.target.checked })} /> Bez dni wolnych</label>
                                                 </div>
                                             </td>
-                                            <td>
+                                            <td data-label="Status kierowcy">
                                                 <label className="driver-table-toggle" title="Nieaktywny kierowca zachowuje historię, ale nie jest planowany automatycznie i nie generuje alertów odczytu ani ważności karty.">
                                                     <input type="checkbox" checked={!driver.isActive}
                                                         onChange={event => void updateDriverPlanningSettings(driver, { isActive: !event.target.checked })}
@@ -340,7 +340,7 @@ export default function DriversPage() {
                                                     <span>Nieaktywny</span>
                                                 </label>
                                             </td>
-                                            <td>
+                                            <td data-label="Akcje">
                                                 <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/drivers/${driver.id}`}>
                                                     Szczegóły

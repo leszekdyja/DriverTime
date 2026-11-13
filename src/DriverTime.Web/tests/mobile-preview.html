@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DriverTime — test mobilny</title></head>
+<body style="margin:0;background:#dbe3ee;font-family:system-ui;padding:16px">
+<h1 style="font-size:18px">Lokalny test interfejsu — wyłącznie fikcyjne dane</h1>
+<nav style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+<a href="?screen=drivers&width=390">Telefon: kierowcy</a><a href="?screen=vehicles&width=390">Telefon: pojazdy</a>
+<a href="?screen=timeline&width=390">Telefon: wykres</a><a href="?screen=planning&width=390">Telefon: blokada grafiku</a>
+<a href="?screen=drivers&width=320">Mały telefon</a><a href="?screen=drivers&width=768">Tablet</a>
+<a href="?screen=planning&width=1440">Komputer: grafik</a>
+</nav>
+<iframe title="Podgląd DriverTime" style="display:block;border:1px solid #94a3b8;border-radius:12px;background:white" height="844"></iframe>
+<script type="module">
+const params = new URLSearchParams(location.search);
+const frame = document.querySelector('iframe');
+const width = Number(params.get('width') || 390);
+frame.width = [320,390,768,1440].includes(width) ? width : 390;
+const screen = params.get('screen') || 'drivers';
+frame.src = './mobile-preview-frame.html?screen=' + encodeURIComponent(['drivers','vehicles','timeline','planning'].includes(screen) ? screen : 'drivers');
+</script></body></html>
