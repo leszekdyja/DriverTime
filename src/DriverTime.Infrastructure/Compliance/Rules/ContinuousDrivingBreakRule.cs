@@ -311,6 +311,17 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                 stepDescription: $"Dodano przerw?/odpoczynek {FormatDuration(activity.Duration)}, ale segment nie resetuje licznika.");
         }
 
+        foreach (var violation in result.Violations)
+        {
+            var uncertain = normalizedTimeline.Any(x => x.StartUtc < violation.PeriodEndUtc && x.EndUtc > violation.PeriodStartUtc
+                && ActivityTypeNormalizer.Normalize(x.ActivityType) is ActivityTypeNormalizer.Availability or ActivityTypeNormalizer.Unknown);
+            if (!uncertain) continue;
+            violation.Severity = "WARNING";
+            violation.Description = "Wymaga weryfikacji: jazda przekracza limit bez potwierdzonej przerwy, ale analizowany okres zawiera dyspozycyjność lub brak danych. Dyspozycyjność nie jest automatycznie przerwą; należy sprawdzić warunki pracy w załodze i brak pomocy prowadzącemu.";
+            violation.Metadata["requiresVerification"] = "true";
+            if (violation.ExecutionTrace is not null) violation.ExecutionTrace.IsEstimated = true;
+        }
+
         _logger.LogInformation(
             "Compliance rule {RuleCode} driver {DriverId}: drivingSegments={DrivingSegments}, resettingBreaks={ResettingBreaks}, maxContinuousDrivingMinutes={MaxContinuousDrivingMinutes}, violations={ViolationCount}.",
             RuleCode,
@@ -328,7 +339,7 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             .Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsQualifyingBreakActivity(TimelineActivity activity) =>
-        ActivityTypeNormalizer.Normalize(activity.ActivityType) is ActivityTypeNormalizer.Rest or ActivityTypeNormalizer.Availability;
+        ActivityTypeNormalizer.Normalize(activity.ActivityType) == ActivityTypeNormalizer.Rest;
 
     private static void AddViolation(
         ComplianceRuleResult result,

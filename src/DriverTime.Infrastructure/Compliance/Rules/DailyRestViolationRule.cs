@@ -182,6 +182,13 @@ public class DailyRestViolationRule : IComplianceRule
             : RegularDailyRestMinutes;
         var missingRestMinutes = Math.Max(requiredRestMinutes - longestRestMinutes, 0);
         var finalDescription = BuildDescription(reason, startUtc, analysisWindowEndUtc, longestRest.Duration);
+        var hasUnknown = orderedActivities.Any(x => x.StartUtc < analysisWindowEndUtc && x.EndUtc > startUtc
+            && ActivityTypeNormalizer.Normalize(x.ActivityType) == ActivityTypeNormalizer.Unknown);
+        if (hasUnknown)
+        {
+            severity = "WARNING";
+            finalDescription = "Niepełne dane do oceny odpoczynku dziennego. Niepotwierdzony okres nie jest ani pracą, ani odpoczynkiem. Wymagana weryfikacja pliku DDD i wpisów ręcznych, bez przesądzania naruszenia.";
+        }
         var trace = BuildRuleExecutionTrace(
             orderedActivities,
             startUtc,
@@ -192,6 +199,7 @@ public class DailyRestViolationRule : IComplianceRule
             missingRestMinutes,
             reason);
 
+        if (hasUnknown) trace.IsEstimated = true;
         return new ComplianceViolationCandidate
         {
             Code = RuleCode,
@@ -206,6 +214,7 @@ public class DailyRestViolationRule : IComplianceRule
             Metadata = new Dictionary<string, object>
             {
                 ["restMinutes"] = longestRestMinutes,
+                ["requiresVerification"] = hasUnknown ? "true" : "false",
                 ["actualRestMinutes"] = longestRestMinutes,
                 ["requiredRestMinutes"] = requiredRestMinutes,
                 ["missingRestMinutes"] = missingRestMinutes,

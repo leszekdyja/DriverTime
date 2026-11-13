@@ -15,5 +15,7 @@ public interface IDriverService
     Task<DriverDto?> UpdateOperatingCompanyAsync(Guid id, UpdateDriverOperatingCompanyDto dto, CancellationToken cancellationToken = default);
 
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<List<DeletedDriverDto>> GetDeletedAsync(CancellationToken cancellationToken = default);
+    Task<bool> RestoreAsync(Guid id, CancellationToken cancellationToken = default);
 }
 

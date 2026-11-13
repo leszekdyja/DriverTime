@@ -68,6 +68,15 @@ public class DriverTimeDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<ComplianceRun>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<ComplianceRunViolation>().HasQueryFilter(x => x.ComplianceRun.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<DriverWorkEvidenceEntry>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<MobileAppInvite>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<PlanningAssignment>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<PlanningDriverAvailability>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<PlanningDriverDutyRule>().HasQueryFilter(x => x.Driver.DeletedAtUtc == null);
+        modelBuilder.Entity<PlanningDriverPair>().HasQueryFilter(x => x.FirstDriver.DeletedAtUtc == null && x.SecondDriver.DeletedAtUtc == null);
+        modelBuilder.Entity<Violation>().HasQueryFilter(x => x.Driver != null && x.Driver.DeletedAtUtc == null);
 
         modelBuilder.Entity<Company>(entity =>
         {
@@ -261,6 +270,7 @@ public class DriverTimeDbContext : DbContext
 
         modelBuilder.Entity<Driver>(entity =>
         {
+            entity.HasQueryFilter(x => x.DeletedAtUtc == null);
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.CompanyId, x.CardNumber }).IsUnique();
 

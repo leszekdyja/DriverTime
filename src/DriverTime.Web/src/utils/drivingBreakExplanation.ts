@@ -19,6 +19,9 @@ export function drivingBreakExplanation(violation: DriverViolation) {
     const limit = analysis?.drivingLimitMinutes ?? details?.drivingLimitMinutes;
     const excess = analysis?.exceededMinutes ?? details?.drivingExceededMinutes ?? violation.excessMinutes;
     const lines: string[] = [];
+    const requiresVerification = violation.metadata?.requiresVerification === "true"
+        || violation.metadataJson?.includes('"requiresVerification":"true"');
+    if (requiresVerification) lines.push("Wynik wymaga weryfikacji — nie potwierdza naruszenia. Dyspozycyjność nie została automatycznie uznana za przerwę, a brak danych za pracę lub odpoczynek.");
     if (driving != null && limit != null) {
         lines.push(`W zapisanej analizie zsumowano ${duration(driving)} jazdy. Limit w tej analizie wynosi ${duration(limit)}.`);
     } else {
@@ -36,5 +39,5 @@ export function drivingBreakExplanation(violation: DriverViolation) {
             const to = stamp(segment.endUtc);
             return `${from ?? "Brak godziny"} – ${to ?? "Brak godziny"}: ${duration(segment.durationMinutes)} odpoczynku. ${segment.resetsCounter ? "W zapisanej analizie zeruje licznik jazdy." : "W tym miejscu zapisana analiza nie zeruje licznika jazdy."}`;
         });
-    return { lines, breaks, note: "To objaśnienie zapisanego wyniku, nie ponowne przeliczenie dnia ani ocena, czy kierowca może teraz jechać. Jeżeli wynik nie zgadza się z wykresem, sprawdź pełną analizę reguły i aktualność przeliczenia." };
+    return { lines, breaks, requiresVerification: Boolean(requiresVerification), note: "To objaśnienie zapisanego wyniku, nie ponowne przeliczenie dnia ani ocena, czy kierowca może teraz jechać. Jeżeli wynik nie zgadza się z wykresem, sprawdź pełną analizę reguły i aktualność przeliczenia." };
 }

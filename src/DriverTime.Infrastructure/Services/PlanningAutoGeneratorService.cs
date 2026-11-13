@@ -160,7 +160,7 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
         // Pobieramy jeden bufor kontekstowy dla odpoczynku dobowego, kolejnych dni pracy,
         // tygodniowego odpoczynku i pełnego poprzedniego miesiąca (rotacja RN). Dalej wszystkie oceny kandydatów
         // działają w pamięci, bez zapytań EF per dzień, kierowca lub kandydat.
-        var assignmentContext = await _dbContext.PlanningAssignments
+        var assignmentContext = await _dbContext.PlanningAssignments.IgnoreQueryFilters()
             .Include(x => x.PlanningDuty)
             .Where(x => x.CompanyId == companyId
                 && x.Date >= contextDateFrom
@@ -169,7 +169,8 @@ public class PlanningAutoGeneratorService : IPlanningAutoGeneratorService
                     || x.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value)
                 && !(x.Date >= request.DateFrom
                     && x.Date <= request.DateTo
-                    && x.Status == PlanningAssignmentStatus.Generated))
+                    && x.Status == PlanningAssignmentStatus.Generated
+                    && x.Driver.DeletedAtUtc == null))
             .ToListAsync(cancellationToken);
 
         var initialAssignmentContext = assignmentContext.ToList();

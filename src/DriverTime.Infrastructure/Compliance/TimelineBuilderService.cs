@@ -81,7 +81,6 @@ public class TimelineBuilderService : ITimelineBuilderService
             if (normalizedType == ActivityTypeNormalizer.Unknown)
             {
                 unknownActivities.Add(activity.ActivityType);
-                continue;
             }
 
             normalizedActivities.Add(new TimelineActivity
@@ -99,7 +98,7 @@ public class TimelineBuilderService : ITimelineBuilderService
         if (unknownActivities.Count > 0)
         {
             _logger.LogWarning(
-                "Compliance timeline ignored {Count} activities with unknown activity type for driver {DriverId}. Examples: {Examples}",
+                "Compliance timeline retained {Count} activities with unknown activity type for driver {DriverId}. Examples: {Examples}",
                 unknownActivities.Count,
                 driverId,
                 string.Join(", ", unknownActivities.Distinct().Take(10)));

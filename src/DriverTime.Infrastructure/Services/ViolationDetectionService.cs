@@ -189,6 +189,18 @@ public class ViolationDetectionService : IViolationDetectionService
         AddContinuousDrivingViolations(driverId, ordered, violations);
         AddDailyRestViolations(driverId, ordered, violations);
 
+        foreach (var violation in violations)
+        {
+            if (!violation.RegulationReference.Contains("REST") && !violation.RegulationReference.Contains("CONTINUOUS_DRIVING")) continue;
+            var uncertain = ordered.Any(x => x.StartUtc < violation.ViolationEnd && x.EndUtc > violation.ViolationStart
+                && (ActivityTypeNormalizer.Normalize(x.ActivityType) == ActivityTypeNormalizer.Unknown
+                    || (violation.RegulationReference.Contains("CONTINUOUS_DRIVING") && IsAvailability(x))));
+            if (!uncertain) continue;
+            violation.Severity = "Warning";
+            violation.ViolationType = "Wymaga weryfikacji — niepotwierdzona przerwa lub niepełne dane";
+            violation.MetadataJson = "{\"requiresVerification\":\"true\"}";
+        }
+
         return violations;
     }
 
@@ -377,7 +389,7 @@ public class ViolationDetectionService : IViolationDetectionService
         IsActivity(activity, ActivityTypeNormalizer.Availability);
 
     private static bool IsBreak(DriverActivity activity) =>
-        IsRest(activity) || IsAvailability(activity);
+        IsRest(activity);
 
     private static bool IsWork(DriverActivity activity) =>
         IsActivity(activity, ActivityTypeNormalizer.Work);

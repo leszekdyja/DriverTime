@@ -1200,6 +1200,11 @@ def parse_ddd_vehicle_uses_embedded(ddd_path: Path) -> list[VehicleUse]:
 
 def _activity_word_to_kind(word: int) -> tuple[int, str]:
     minutes = word & 0x07FF
+    # ActivityChangeInfo: p=1,c=0 means no card and unknown following activity.
+    # The aa bits retain the activity at withdrawal; they are not evidence of
+    # ongoing work. p=1,c=1 is a confirmed manual entry and must be preserved.
+    if word & 0x2000 and not word & 0x4000:
+        return minutes, "UNKNOWN"
     activity_code = (word >> 11) & 0x03
     kind = {
         0: "REST",
@@ -1339,7 +1344,7 @@ def _activities_from_daily_record(record_date: dt.datetime, payload: bytes, sour
     for i in range(0, len(payload) - 1, 2):
         word = _be16(payload, i)
         minute, kind = _activity_word_to_kind(word)
-        if 0 <= minute <= 1440 and kind != "UNKNOWN":
+        if 0 <= minute <= 1440:
             points.append((minute, kind))
 
     # Keep last state per minute and sort.

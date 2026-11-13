@@ -355,6 +355,8 @@ public class DddFileService : IDddFileService
         {
             throw new InvalidOperationException("Ta karta kierowcy jest przypisana do innej firmy.");
         }
+        if (driver?.DeletedAtUtc is not null)
+            throw new InvalidOperationException("Kierowca został usunięty. Najpierw przywróć go w sekcji Usunięci kierowcy.");
         var driverCreated = driver is null;
 
         if (driver is null)
@@ -760,14 +762,14 @@ public class DddFileService : IDddFileService
         string cardNumber,
         ParsedDriverDto parsedDriver)
     {
-        var directMatch = await _dbContext.Drivers.FirstOrDefaultAsync(x =>
+        var directMatch = await _dbContext.Drivers.IgnoreQueryFilters().FirstOrDefaultAsync(x =>
             x.CompanyId == companyId && x.CardNumber == cardNumber);
         if (directMatch is not null)
         {
             return directMatch;
         }
 
-        var historicalMatch = await _dbContext.DddFiles
+        var historicalMatch = await _dbContext.DddFiles.IgnoreQueryFilters()
             .Where(x => x.CompanyId == companyId && x.DriverCardNumber == cardNumber && x.DriverId != null)
             .Select(x => x.Driver)
             .FirstOrDefaultAsync();
@@ -779,7 +781,7 @@ public class DddFileService : IDddFileService
         var cardIdentity = GetCardIdentity(cardNumber);
         if (cardIdentity is not null)
         {
-            var identityDriverIds = await _dbContext.Drivers
+            var identityDriverIds = await _dbContext.Drivers.IgnoreQueryFilters()
                 .Where(x => x.CompanyId == companyId && x.CardNumber.StartsWith(cardIdentity))
                 .Select(x => x.Id)
                 .Concat(_dbContext.DddFiles
@@ -791,11 +793,11 @@ public class DddFileService : IDddFileService
                 .ToListAsync();
             if (identityDriverIds.Count == 1)
             {
-                return await _dbContext.Drivers.SingleAsync(x => x.Id == identityDriverIds[0]);
+                return await _dbContext.Drivers.IgnoreQueryFilters().SingleAsync(x => x.Id == identityDriverIds[0] && x.CompanyId == companyId);
             }
         }
 
-        var companyDrivers = await _dbContext.Drivers
+        var companyDrivers = await _dbContext.Drivers.IgnoreQueryFilters()
             .Where(x => x.CompanyId == companyId)
             .ToListAsync();
         var personMatches = companyDrivers

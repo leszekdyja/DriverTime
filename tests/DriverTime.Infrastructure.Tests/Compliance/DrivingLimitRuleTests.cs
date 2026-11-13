@@ -481,7 +481,7 @@ public class DrivingLimitRuleTests
     [DataRow(ActivityTypeNormalizer.Availability, ActivityTypeNormalizer.Availability)]
     [DataRow(ActivityTypeNormalizer.Rest, ActivityTypeNormalizer.Availability)]
     [DataRow(ActivityTypeNormalizer.Availability, ActivityTypeNormalizer.Rest)]
-    public void ContinuousDrivingBreak_WithSplitFifteenAndThirtyRestOrAvailability_ResetsCounter(
+    public void ContinuousDrivingBreak_SplitAvailabilityRequiresVerificationWhileRestResetsCounter(
         string firstBreakType,
         string secondBreakType)
     {
@@ -497,13 +497,14 @@ public class DrivingLimitRuleTests
 
         var result = _continuousRule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(0, result.Violations.Count);
+        Assert.AreEqual(firstBreakType == ActivityTypeNormalizer.Rest && secondBreakType == ActivityTypeNormalizer.Rest ? 0 : 1, result.Violations.Count);
+        if (result.Violations.Count > 0) Assert.AreEqual("WARNING", result.Violations[0].Severity);
     }
 
     [DataTestMethod]
     [DataRow(ActivityTypeNormalizer.Rest)]
     [DataRow(ActivityTypeNormalizer.Availability)]
-    public void ContinuousDrivingBreak_WithFortyFiveMinuteRestOrAvailability_ResetsCounter(string breakType)
+    public void ContinuousDrivingBreak_OnlyConfirmedRestResetsCounter(string breakType)
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -515,7 +516,7 @@ public class DrivingLimitRuleTests
 
         var result = _continuousRule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(0, result.Violations.Count);
+        Assert.AreEqual(breakType == ActivityTypeNormalizer.Rest ? 0 : 1, result.Violations.Count);
     }
 
     [TestMethod]
@@ -883,7 +884,7 @@ public class DrivingLimitRuleTests
     }
 
     [TestMethod]
-    public void ViolationDetectionService_WithSplitFifteenAndThirtyMinutes_DoesNotCreateContinuousDrivingViolation()
+    public void ViolationDetectionService_WithAvailabilityInSplitBreak_RequiresVerification()
     {
         var driverId = Guid.NewGuid();
         var activities = new[]
@@ -897,12 +898,12 @@ public class DrivingLimitRuleTests
 
         var violations = DetectLegacyViolations(driverId, activities);
 
-        Assert.IsFalse(violations.Any(x =>
-            x.RegulationReference == "EU561:CONTINUOUS_DRIVING_WITHOUT_45M_BREAK"));
+        var unconfirmed = violations.Single(x => x.RegulationReference == "EU561:CONTINUOUS_DRIVING_WITHOUT_45M_BREAK");
+        Assert.AreEqual("Warning", unconfirmed.Severity);
     }
 
     [TestMethod]
-    public void ContinuousDrivingBreak_WithFortyFiveMinuteAvailability_ResetsCounter()
+    public void ContinuousDrivingBreak_WithFortyFiveMinuteAvailability_RequiresVerification()
     {
         var driverId = Guid.NewGuid();
         var timeline = new[]
@@ -914,7 +915,9 @@ public class DrivingLimitRuleTests
 
         var result = _continuousRule.Evaluate(driverId, timeline);
 
-        Assert.AreEqual(0, result.Violations.Count);
+        Assert.AreEqual(1, result.Violations.Count);
+        Assert.AreEqual("WARNING", result.Violations[0].Severity);
+        Assert.AreEqual("true", result.Violations[0].Metadata["requiresVerification"]);
     }
 
     [TestMethod]

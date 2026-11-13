@@ -24,3 +24,9 @@ test("does not invent metrics or breaks when missing", () => {
     assert.equal(result.breaks.length, 0);
     assert.equal(drivingBreakExplanation({ code: "DAILY_REST" }), null);
 });
+
+test("uncertain availability is clearly marked as requiring verification", () => {
+    const result = drivingBreakExplanation({ code: "CONTINUOUS_DRIVING_BREAK", metadata: { requiresVerification: "true" } });
+    assert.equal(result.requiresVerification, true);
+    assert.ok(result.lines[0].includes("nie potwierdza naruszenia"));
+});
