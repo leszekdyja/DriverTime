@@ -481,69 +481,56 @@ public class DriverService : IDriverService
         CancellationToken cancellationToken = default)
     {
         var companyId = _currentUser.CompanyId;
-        var driverExists = await _dbContext.Drivers
-            .AsNoTracking()
-            .AnyAsync(
+        if (!_currentUser.IsAuthenticated || companyId == Guid.Empty || _currentUser.IsMobileDriver) return false;
+        var driver = await _dbContext.Drivers.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
                 x => x.Id == id && x.CompanyId == companyId
                     && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId.Value),
                 cancellationToken);
 
-        if (!driverExists)
+        if (driver is null)
         {
             return false;
         }
 
-        await using var transaction = await _dbContext.Database
-            .BeginTransactionAsync(cancellationToken);
+        if (driver.DeletedAtUtc.HasValue) return true;
+        driver.WasActiveBeforeDeletion = driver.IsActive;
+        driver.DeletedAtUtc = DateTime.UtcNow;
+        driver.IsActive = false;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 
-        var dddFileIds = await _dbContext.DddFiles
-            .Where(x => x.CompanyId == companyId && x.DriverId == id)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken);
+    private IQueryable<Driver> DeletedDriversInScope() => _dbContext.Drivers.IgnoreQueryFilters()
+        .Where(x => x.CompanyId == _currentUser.CompanyId && x.DeletedAtUtc != null
+            && (!_currentUser.OperatingCompanyId.HasValue || x.OperatingCompanyId == _currentUser.OperatingCompanyId));
 
-        await _dbContext.ComplianceRunViolations
-            .Where(x =>
-                x.ComplianceRun.CompanyId == companyId &&
-                x.ComplianceRun.DriverId == id)
-            .ExecuteDeleteAsync(cancellationToken);
+    public async Task<List<DeletedDriverDto>> GetDeletedAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty || _currentUser.IsMobileDriver) return [];
+        var drivers = await DeletedDriversInScope().Include(x => x.OperatingCompany)
+            .OrderByDescending(x => x.DeletedAtUtc).ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        return drivers.Select(x => new DeletedDriverDto {
+            Id = x.Id, FirstName = x.FirstName, LastName = x.LastName,
+            OperatingCompanyName = x.OperatingCompany?.Name,
+            DeletedAtUtc = x.DeletedAtUtc!.Value, RestoreUntilUtc = x.DeletedAtUtc.Value.AddMonths(1),
+            CanRestore = now < x.DeletedAtUtc.Value.AddMonths(1)
+        }).ToList();
+    }
 
-        await _dbContext.ComplianceRuns
-            .Where(x => x.CompanyId == companyId && x.DriverId == id)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await _dbContext.Violations
-            .Where(x =>
-                x.DriverId == id &&
-                x.Driver != null &&
-                x.Driver.CompanyId == companyId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        if (dddFileIds.Count > 0)
-        {
-            await _dbContext.DriverActivities
-                .Where(x => dddFileIds.Contains(x.DddFileId))
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await _dbContext.VehicleUses
-                .Where(x => dddFileIds.Contains(x.DddFileId))
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await _dbContext.CountryEntries
-                .Where(x => dddFileIds.Contains(x.DddFileId))
-                .ExecuteDeleteAsync(cancellationToken);
-
-            await _dbContext.DddFiles
-                .Where(x => dddFileIds.Contains(x.Id))
-                .ExecuteDeleteAsync(cancellationToken);
-        }
-
-        var deletedDrivers = await _dbContext.Drivers
-            .Where(x => x.Id == id && x.CompanyId == companyId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
-
-        return deletedDrivers > 0;
+    public async Task<bool> RestoreAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        if (!_currentUser.IsAuthenticated || _currentUser.CompanyId == Guid.Empty || _currentUser.IsMobileDriver) return false;
+        var driver = await DeletedDriversInScope().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (driver is null) return false;
+        if (DateTime.UtcNow >= driver.DeletedAtUtc!.Value.AddMonths(1))
+            throw new InvalidOperationException("Minął miesięczny termin przywrócenia kierowcy. Historia pozostaje zachowana.");
+        driver.IsActive = driver.WasActiveBeforeDeletion ?? true;
+        driver.WasActiveBeforeDeletion = null;
+        driver.DeletedAtUtc = null;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     internal static bool IsDriverInCompanyScope(

@@ -27,7 +27,7 @@ public class PlanningScheduleService : IPlanningScheduleService
     {
         var companyId = _currentUser.CompanyId;
 
-        return await _dbContext.PlanningSchedules
+        return await _dbContext.PlanningSchedules.IgnoreQueryFilters()
             .AsNoTracking()
             .Where(x => x.CompanyId == companyId
                 && (!_currentUser.OperatingCompanyId.HasValue
@@ -399,7 +399,8 @@ public class PlanningScheduleService : IPlanningScheduleService
     {
         var companyId = _currentUser.CompanyId;
 
-        return _dbContext.PlanningSchedules
+        // Historical assignments remain visible; tenant/company scope below still applies.
+        return _dbContext.PlanningSchedules.IgnoreQueryFilters()
             .Include(x => x.Assignments.Where(a => !_currentUser.OperatingCompanyId.HasValue
                 || a.Driver.OperatingCompanyId == _currentUser.OperatingCompanyId.Value))
                 .ThenInclude(x => x.Driver)
@@ -477,7 +478,8 @@ public class PlanningScheduleService : IPlanningScheduleService
     private static string FormatDriverName(Driver driver)
     {
         var name = $"{driver.FirstName} {driver.LastName}".Trim();
-        return string.IsNullOrWhiteSpace(name) ? driver.CardNumber : name;
+        var displayName = string.IsNullOrWhiteSpace(name) ? driver.CardNumber : name;
+        return driver.DeletedAtUtc.HasValue ? $"{displayName} (usunięty)" : displayName;
     }
 
     private static string GetLineKey(PlanningDuty duty) =>

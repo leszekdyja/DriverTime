@@ -424,6 +424,9 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("DeletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -471,6 +474,9 @@ namespace DriverTime.Infrastructure.Migrations.DriverTimeDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<bool?>("WasActiveBeforeDeletion")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

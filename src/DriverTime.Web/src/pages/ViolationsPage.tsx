@@ -1794,7 +1794,7 @@ function ViolationDetailsModal({
                                 <strong>{violation.dispatcherRecommendation.plannerAttentionRequired ? "Wymaga uwagi" : "Informacyjnie"}</strong>
                             </div>
                         </div>
-                        <p>{breakExplanation ? "Przekroczono czas jazdy przed ukończeniem wymaganej przerwy. Poniżej pokazujemy, co wynika z zapisanego obliczenia." : violation.dispatcherRecommendation.summary}</p>
+                        <p>{breakExplanation?.requiresVerification ? violation.dispatcherRecommendation.summary : breakExplanation ? "Przekroczono czas jazdy przed ukończeniem wymaganej przerwy. Poniżej pokazujemy, co wynika z zapisanego obliczenia." : violation.dispatcherRecommendation.summary}</p>
                         {breakExplanation && <div className="dispatcher-break-explanation">
                             <h5>Co dokładnie oznacza ten komunikat?</h5>
                             {breakExplanation.lines.slice(0, 2).map((line) => <p key={line}>{line}</p>)}

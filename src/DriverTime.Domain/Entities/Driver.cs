@@ -24,6 +24,8 @@ public class Driver
 
     public bool IncludeInPlanning { get; set; } = true;
     public bool IsActive { get; set; } = true;
+    public DateTime? DeletedAtUtc { get; set; }
+    public bool? WasActiveBeforeDeletion { get; set; }
 
     public bool PlanningNoNightDuty { get; set; }
 

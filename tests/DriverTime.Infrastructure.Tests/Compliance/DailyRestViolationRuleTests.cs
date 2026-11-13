@@ -9,6 +9,20 @@ namespace DriverTime.Infrastructure.Tests.Compliance;
 [TestClass]
 public class DailyRestViolationRuleTests
 {
+    [TestMethod]
+    public void UnknownPeriodRequiresVerificationInsteadOfConfirmedMissingRest()
+    {
+        var id = Guid.NewGuid();
+        var result = new DailyRestViolationRule(NullLogger<DailyRestViolationRule>.Instance).Evaluate(id, new[] {
+            Activity(id, ActivityTypeNormalizer.Driving, "2026-10-30T15:34:00Z", "2026-10-31T00:56:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-10-31T00:56:00Z", "2026-10-31T01:02:00Z"),
+            Activity(id, ActivityTypeNormalizer.Unknown, "2026-10-31T01:02:00Z", "2026-11-01T00:00:00Z"),
+            Activity(id, ActivityTypeNormalizer.Work, "2026-11-01T00:00:00Z", "2026-11-01T00:10:00Z")
+        });
+        Assert.IsTrue(result.Violations.Count > 0);
+        Assert.IsTrue(result.Violations.All(x => x.Severity == "WARNING"));
+        Assert.AreEqual("true", result.Violations[0].Metadata["requiresVerification"]);
+    }
     private readonly DailyRestViolationRule _rule = new(NullLogger<DailyRestViolationRule>.Instance);
 
     [TestMethod]

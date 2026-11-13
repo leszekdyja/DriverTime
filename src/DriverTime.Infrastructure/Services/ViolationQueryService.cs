@@ -984,6 +984,16 @@ public class ViolationQueryService : IViolationQueryService
         Violation violation,
         BusinessViolationValues values)
     {
+        if (GetString(ParseMetadata(violation.MetadataJson), "requiresVerification") == "true")
+        {
+            return new DispatcherRecommendationDto
+            {
+                Status = "WARNING",
+                Summary = "Wynik nie jest potwierdzonym naruszeniem: okres zawiera niepełne dane lub dyspozycyjność wymagającą sprawdzenia warunków przerwy w załodze.",
+                PlannerAttentionRequired = true,
+                RecommendedActions = ["Sprawdź oryginalny plik DDD i wpisy ręczne.", "Nie zamieniaj automatycznie braku danych na pracę ani odpoczynek.", "Przy dyspozycyjności sprawdź załogę wieloosobową, ciągłą przerwę 45 minut i brak pomocy prowadzącemu."]
+            };
+        }
         var code = violation.RegulationReference.ToUpperInvariant();
         var isBlocked = values.MissingMinutes.GetValueOrDefault() >= 180 ||
             values.ExcessMinutes.GetValueOrDefault() >= 60;

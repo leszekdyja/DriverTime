@@ -45,6 +45,31 @@ export default function DriversPage() {
     const [currentPage, setCurrentPage] = useState(1);
     const [driverToDelete, setDriverToDelete] = useState<DriverDto | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [deletedDrivers, setDeletedDrivers] = useState<Array<{ id: string; firstName: string; lastName: string; operatingCompanyName: string | null; restoreUntilUtc: string; canRestore: boolean }>>([]);
+    const [isTrashLoading, setIsTrashLoading] = useState(false);
+    const [restoringId, setRestoringId] = useState<string | null>(null);
+
+    async function loadDeletedDrivers() {
+        setIsTrashLoading(true);
+        try {
+            const response = await apiFetch(`${driversApiUrl}/deleted`);
+            if (!response.ok) throw new Error("Nie udało się pobrać usuniętych kierowców.");
+            setDeletedDrivers(await response.json());
+        } catch (error) {
+            setIsError(true); setMessage(error instanceof Error ? error.message : "Błąd pobierania usuniętych kierowców.");
+        } finally { setIsTrashLoading(false); }
+    }
+
+    async function restoreDriver(id: string) {
+        setRestoringId(id); setMessage("");
+        try {
+            const response = await apiFetch(`${driversApiUrl}/${id}/restore`, { method: "POST" });
+            if (!response.ok) throw new Error(response.status === 410 ? "Minął miesięczny termin przywrócenia." : "Nie udało się przywrócić kierowcy.");
+            await Promise.all([loadDrivers(), loadDeletedDrivers()]);
+            setIsError(false); setMessage("Kierowca został przywrócony. Jego historia i przypisania zostały zachowane.");
+        } catch (error) { setIsError(true); setMessage(error instanceof Error ? error.message : "Błąd przywracania."); }
+        finally { setRestoringId(null); }
+    }
     const deferredSearch = useDeferredValue(search.trim().toLocaleLowerCase("pl-PL"));
 
     const filteredDrivers = useMemo(() => {
@@ -162,7 +187,8 @@ export default function DriversPage() {
 
             setDriverToDelete(null);
             await loadDrivers();
-            setMessage("Kierowca został usunięty wraz z importami, aktywnościami i naruszeniami.");
+            await loadDeletedDrivers();
+            setMessage("Kierowca został przeniesiony do usuniętych. Możesz go przywrócić przez miesiąc. Historia pozostaje zachowana.");
         } catch (deleteError) {
             setIsError(true);
             setMessage(
@@ -198,6 +224,16 @@ export default function DriversPage() {
             </div>
 
             <section className="drivers-panel">
+                    <details onToggle={(event) => { if (event.currentTarget.open) void loadDeletedDrivers(); }}>
+                        <summary>Usunięci kierowcy — przywracanie przez miesiąc</summary>
+                        <p>Usunięcie ukrywa profil i wyłącza go z nowego planowania. Nie kasuje odczytów ani istniejących obsad. Po miesiącu przywracanie jest blokowane; historia nie jest automatycznie kasowana.</p>
+                        {isTrashLoading ? <p>Wczytywanie…</p> : deletedDrivers.length === 0 ? <p>Brak usuniętych kierowców.</p> : (
+                            <ul>{deletedDrivers.map((driver) => <li key={driver.id}>
+                                <strong>{driver.lastName} {driver.firstName}</strong> — {driver.operatingCompanyName || "Bez przypisanej firmy"}. Przywrócenie do: {new Intl.DateTimeFormat("pl-PL", {dateStyle:"medium",timeStyle:"short",timeZone:"Europe/Warsaw"}).format(new Date(driver.restoreUntilUtc))}.
+                                <button type="button" disabled={!driver.canRestore || restoringId !== null} onClick={() => void restoreDriver(driver.id)}>{driver.canRestore ? (restoringId === driver.id ? "Przywracanie…" : "Przywróć kierowcę") : "Termin przywrócenia minął"}</button>
+                            </li>)}</ul>
+                        )}
+                    </details>
                     <div className="section-heading">
                         <h3>Lista kierowców</h3>
                         <p>Aktualna baza kierowców DriverTime.</p>
@@ -344,7 +380,7 @@ export default function DriversPage() {
                     >
                         <h3 id="driver-delete-title">Usuń kierowcę</h3>
                         <p>
-                            Czy na pewno chcesz usunąć kierowcę {driverToDelete.lastName} {driverToDelete.firstName}? Usunięte zostaną również importy, aktywności i naruszenia tego kierowcy.
+                            Czy chcesz przenieść kierowcę {driverToDelete.lastName} {driverToDelete.firstName} do usuniętych? Przez miesiąc możesz go przywrócić. Odczyty, aktywności, naruszenia i dotychczasowe obsady pozostaną zachowane.
                         </p>
                         <div className="driver-delete-modal-actions">
                             <button

@@ -126,6 +126,7 @@ public class DriversController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    // Deletion archives the profile without deleting historical data.
     public async Task<IActionResult> Delete(
         Guid id,
         CancellationToken cancellationToken)
@@ -133,6 +134,17 @@ public class DriversController : ControllerBase
         var deleted = await _driverService.DeleteAsync(id, cancellationToken);
 
         return deleted ? NoContent() : NotFound();
+    }
+
+    [HttpGet("deleted")]
+    public async Task<ActionResult<List<DeletedDriverDto>>> GetDeleted(CancellationToken cancellationToken) =>
+        Ok(await _driverService.GetDeletedAsync(cancellationToken));
+
+    [HttpPost("{id:guid}/restore")]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        try { return await _driverService.RestoreAsync(id, cancellationToken) ? NoContent() : NotFound(); }
+        catch (InvalidOperationException exception) { return StatusCode(StatusCodes.Status410Gone, new { message = exception.Message }); }
     }
 }
 
