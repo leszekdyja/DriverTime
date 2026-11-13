@@ -33,8 +33,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-tk
-          python3 -m unittest discover -s tests/parser -p test_card_download_time.py -v
-          python3 -m unittest discover -s tests/parser -p test_ddd_parser_vehicle_uses.py -v
+          python3 -m unittest discover -s tests/parser -v
           python3 -m unittest discover -s tests -p test_christmas_sunday_duties.py -v
           python3 -m unittest discover -s tests -p test_christmas_work_limit.py -v
           python3 -m unittest discover -s tests -p test_working_time_norm.py -v
@@ -97,3 +96,6 @@ jobs:
 
       - name: Test dashboard replacement card expiry filtering
         run: node --experimental-strip-types --test tests/cardExpiryAlertDrivers.test.mjs
+
+      - name: Test timeline breaks, selection and explanations
+        run: node --experimental-strip-types --test tests/drivingBreakCounter.test.mjs tests/timelineSelection.test.mjs tests/drivingBreakExplanation.test.mjs

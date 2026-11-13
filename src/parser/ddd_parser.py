@@ -178,6 +178,8 @@ class Activity:
     kind: str
     source: str = ""
     vehicle_registration: str = ""
+    is_crew: Optional[bool] = None
+    card_slot: Optional[int] = None
 
     @property
     def duration(self) -> dt.timedelta:
@@ -817,7 +819,7 @@ def extract_vehicle_uses(data: Any) -> list[VehicleUse]:
 
 
 def _activity_with_vehicle(activity: Activity, start: dt.datetime, end: dt.datetime, registration: str) -> Activity:
-    return Activity(start=start, end=end, kind=activity.kind, source=activity.source, vehicle_registration=registration)
+    return replace(activity, start=start, end=end, vehicle_registration=registration)
 
 
 def apply_vehicle_registrations(activities: list[Activity], vehicle_uses: list[VehicleUse]) -> list[Activity]:
@@ -873,7 +875,10 @@ def extract_explicit_intervals(data: Any) -> list[Activity]:
             kind = normalize_kind(path)
         if kind != "UNKNOWN":
             source = mark_source_as_manual(path) if node_has_manual_entry_marker(node) else path
-            result.append(Activity(start=start, end=end, kind=kind, source=source, vehicle_registration=find_first_registration_value(node)))
+            result.append(Activity(start=start, end=end, kind=kind, source=source,
+                                   vehicle_registration=find_first_registration_value(node),
+                                   is_crew=node.get("is_crew") if isinstance(node.get("is_crew"), bool) else None,
+                                   card_slot=node.get("card_slot") if node.get("card_slot") in (1, 2) else None))
     return dedupe_and_merge(result)
 
 
@@ -911,11 +916,13 @@ def dedupe_and_merge(items: list[Activity]) -> list[Activity]:
         if (
             merged
             and merged[-1].kind == item.kind
+            and merged[-1].is_crew == item.is_crew
+            and merged[-1].card_slot == item.card_slot
             and merged[-1].end == item.start
             and getattr(merged[-1], "vehicle_registration", "") == getattr(item, "vehicle_registration", "")
         ):
             prev = merged[-1]
-            merged[-1] = Activity(prev.start, item.end, prev.kind, prev.source, prev.vehicle_registration)
+            merged[-1] = replace(prev, end=item.end)
         else:
             merged.append(item)
     return merged
@@ -1340,30 +1347,35 @@ def _daily_record_candidates(ordered: bytes) -> list[tuple[int, int, dt.datetime
 
 def _activities_from_daily_record(record_date: dt.datetime, payload: bytes, source: str) -> list[Activity]:
     day_start = dt.datetime.combine(record_date.date(), dt.time.min)
-    points: list[tuple[int, str]] = []
+    points: list[tuple[int, str, Optional[bool], Optional[int]]] = []
     for i in range(0, len(payload) - 1, 2):
         word = _be16(payload, i)
         minute, kind = _activity_word_to_kind(word)
         if 0 <= minute <= 1440:
-            points.append((minute, kind))
+            # Annex IC ActivityChangeInfo: c is CREW only while p=0.
+            # With p=1 it means a known manual entry, not a second driver.
+            inserted = not bool(word & 0x2000)
+            crew = bool(word & 0x4000) if inserted else None
+            slot = (2 if word & 0x8000 else 1) if inserted else None
+            points.append((minute, kind, crew, slot))
 
     # Keep last state per minute and sort.
-    by_minute: dict[int, str] = {}
-    for minute, kind in points:
-        by_minute[minute] = kind
+    by_minute: dict[int, tuple[str, Optional[bool], Optional[int]]] = {}
+    for minute, kind, crew, slot in points:
+        by_minute[minute] = (kind, crew, slot)
     ordered_points = sorted(by_minute.items())
     if len(ordered_points) < 1:
         return []
 
     activities: list[Activity] = []
-    for idx, (minute, kind) in enumerate(ordered_points):
+    for idx, (minute, (kind, crew, slot)) in enumerate(ordered_points):
         next_minute = ordered_points[idx + 1][0] if idx + 1 < len(ordered_points) else 1440
         if next_minute <= minute:
             continue
         start = day_start + dt.timedelta(minutes=minute)
         end = day_start + dt.timedelta(minutes=min(next_minute, 1440))
         if end > start:
-            activities.append(Activity(start, end, kind, source))
+            activities.append(Activity(start, end, kind, source, is_crew=crew, card_slot=slot))
     return activities
 
 
@@ -1449,6 +1461,8 @@ def parse_ddd_driver_card_embedded(ddd_path: Path) -> dict[str, Any]:
                 "end": a.end.isoformat(sep=" "),
                 "activity": activity_label(a.kind),
                 "activity_code": a.kind,
+                "is_crew": a.is_crew,
+                "card_slot": a.card_slot,
                 "vehicle_registration": vehicle_registration_display(a),
                 "source": a.source,
             }

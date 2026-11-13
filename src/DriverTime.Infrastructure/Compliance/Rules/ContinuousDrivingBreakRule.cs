@@ -39,12 +39,12 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             RuleName = Name
         };
 
-        var normalizedTimeline = WeeklyDrivingTimelineHelper.GetMergedDrivingTimeline(timeline)
+        var normalizedTimeline = MultiManningHelper.MergeAdjacentBreaks(WeeklyDrivingTimelineHelper.GetMergedDrivingTimeline(timeline)
             .Concat(timeline.Where(activity => !IsDriving(activity)))
             .Where(x => x.StartUtc < x.EndUtc)
             .OrderBy(x => x.StartUtc)
             .ThenBy(x => x.EndUtc)
-            .ToList();
+            .ToList());
 
         var trace = CreateTrace(normalizedTimeline);
         var continuousDriving = TimeSpan.Zero;
@@ -191,7 +191,9 @@ public class ContinuousDrivingBreakRule : IComplianceRule
                     ref continuousStartUtc,
                     ref pendingFirstSplitBreak);
 
-                var note = "Przerwa lub odpoczynek co najmniej 45 min resetuje licznik jazdy ci?g?ej.";
+                var note = MultiManningHelper.IsCoDriverBreak(activity)
+                    ? "Przyjęto 45 min ciągłej dyspozycyjności drugiego kierowcy w załodze jako przerwę, pod warunkiem niepomagania prowadzącemu. Nie jest to odpoczynek dzienny."
+                    : "Przerwa lub odpoczynek co najmniej 45 min resetuje licznik jazdy ciągłej.";
                 AddDiagnosticSegment(
                     diagnosticSegments,
                     debugTrace,
@@ -314,7 +316,9 @@ public class ContinuousDrivingBreakRule : IComplianceRule
         foreach (var violation in result.Violations)
         {
             var uncertain = normalizedTimeline.Any(x => x.StartUtc < violation.PeriodEndUtc && x.EndUtc > violation.PeriodStartUtc
-                && ActivityTypeNormalizer.Normalize(x.ActivityType) is ActivityTypeNormalizer.Availability or ActivityTypeNormalizer.Unknown);
+                && (ActivityTypeNormalizer.Normalize(x.ActivityType) == ActivityTypeNormalizer.Unknown
+                    || (ActivityTypeNormalizer.Normalize(x.ActivityType) == ActivityTypeNormalizer.Availability
+                        && !MultiManningHelper.IsCoDriverBreak(x))));
             if (!uncertain) continue;
             violation.Severity = "WARNING";
             violation.Description = "Wymaga weryfikacji: jazda przekracza limit bez potwierdzonej przerwy, ale analizowany okres zawiera dyspozycyjność lub brak danych. Dyspozycyjność nie jest automatycznie przerwą; należy sprawdzić warunki pracy w załodze i brak pomocy prowadzącemu.";
@@ -339,7 +343,8 @@ public class ContinuousDrivingBreakRule : IComplianceRule
             .Equals(ActivityTypeNormalizer.Driving, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsQualifyingBreakActivity(TimelineActivity activity) =>
-        ActivityTypeNormalizer.Normalize(activity.ActivityType) == ActivityTypeNormalizer.Rest;
+        ActivityTypeNormalizer.Normalize(activity.ActivityType) == ActivityTypeNormalizer.Rest
+        || MultiManningHelper.IsCoDriverBreak(activity);
 
     private static void AddViolation(
         ComplianceRuleResult result,

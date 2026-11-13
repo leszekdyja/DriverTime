@@ -21,4 +21,10 @@ public class ParsedDriverActivityDto
 
     [JsonPropertyName("source")]
     public string Source { get; set; } = string.Empty;
+
+    [JsonPropertyName("is_crew")]
+    public bool? IsCrew { get; set; }
+
+    [JsonPropertyName("card_slot")]
+    public int? CardSlot { get; set; }
 }

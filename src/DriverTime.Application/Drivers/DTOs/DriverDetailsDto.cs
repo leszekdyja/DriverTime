@@ -42,6 +42,10 @@ public class DriverImportDto
 
 public class DriverDetailsActivityDto
 {
+    public bool? IsCrew { get; set; }
+
+    public int? CardSlot { get; set; }
+
     public Guid Id { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;

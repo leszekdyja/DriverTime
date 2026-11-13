@@ -24,6 +24,10 @@ public class DriverActivityDto
 
     public string ActivityType { get; set; } = string.Empty;
 
+    public bool? IsCrew { get; set; }
+
+    public int? CardSlot { get; set; }
+
     public int DurationSeconds { get; set; }
 
     public int? StartOdometerKm { get; set; }

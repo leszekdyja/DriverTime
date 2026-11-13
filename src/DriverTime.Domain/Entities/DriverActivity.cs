@@ -13,4 +13,10 @@ public class DriverActivity
     public DateTime EndUtc { get; set; }
 
     public string ActivityType { get; set; } = string.Empty;
+
+    // Null for older imports and manual entries: neither proves crew status.
+    public bool? IsCrew { get; set; }
+
+    // 1 = driver, 2 = co-driver; null when the card was not inserted.
+    public int? CardSlot { get; set; }
 }

@@ -52,6 +52,7 @@ public class ReducedDailyRestCounterRule : IComplianceRule
         var totalReducedDailyRests = 0;
         var restsSinceWeeklyRest = new List<WeeklyRestTimelineHelper.RestPeriod>();
         var periods = 0;
+        DateTime? previousDailyRestEndUtc = null;
 
         foreach (var rest in restPeriods)
         {
@@ -61,12 +62,22 @@ public class ReducedDailyRestCounterRule : IComplianceRule
                 periodStartUtc = rest.EndUtc;
                 reducedDailyRestCount = 0;
                 restsSinceWeeklyRest.Clear();
+                previousDailyRestEndUtc = rest.EndUtc;
                 continue;
             }
 
             periodStartUtc ??= restPeriods[0].StartUtc;
 
-            if (IsReducedDailyRest(rest) && !IsSecondPartOfSplitRegularRest(rest, restsSinceWeeklyRest))
+            var dutyStart = timeline.Where(x => x.StartUtc >= (previousDailyRestEndUtc ?? DateTime.MinValue)
+                    && x.StartUtc < rest.StartUtc
+                    && ActivityTypeNormalizer.Normalize(x.ActivityType) is ActivityTypeNormalizer.Driving
+                        or ActivityTypeNormalizer.Work or ActivityTypeNormalizer.Availability)
+                .Select(x => (DateTime?)x.StartUtc).Min();
+            var crewRest = dutyStart.HasValue && MultiManningHelper.GetStatus(timeline, dutyStart.Value, rest.StartUtc)
+                == MultiManningHelper.CrewStatus.Confirmed;
+
+            // Article 8(5) specifies a separate 9h minimum for a confirmed crew duty.
+            if (IsReducedDailyRest(rest) && !crewRest && !IsSecondPartOfSplitRegularRest(rest, restsSinceWeeklyRest))
             {
                 reducedDailyRestCount++;
                 totalReducedDailyRests++;
@@ -82,6 +93,7 @@ public class ReducedDailyRestCounterRule : IComplianceRule
             }
 
             restsSinceWeeklyRest.Add(rest);
+            if (rest.Duration >= ReducedDailyRest) previousDailyRestEndUtc = rest.EndUtc;
         }
 
         LogSummary(driverId, periods, totalReducedDailyRests, result.Violations.Count);
