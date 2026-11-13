@@ -192,7 +192,8 @@ public class TimelineBuilderService : ITimelineBuilderService
             .ThenBy(x => x.EndUtc)
             .ToList();
 
-        var resolved = new List<TimelineActivity>();
+        var resolved = new SortedSet<TimelineActivity>(Comparer<TimelineActivity>.Create(
+            (left, right) => left.StartUtc.CompareTo(right.StartUtc)));
 
         foreach (var activity in ordered)
         {
@@ -213,12 +214,28 @@ public class TimelineBuilderService : ITimelineBuilderService
     }
 
     private static void AddResolvedActivity(
-        List<TimelineActivity> resolved,
+        SortedSet<TimelineActivity> resolved,
         TimelineActivity activity)
     {
         var remaining = new List<TimelineActivity> { activity };
 
-        foreach (var existing in resolved.OrderBy(x => x.StartUtc).ToList())
+        // Resolved intervals never overlap. Only the predecessor and intervals
+        // starting inside this range can intersect the incoming activity.
+        var predecessor = resolved.GetViewBetween(
+            new TimelineActivity { StartUtc = DateTime.MinValue },
+            new TimelineActivity { StartUtc = activity.StartUtc }).Max;
+        var overlaps = resolved.GetViewBetween(
+                new TimelineActivity { StartUtc = activity.StartUtc },
+                new TimelineActivity { StartUtc = activity.EndUtc })
+            .Where(x => x.StartUtc < activity.EndUtc)
+            .ToList();
+        if (predecessor is not null && predecessor.StartUtc < activity.StartUtc
+            && predecessor.EndUtc > activity.StartUtc)
+        {
+            overlaps.Insert(0, predecessor);
+        }
+
+        foreach (var existing in overlaps)
         {
             if (remaining.Count == 0)
             {
@@ -260,7 +277,10 @@ public class TimelineBuilderService : ITimelineBuilderService
                 }
 
                 resolved.Remove(existing);
-                resolved.AddRange(SubtractOverlap(existing, segment));
+                foreach (var remainder in SubtractOverlap(existing, segment))
+                {
+                    resolved.Add(remainder);
+                }
                 next.Add(segment);
             }
 
