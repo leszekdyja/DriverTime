@@ -99,3 +99,6 @@ jobs:
 
       - name: Test timeline breaks, selection and explanations
         run: node --experimental-strip-types --test tests/drivingBreakCounter.test.mjs tests/timelineSelection.test.mjs tests/drivingBreakExplanation.test.mjs
+
+      - name: Test mobile navigation, desktop planning guard and PWA icons
+        run: node --experimental-strip-types --test tests/mobileNavigation.test.mjs

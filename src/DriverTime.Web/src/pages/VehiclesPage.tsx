@@ -135,24 +135,25 @@ export default function VehiclesPage() {
                             <tbody>
                                 {vehicles.map((vehicle) => (
                                     <tr key={vehicle.id}>
-                                        <td>
+                                        <td data-label="Rejestracja">
                                             <Link className="driver-details-link" to={`/vehicles/${vehicle.id}`}>
                                                 {vehicle.registrationNumber}
                                             </Link>
                                         </td>
-                                        <td>{vehicle.vin || "Brak"}</td>
-                                        <td>
+                                        <td data-label="VIN">{vehicle.vin || "Brak"}</td>
+                                        <td data-label="Status">
                                             {vehicle.active ? (
                                                 <StatusBadge label="Aktywny" tone="success" />
                                             ) : (
                                                 <StatusBadge label="Nieaktywny" tone="neutral" />
                                             )}
                                         </td>
-                                        <td>
+                                        <td data-label="Firma">
                                             {user?.operatingCompanyId ? (
                                                 vehicle.operatingCompanyName ?? "Brak przypisania"
                                             ) : (
                                                 <select
+                                                    aria-label={`Firma pojazdu ${vehicle.registrationNumber}`}
                                                     value={vehicle.operatingCompanyId ?? ""}
                                                     onChange={event => void assignCompany(vehicle, event.target.value || null)}
                                                 >
@@ -163,7 +164,7 @@ export default function VehiclesPage() {
                                                 </select>
                                             )}
                                         </td>
-                                        <td>
+                                        <td data-label="Akcje">
                                             <div className="driver-row-actions">
                                                 <Link className="driver-details-link" to={`/vehicles/${vehicle.id}`}>
                                                     Szczegóły

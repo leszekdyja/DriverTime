@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 
 import { useAuth } from "../auth/useAuth";
 import { useTheme } from "../theme/useTheme";
+import { useMobileLayout } from "../hooks/useMobileLayout";
+import { MobileNavigation } from "../components/mobile/MobileNavigation";
+import { ConnectionStatus } from "../components/mobile/ConnectionStatus";
 import "../styles/layout.css";
+import "../styles/mobile.css";
 
 const navigationItems = [
     { to: "/", label: "Dashboard", icon: "dashboard" },
@@ -18,7 +22,7 @@ const navigationItems = [
     { to: "/reports", label: "Raporty", icon: "reports" },
     { to: "/violations", label: "Naruszenia", icon: "alerts" },
     { to: "/imports", label: "Importy DDD", icon: "imports" },
-    { to: "/import-monitoring", label: "Monitoring importĂłw", icon: "monitoring" },
+    { to: "/import-monitoring", label: "Monitoring importów", icon: "monitoring" },
     { to: "/company-settings", label: "Ustawienia firmy", icon: "company" },
     { to: "/account", label: "Moje konto", icon: "account" },
 ];
@@ -44,6 +48,7 @@ export default function AppLayout() {
     const { user, logout } = useAuth();
     const { isDark, toggleTheme } = useTheme();
     const location = useLocation();
+    const mobile = useMobileLayout();
     const visibleNavigationItems = user?.operatingCompanyId
         ? navigationItems.filter((item) => item.to !== "/companies")
         : navigationItems;
@@ -56,7 +61,7 @@ export default function AppLayout() {
 
     return (
         <div className="app-shell">
-            <aside className="sidebar">
+            {!mobile && <aside className="sidebar">
                 <div className="brand">
                     <span className="brand-mark">DT</span>
                     <div>
@@ -85,7 +90,7 @@ export default function AppLayout() {
                     <span className="sidebar-status"><i /> System operacyjny</span>
                     <small>DriverTime SaaS workspace</small>
                 </div>
-            </aside>
+            </aside>}
 
             <div className="app-main">
                 <header className="topbar">
@@ -100,7 +105,7 @@ export default function AppLayout() {
                             className="theme-toggle"
                             type="button"
                             onClick={toggleTheme}
-                            aria-label={isDark ? "PrzeĹ‚Ä…cz na jasny motyw" : "PrzeĹ‚Ä…cz na ciemny motyw"}
+                            aria-label={isDark ? "Przełącz na jasny motyw" : "Przełącz na ciemny motyw"}
                             aria-pressed={isDark}
                         >
                             <span className="theme-toggle-track" aria-hidden="true">
@@ -108,7 +113,7 @@ export default function AppLayout() {
                             </span>
                             <span>{isDark ? "Ciemny" : "Jasny"}</span>
                         </button>
-                        <Link className="profile-placeholder" aria-label="Profil uĹĽytkownika" to="/account">
+                        <Link className="profile-placeholder" aria-label="Profil użytkownika" to="/account">
                             <span className="profile-avatar">{initials}</span>
                             <div>
                                 <strong>{`${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim() || user?.email}</strong>
@@ -122,9 +127,12 @@ export default function AppLayout() {
                 </header>
 
                 <main className="page-content">
+                    {mobile && <p className="mobile-company-context">Firma: <strong>{user?.operatingCompanyName ?? user?.companyName}</strong></p>}
+                    <ConnectionStatus />
                     <Outlet />
                 </main>
             </div>
+            {mobile && <MobileNavigation items={visibleNavigationItems} icon={name => <NavigationIcon name={name} />} />}
         </div>
     );
 }

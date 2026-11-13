@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { summarizeTimelineSelection } from "./timelineSelection";
 import { drivingSecondsSinceBreak } from "./drivingBreakCounter";
+import { useMobileLayout } from "../../hooks/useMobileLayout";
 import { getComplianceRuleLabel } from "../../utils/complianceLabels";
 import "./TachographTimeline.css";
 
@@ -653,6 +654,9 @@ function getRestAnalysisRows(segment: Segment) {
 }
 
 export default function TachographTimeline({ activities, day, days, label, countryEntries = [], vehicleUses = [], violations = [], cardReadings = [], onViolationClick }: TachographTimelineProps) {
+    const mobile = useMobileLayout();
+    const [gestureMode, setGestureMode] = useState<"scroll" | "select">("scroll");
+    const [zoom, setZoom] = useState(1);
     const [selectedSegmentKey, setSelectedSegmentKey] = useState<string | null>(null);
     const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
     const drag = useRef<{ pointerId: number; start: number; x: number; y: number; moved: boolean } | null>(null);
@@ -695,12 +699,25 @@ export default function TachographTimeline({ activities, day, days, label, count
     }
 
     return (
-        <section className="tachograph-timeline-pro" aria-label="Oś czasu tachografu">
+        <section className={`tachograph-timeline-pro${mobile && gestureMode === "scroll" ? " touch-scroll" : ""}`} aria-label="Oś czasu tachografu">
             <header className="tachograph-pro-header">
                 <div><span>Oś czasu tachografu</span><h4>{label ?? dateRange}</h4></div>
                 <div className="tachograph-pro-meta"><strong>{dateRange}</strong><span>{rows.length === 1 ? "1 dzień" : `${rows.length} dni`}</span></div>
             </header>
-            <p className="tachograph-selection-help">Kliknij aktywność lub przeciągnij po wykresie, aby zbadać dowolny zakres. Możesz przeciągać między dniami. Dokładność zaznaczenia: 1 minuta. Godziny osi: UTC.</p>
+            {mobile && <div className="tachograph-gesture-controls">
+                <div role="group" aria-label="Tryb dotyku">
+                    <button type="button" aria-pressed={gestureMode === "scroll"} onClick={() => { drag.current = null; setGestureMode("scroll"); }}>Przewijaj</button>
+                    <button type="button" aria-pressed={gestureMode === "select"} onClick={() => { drag.current = null; setGestureMode("select"); }}>Zaznacz zakres</button>
+                </div>
+                <div role="group" aria-label="Powiększenie wykresu">
+                    <button type="button" aria-label="Pomniejsz wykres" disabled={zoom <= 1} onClick={() => setZoom(value => Math.max(1, value - 0.5))}>−</button>
+                    <output aria-live="polite">{Math.round(zoom * 100)}%</output>
+                    <button type="button" aria-label="Powiększ wykres" disabled={zoom >= 3} onClick={() => setZoom(value => Math.min(3, value + 0.5))}>+</button>
+                </div>
+            </div>}
+            <p className="tachograph-selection-help">{mobile ? (gestureMode === "scroll" ? "Przesuń wykres palcem lub dotknij aktywności. Aby zbadać przedział, wybierz Zaznacz zakres albo wpisz dokładne godziny poniżej."
+                : "Przeciągnij palcem po wykresie, aby zaznaczyć przedział. Aby przesunąć wykres, wróć do trybu Przewijaj.")
+                : "Kliknij aktywność lub przeciągnij po wykresie, aby zbadać dowolny zakres. Możesz przeciągać między dniami."} Dokładność zaznaczenia: 1 minuta. Godziny osi: UTC.</p>
             <details className="tachograph-manual-selection">
                 <summary>Wpisz dokładne godziny zaznaczenia</summary>
                 <form onInput={(event) => {
@@ -724,7 +741,7 @@ export default function TachographTimeline({ activities, day, days, label, count
             </details>
             <div className="tachograph-analysis-layout">
                 <div className="tachograph-pro-scroll">
-                    <div className="tachograph-pro-grid">
+                    <div className="tachograph-pro-grid" style={mobile ? { minWidth: `${760 * zoom}px` } : undefined}>
                         <div className="tachograph-time-scale" aria-hidden="true"><div /><div className="tachograph-time-axis">{hourLabels.map((hour) => <span key={hour} style={{ left: `${(hour / 24) * 100}%` }}>{formatHour(hour)}</span>)}</div></div>
                         <div className="tachograph-week-rows">
                             {rowModels.map(({ row, segments, markers }) => {
@@ -735,6 +752,7 @@ export default function TachographTimeline({ activities, day, days, label, count
                                         <div className="tachograph-day-label"><strong>{row.dayName}</strong><span>{row.shortDate}</span><small>Jazda {formatDuration(drivingSeconds)}</small></div>
                                         <div className="tachograph-day-track" data-selection-day={row.date}
                                             onPointerDownCapture={(event) => {
+                                                if (mobile && gestureMode === "scroll") return;
                                                 if (!event.isPrimary || event.button !== 0) return;
                                                 suppressClick.current = false;
                                                 drag.current = { pointerId: event.pointerId, start: pointerTime(event, row.date), x: event.clientX, y: event.clientY, moved: false };
