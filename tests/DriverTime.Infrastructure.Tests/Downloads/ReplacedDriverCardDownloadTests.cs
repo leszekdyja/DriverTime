@@ -163,4 +163,45 @@ public class ReplacedDriverCardDownloadTests
         current.OperatingCompanyId = null; current.CompanyId = Guid.NewGuid();
         Assert.IsFalse(DownloadScheduleService.IsSupersededDriverCard(old, current, DateTime.UtcNow));
     }
+
+    [TestMethod]
+    public async Task ReadoutOfReplacementOnSameProfileUsesNewCardEvenWithoutActivities()
+    {
+        await using var db = Database();
+        var driver = Card(Guid.NewGuid(), false);
+        driver.CardNumber = "1234567890123402";
+        db.Drivers.Add(driver);
+        Readout(db, driver, 55);
+        var readAt = DateTime.UtcNow.AddDays(-12);
+        db.DddFiles.Add(new DddFile
+        {
+            Id = Guid.NewGuid(), CompanyId = driver.CompanyId, DriverId = driver.Id,
+            DriverCardNumber = "1234567890123412",
+            CardReadAtUtc = readAt, CardReadDateSource = "OriginalFileName"
+        });
+        await db.SaveChangesAsync();
+
+        var row = (await new DownloadScheduleService(db).GetDriverDownloadsAsync(driver.CompanyId, null)).Single();
+
+        Assert.AreEqual("1234567890123412", row.CardNumber);
+        Assert.AreEqual(readAt.AddDays(28), row.NextRequiredDownloadUtc);
+        Assert.AreEqual(DownloadStatus.Ok, row.Status);
+        Assert.AreEqual("1234567890123402", driver.CardNumber);
+    }
+
+    [TestMethod]
+    public void ImportAdoptsForwardReplacementWithSameExpiryAndDoesNotRevertOnOldReadout()
+    {
+        var driver = Card(Guid.NewGuid(), false);
+        var parsed = new DriverTime.Application.DDD.DTOs.ParsedDriverDto
+        {
+            FirstName = driver.FirstName, LastName = driver.LastName,
+            CardIssuingCountry = driver.CardIssuingCountry,
+            CardExpiryDate = driver.CardExpiryDate!.Value.ToString("yyyy-MM-dd")
+        };
+        DddFileService.AdoptNewerDriverCard(driver, parsed, "1234567890123412");
+        Assert.AreEqual("1234567890123412", driver.CardNumber);
+        DddFileService.AdoptNewerDriverCard(driver, parsed, "1234567890123402");
+        Assert.AreEqual("1234567890123412", driver.CardNumber);
+    }
 }

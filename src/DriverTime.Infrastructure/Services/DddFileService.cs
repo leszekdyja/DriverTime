@@ -846,11 +846,27 @@ public class DddFileService : IDddFileService
             .ToUpperInvariant();
     }
 
-    private static void AdoptNewerDriverCard(Driver driver, ParsedDriverDto parsedDriver, string cardNumber)
+    internal static bool IsForwardReplacementCard(string oldNumber, string newNumber)
+    {
+        oldNumber = NormalizeCardNumber(oldNumber);
+        newNumber = NormalizeCardNumber(newNumber);
+        return oldNumber.Length == 16 && newNumber.Length == 16
+            && oldNumber.All(char.IsAsciiLetterOrDigit) && newNumber.All(char.IsAsciiLetterOrDigit)
+            && oldNumber[..14] == newNumber[..14]
+            && oldNumber[15] == newNumber[15] && newNumber[14] > oldNumber[14];
+    }
+
+    internal static void AdoptNewerDriverCard(Driver driver, ParsedDriverDto parsedDriver, string cardNumber)
     {
         var parsedExpiry = ParseDate(parsedDriver.CardExpiryDate);
         if (driver.CardNumber == cardNumber) return;
-        if (driver.CardExpiryDate.HasValue && (!parsedExpiry.HasValue || parsedExpiry.Value <= driver.CardExpiryDate.Value)) return;
+        if (driver.CardExpiryDate is { } currentExpiry)
+        {
+            if (!parsedExpiry.HasValue || parsedExpiry.Value.Date < currentExpiry.Date) return;
+            if (parsedExpiry.Value.Date == currentExpiry.Date
+                && (!IsForwardReplacementCard(driver.CardNumber, cardNumber)
+                    || !IsSameDriverPerson(driver, parsedDriver))) return;
+        }
 
         driver.CardNumber = cardNumber;
         driver.CardExpiryDate = parsedExpiry;

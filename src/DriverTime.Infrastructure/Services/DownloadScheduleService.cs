@@ -47,6 +47,9 @@ public class DownloadScheduleService : IDownloadScheduleService
             .GroupBy(x => (x.File.DriverId, x.File.DriverCardNumber))
             .ToDictionary(group => group.Key, group => group.OrderByDescending(x => x.Read!.AtUtc).First().Read!);
 
+        // Older imports could attach the replacement to the driver without updating the profile.
+        var readCardsByDriver = readDates.Keys.ToLookup(x => x.DriverId, x => x.DriverCardNumber);
+
         var lastActivities = await _dbContext.DriverActivities
             .AsNoTracking()
             .Where(x =>
@@ -67,7 +70,11 @@ public class DownloadScheduleService : IDownloadScheduleService
         return activeDrivers
             .Select(x =>
             {
-                var read = readDates.GetValueOrDefault((x.Id, x.CardNumber));
+                var cardNumber = readCardsByDriver[x.Id]
+                    .Where(number => DddFileService.IsForwardReplacementCard(x.CardNumber, number))
+                    .OrderByDescending(number => number.Trim().ToUpperInvariant()[14])
+                    .FirstOrDefault() ?? x.CardNumber;
+                var read = readDates.GetValueOrDefault((x.Id, cardNumber));
                 var lastRead = read?.AtUtc ?? lastActivities.GetValueOrDefault(x.Id);
                 var nextRead = DownloadScheduleCalculator.GetNextRequiredDownloadUtc(lastRead,
                     DownloadScheduleCalculator.DriverDownloadIntervalDays);
@@ -77,7 +84,7 @@ public class DownloadScheduleService : IDownloadScheduleService
                     DriverId = x.Id,
                     FirstName = x.FirstName,
                     LastName = x.LastName,
-                    CardNumber = x.CardNumber,
+                    CardNumber = cardNumber,
                     LastDownloadUtc = lastRead,
                     LastDownloadSource = read?.Source ?? (lastRead.HasValue ? "ActivityEstimate" : "Unknown"),
                     NextRequiredDownloadUtc = nextRead,
@@ -101,13 +108,9 @@ public class DownloadScheduleService : IDownloadScheduleService
             return false;
         var expiredRenewal = old.CardExpiryDate.Value.Date < nowUtc.Date
             && replacement.CardExpiryDate > old.CardExpiryDate;
-        var oldNumber = old.CardNumber.Trim().ToUpperInvariant();
-        var newNumber = replacement.CardNumber.Trim().ToUpperInvariant();
-        // A replacement (lost/damaged card) retains its expiry and renewal index.
         var sameExpiryReplacement = replacement.CardExpiryDate.Value.Date == old.CardExpiryDate.Value.Date
-            && oldNumber.Length == 16 && newNumber.Length == 16
-            && oldNumber.All(char.IsAsciiLetterOrDigit) && newNumber.All(char.IsAsciiLetterOrDigit)
-            && oldNumber[15] == newNumber[15] && newNumber[14] > oldNumber[14];
+            && DddFileService.IsForwardReplacementCard(old.CardNumber, replacement.CardNumber);
+
         if (!expiredRenewal && !sameExpiryReplacement) return false;
         var identity = DddFileService.GetCardIdentity(old.CardNumber);
         return identity is not null && identity == DddFileService.GetCardIdentity(replacement.CardNumber)
