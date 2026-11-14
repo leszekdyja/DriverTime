@@ -1,4 +1,4 @@
-﻿using DriverTime.Application.Drivers.DTOs;
+using DriverTime.Application.Drivers.DTOs;
 using DriverTime.Application.Interfaces;
 using DriverTime.Application.Violations.DTOs;
 using DriverTime.Domain.Entities;
@@ -12,18 +12,15 @@ public class DriverService : IDriverService
 {
     private readonly DriverTimeDbContext _dbContext;
     private readonly ICurrentUserService _currentUser;
-    private readonly IDriverViolationService _driverViolationService;
     private readonly ILogger<DriverService> _logger;
 
     public DriverService(
         DriverTimeDbContext dbContext,
         ICurrentUserService currentUser,
-        IDriverViolationService driverViolationService,
         ILogger<DriverService> logger)
     {
         _dbContext = dbContext;
         _currentUser = currentUser;
-        _driverViolationService = driverViolationService;
         _logger = logger;
     }
 
@@ -199,10 +196,30 @@ public class DriverService : IDriverService
                 visibleTimelineRange.Value.EndUtc);
         }
 
-        driver.RecentViolations = ((await _driverViolationService
-                .GetViolationsForDriverAsync(id)) ?? Array.Empty<DriverViolationDto>())
+        var now = DateTime.UtcNow;
+        var cutoff = now.AddDays(-ViolationQueryService.DisplayRangeDays);
+        var recentViolations = await _dbContext.Violations
+            .AsNoTracking()
+            .Where(x => x.DriverId == id && x.ViolationEnd >= cutoff && x.ViolationStart <= now)
+            .OrderByDescending(x => x.ViolationStart)
+            .ThenBy(x => x.Id)
             .Take(10)
-            .ToList();
+            .ToListAsync();
+        driver.RecentViolations = recentViolations.Select(x => new DriverViolationDto
+        {
+            Code = x.RegulationReference,
+            DriverFirstName = driver.FirstName,
+            DriverLastName = driver.LastName,
+            DriverCardNumber = driver.CardNumber,
+            ViolationType = x.ViolationType,
+            OccurredAtUtc = x.ViolationStart,
+            PeriodEndUtc = x.ViolationEnd,
+            Description = ViolationQueryService.BuildDescription(x),
+            Severity = x.Severity,
+            ActualDurationMinutes = x.DurationMinutes,
+            LimitDurationMinutes = ViolationQueryService.GetLimitMinutes(x.RegulationReference)
+        }).ToList();
+
         driver.Vehicles = await _dbContext.VehicleUses
             .AsNoTracking()
             .Where(x =>

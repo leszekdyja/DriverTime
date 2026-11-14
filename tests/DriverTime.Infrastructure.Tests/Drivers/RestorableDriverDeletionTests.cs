@@ -91,7 +91,7 @@ public class RestorableDriverDeletionTests
         var company = Guid.NewGuid(); var firstScope = Guid.NewGuid(); var otherScope = Guid.NewGuid();
         var driver = new Driver { Id = Guid.NewGuid(), CompanyId = company, OperatingCompanyId = firstScope };
         db.Drivers.Add(driver); await db.SaveChangesAsync();
-        var foreign = new DriverService(db, new User(company, otherScope), null!, NullLogger<DriverService>.Instance);
+        var foreign = new DriverService(db, new User(company, otherScope), NullLogger<DriverService>.Instance);
         Assert.IsFalse(await foreign.DeleteAsync(driver.Id));
         await Service(db, company).DeleteAsync(driver.Id);
         Assert.AreEqual(0, (await foreign.GetDeletedAsync()).Count);
@@ -100,7 +100,7 @@ public class RestorableDriverDeletionTests
 
     private static DriverTimeDbContext Context() => new(new DbContextOptionsBuilder<DriverTimeDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-    private static DriverService Service(DriverTimeDbContext db, Guid company) => new(db, new User(company), null!, NullLogger<DriverService>.Instance);
+    private static DriverService Service(DriverTimeDbContext db, Guid company) => new(db, new User(company), NullLogger<DriverService>.Instance);
     private sealed class User(Guid company, Guid? scope = null) : ICurrentUserService
     {
         public Guid UserId => Guid.NewGuid(); public Guid CompanyId => company; public Guid DriverId => Guid.Empty;
