@@ -19,7 +19,7 @@ public class DriverActivityStatusTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var company=Guid.NewGuid();var driver=new Driver {Id=Guid.NewGuid(),CompanyId=company};
         db.Drivers.Add(driver);await db.SaveChangesAsync();
-        var service=new DriverService(db,new User(company,null),null!,NullLogger<DriverService>.Instance);
+        var service=new DriverService(db,new User(company,null), NullLogger<DriverService>.Instance);
         var saved=await service.UpdatePlanningAsync(driver.Id,new UpdateDriverPlanningDto {IsActive=false,IncludeInPlanning=true});
         Assert.IsFalse(saved!.IsActive);Assert.IsTrue(saved.IncludeInPlanning);
         Assert.IsFalse((await service.GetAllAsync()).Single().IsActive);
@@ -35,7 +35,7 @@ public class DriverActivityStatusTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var company=Guid.NewGuid();var driver=new Driver {Id=Guid.NewGuid(),CompanyId=company,OperatingCompanyId=Guid.NewGuid()};
         db.Drivers.Add(driver);await db.SaveChangesAsync();
-        var service=new DriverService(db,new User(company,Guid.NewGuid()),null!,NullLogger<DriverService>.Instance);
+        var service=new DriverService(db,new User(company,Guid.NewGuid()), NullLogger<DriverService>.Instance);
         Assert.IsNull(await service.UpdatePlanningAsync(driver.Id,new UpdateDriverPlanningDto {IsActive=false}));
         Assert.IsTrue(driver.IsActive);
     }
