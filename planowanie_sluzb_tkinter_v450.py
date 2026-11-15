@@ -30,7 +30,14 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-APP_VERSION = "v514_correct_holiday_working_hours"
+NEW_YEAR_EVE_DUTY_TYPES = {
+    "Według kalendarza": "calendar",
+    "Dzień roboczy": "workday",
+    "Sobota": "saturday",
+    "Niedziela": "sunday",
+}
+
+APP_VERSION = "v516_new_year_eve_radio_buttons"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -11318,6 +11325,16 @@ class DutyPlannerApp(tk.Tk):
 
         self.auto_status_label = ttk.Label(auto_box, text="", style="Good.TLabel")
         self.auto_status_label.grid(row=3, column=0, columnspan=6, sticky="w", pady=(10, 0))
+        self.new_year_eve_box = ttk.Frame(auto_box)
+        self.new_year_eve_box.grid(row=4, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        ttk.Label(self.new_year_eve_box, text="31 grudnia – planuj służby jak:").pack(side="left", padx=(0, 8))
+        self.new_year_eve_choice = tk.StringVar(master=self)
+        for label, value in NEW_YEAR_EVE_DUTY_TYPES.items():
+            ttk.Radiobutton(
+                self.new_year_eve_box, text=label, value=value, variable=self.new_year_eve_choice,
+                command=self.save_new_year_eve_duty_type,
+            ).pack(side="left", padx=(0, 8))
+        self.refresh_new_year_eve_duty_type()
         auto_box.columnconfigure(5, weight=1)
 
         proposals_box = ttk.LabelFrame(tab, text="Propozycje zmian po ręcznych rezerwacjach", padding=10)
@@ -12632,6 +12649,7 @@ class DutyPlannerApp(tk.Tk):
         if hasattr(self, "weekend_duty_overrides_tree"):
             self.set_default_weekend_override_date()
             self.load_weekend_duty_overrides_tree()
+        self.refresh_new_year_eve_duty_type()
         self.set_status(f"Ustawiono miesiąc {month_key}. Gotowy plan i rbh ustawiono na ten miesiąc.", "Good.TLabel")
 
     def each_date(self, start: str, end: str) -> list[str]:
@@ -14142,12 +14160,56 @@ class DutyPlannerApp(tk.Tk):
         """Zwraca True dla świąt ustawowo wolnych z kalendarza programu."""
         return day in self.polish_public_holidays(day.year)
 
+    def new_year_eve_duty_type(self, year: int) -> str:
+        cache = self.__dict__.setdefault("_new_year_eve_types", {})
+        if year not in cache:
+            cache[year] = (
+                self.get_meta(f"new_year_eve_duty_type_{year}", "calendar")
+                if "conn" in self.__dict__ else "calendar"
+            )
+        return cache[year]
+
+    def refresh_new_year_eve_duty_type(self) -> None:
+        if "new_year_eve_choice" not in self.__dict__:
+            return
+        target = self.get_target_year_month()
+        if target is None or target[1] != 12:
+            self.new_year_eve_box.grid_remove()
+            return
+        value = self.new_year_eve_duty_type(target[0])
+        self.new_year_eve_choice.set(value if value in NEW_YEAR_EVE_DUTY_TYPES.values() else "calendar")
+        self.new_year_eve_box.grid()
+
+    def save_new_year_eve_duty_type(self, _event=None) -> None:
+        target = self.get_target_year_month()
+        if target is None or target[1] != 12:
+            return
+        year = target[0]
+        value = self.new_year_eve_choice.get()
+        label = next((label for label, key in NEW_YEAR_EVE_DUTY_TYPES.items() if key == value), None)
+        if label is None:
+            return
+        self.set_meta(f"new_year_eve_duty_type_{year}", value)
+        self.conn.commit()
+        self.__dict__.setdefault("_new_year_eve_types", {})[year] = value
+        self.apply_target_month_changed()
+        self.set_status(f"31 grudnia {year}: {label}. Ustawienie obowiązuje przy planowaniu.", "Good.TLabel")
+
     def planning_weekday(self, day: date) -> int:
         """25 i 26 grudnia mają służby niedzielne, inne święta sobotnie.
 
         0-4 = pon.-pt., 5 = sobota, 6 = niedziela.
         Wyjątek v512: pierwszy i drugi dzień Bożego Narodzenia to niedziela.
         """
+        if (day.month, day.day) == (12, 31):
+            override = self.new_year_eve_duty_type(day.year)
+            if override == "workday":
+                return day.weekday() if day.weekday() < 5 else 0
+            if override == "saturday":
+                return 5
+            if override == "sunday":
+                return 6
+
         if day.month == 12 and day.day in (25, 26):
             return 6
         return 5 if self.is_public_holiday(day) else day.weekday()
