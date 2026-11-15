@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v516_new_year_eve_radio_buttons"
+APP_VERSION = "v517_new_year_eve_leave_visibility"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -15232,7 +15232,7 @@ class DutyPlannerApp(tk.Tk):
                 return False
         else:
             day_obj = plan_date
-        return self.is_planning_weekend_or_holiday(day_obj)
+        return not self.is_calendar_workday_for_norm(day_obj)
 
     def wg_duty_ids(self) -> set[int]:
         result: set[int] = set()
