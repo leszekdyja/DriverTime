@@ -38,3 +38,17 @@ class NewYearEveDutyTypeTests(unittest.TestCase):
                         duty[flag] = 1
                         self.assertEqual(i == (0 if weekday < 5 else weekday - 4),
                                          reopened.duty_allowed_on_weekday(duty, weekday))
+
+    def test_december_31_leave_visibility_and_rbh_follow_calendar(self):
+        planner = object.__new__(DutyPlannerApp)
+        for year, mode, hidden, hours in (
+            (2026, "saturday", False, 8),
+            (2026, "sunday", False, 8),
+            (2028, "workday", True, 0),
+        ):
+            with self.subTest(year=year, mode=mode):
+                planner._new_year_eve_types = {year: mode}
+                day = date(year, 12, 31)
+                duty = {"code": "UW", "work_hours": 8}
+                self.assertEqual(hidden, planner.should_hide_vacation_on_date(duty, day))
+                self.assertEqual(hours, planner.planned_entry_rbh_hours(duty, day))
