@@ -20,7 +20,7 @@ class NewYearEveDutyTypeTests(unittest.TestCase):
                     planner = object.__new__(DutyPlannerApp)
                     planner.conn = conn
                     planner.get_target_year_month = lambda: (2028, 12)
-                    planner.new_year_eve_combo = SimpleNamespace(get=lambda: label)
+                    planner.new_year_eve_choice = SimpleNamespace(get=lambda: setting)
                     planner.apply_target_month_changed = lambda: None
                     planner.set_status = lambda *_: None
                     planner.save_new_year_eve_duty_type()

@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v515_new_year_eve_duty_type"
+APP_VERSION = "v516_new_year_eve_radio_buttons"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -11314,16 +11314,6 @@ class DutyPlannerApp(tk.Tk):
             style="Hint.TLabel",
         ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(4, 0))
 
-        self.new_year_eve_box = ttk.Frame(auto_box)
-        self.new_year_eve_box.grid(row=1, column=0, columnspan=5, sticky="w", pady=(4, 4))
-        ttk.Label(self.new_year_eve_box, text="31 grudnia – planuj służby jak:").pack(side="left", padx=(0, 8))
-        self.new_year_eve_combo = ttk.Combobox(
-            self.new_year_eve_box, values=list(NEW_YEAR_EVE_DUTY_TYPES), state="readonly", width=20
-        )
-        self.new_year_eve_combo.pack(side="left")
-        self.new_year_eve_combo.bind("<<ComboboxSelected>>", self.save_new_year_eve_duty_type)
-        self.refresh_new_year_eve_duty_type()
-
         self.auto_plan_button = ttk.Button(
             auto_box,
             text="Zaplanuj automatycznie wszystkich dostępnych kierowców",
@@ -11335,6 +11325,16 @@ class DutyPlannerApp(tk.Tk):
 
         self.auto_status_label = ttk.Label(auto_box, text="", style="Good.TLabel")
         self.auto_status_label.grid(row=3, column=0, columnspan=6, sticky="w", pady=(10, 0))
+        self.new_year_eve_box = ttk.Frame(auto_box)
+        self.new_year_eve_box.grid(row=4, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        ttk.Label(self.new_year_eve_box, text="31 grudnia – planuj służby jak:").pack(side="left", padx=(0, 8))
+        self.new_year_eve_choice = tk.StringVar(master=self)
+        for label, value in NEW_YEAR_EVE_DUTY_TYPES.items():
+            ttk.Radiobutton(
+                self.new_year_eve_box, text=label, value=value, variable=self.new_year_eve_choice,
+                command=self.save_new_year_eve_duty_type,
+            ).pack(side="left", padx=(0, 8))
+        self.refresh_new_year_eve_duty_type()
         auto_box.columnconfigure(5, weight=1)
 
         proposals_box = ttk.LabelFrame(tab, text="Propozycje zmian po ręcznych rezerwacjach", padding=10)
@@ -14170,15 +14170,14 @@ class DutyPlannerApp(tk.Tk):
         return cache[year]
 
     def refresh_new_year_eve_duty_type(self) -> None:
-        if "new_year_eve_combo" not in self.__dict__:
+        if "new_year_eve_choice" not in self.__dict__:
             return
         target = self.get_target_year_month()
         if target is None or target[1] != 12:
             self.new_year_eve_box.grid_remove()
             return
         value = self.new_year_eve_duty_type(target[0])
-        label = next((label for label, key in NEW_YEAR_EVE_DUTY_TYPES.items() if key == value), "Według kalendarza")
-        self.new_year_eve_combo.set(label)
+        self.new_year_eve_choice.set(value if value in NEW_YEAR_EVE_DUTY_TYPES.values() else "calendar")
         self.new_year_eve_box.grid()
 
     def save_new_year_eve_duty_type(self, _event=None) -> None:
@@ -14186,9 +14185,9 @@ class DutyPlannerApp(tk.Tk):
         if target is None or target[1] != 12:
             return
         year = target[0]
-        label = self.new_year_eve_combo.get()
-        value = NEW_YEAR_EVE_DUTY_TYPES.get(label)
-        if value is None:
+        value = self.new_year_eve_choice.get()
+        label = next((label for label, key in NEW_YEAR_EVE_DUTY_TYPES.items() if key == value), None)
+        if label is None:
             return
         self.set_meta(f"new_year_eve_duty_type_{year}", value)
         self.conn.commit()
