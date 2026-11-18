@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v518_barborka_duty_type"
+APP_VERSION = "v519_sick_leave_rbh"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -15181,7 +15181,7 @@ class DutyPlannerApp(tk.Tk):
     def is_paid_rest_only_for_compliance(self, duty: sqlite3.Row | dict[str, object]) -> bool:
         """Płatna nieobecność liczona do RBH, ale nie do kontroli czasu pracy.
 
-        UW ma naliczać 8 rbh w bilansie planu, natomiast przy kontroli odpoczynku,
+        UW i CH mają naliczać 8 rbh w bilansie planu, natomiast przy kontroli odpoczynku,
         ciągu dni pracy, limitu tygodniowego, średniej i normy miesięcznej ma być
         traktowany jak WG, czyli dzień bez realnej pracy.
         """
@@ -15189,7 +15189,7 @@ class DutyPlannerApp(tk.Tk):
             code = self.normalize_code(duty["code"])
         except Exception:
             code = ""
-        return code == "UW"
+        return code in {"UW", "CH"}
 
     def is_manual_vacation_note_on_day_off(self, duty: sqlite3.Row | dict[str, object], note: object) -> bool:
         """Czy ręczne WG/W opisano jako urlop wypoczynkowy.
@@ -15234,7 +15234,7 @@ class DutyPlannerApp(tk.Tk):
             code = ""
         if code == "RN" or self.is_rn_duty(duty):
             return 8.0
-        if code in {"UW", "UO"} or self.is_manual_vacation_note_on_day_off(duty, note):
+        if code in {"UW", "UO", "CH"} or self.is_manual_vacation_note_on_day_off(duty, note):
             if day_obj is not None and not self.is_calendar_workday_for_norm(day_obj):
                 return 0.0
             return 8.0
