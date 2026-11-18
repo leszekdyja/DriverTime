@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v519_sick_leave_rbh"
+APP_VERSION = "v520_repeatable_text_duties"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -22025,7 +22025,7 @@ class DutyPlannerApp(tk.Tk):
                 if duty is None:
                     return False
                 code = self.normalize_code(str(duty["code"] or ""))
-                if not code:
+                if not code.isdigit():
                     return False
                 if int(duty_id) in wg_duty_ids or int(duty_id) in rn_duty_ids or int(duty_id) in reserve_duty_id_set:
                     return False
@@ -32268,7 +32268,11 @@ class DutyPlannerApp(tk.Tk):
         sickness_duty_ids = {int(x) for x in (self.duty_id_by_code("CH"),) if x is not None}
         rental_duty_ids = {int(x) for x in (self.duty_id_by_code("NAJEM"), self.duty_id_by_code("NAJEM2")) if x is not None}
         repeatable_duty_ids = reserve_duty_ids | vacation_duty_ids | sickness_duty_ids | rental_duty_ids
-        if int(duty_id) not in wg_duty_ids and int(duty_id) not in repeatable_duty_ids:
+        selected_code = self.normalize_code(str(self.one_value(
+            "SELECT code FROM duties WHERE id=?", (int(duty_id),), default=""
+        )))
+        if (int(duty_id) not in wg_duty_ids and int(duty_id) not in repeatable_duty_ids
+                and (selected_code == "RN" or self.unique_daily_service_code(selected_code))):
             for row in self.rows(
                 """
                 SELECT id
@@ -33179,7 +33183,8 @@ class DutyPlannerApp(tk.Tk):
 
         # R/R2, urlopy UW/UO, choroba CH, NAJEM/NAJEM2 oraz ZAGLEBIE mogą wystąpić w tym samym dniu u wielu kierowców.
         # Nadal działa unikalność plan_date+driver_id, więc jeden kierowca ma tylko jeden wpis na dzień.
-        if duty_id not in self.wg_duty_ids() and int(duty_id) not in repeatable_manual_duty_ids:
+        if (duty_id not in self.wg_duty_ids() and int(duty_id) not in repeatable_manual_duty_ids
+                and (selected_manual_code == "RN" or self.unique_daily_service_code(selected_manual_code))):
             is_rn = self.is_rn_duty(duty_row) if duty_row is not None else False
             duplicate_rows = self.rows(
                 """
@@ -34510,7 +34515,7 @@ class DutyPlannerApp(tk.Tk):
     def unique_daily_service_code(self, code: str, name: str = "", duty_type: str = "") -> bool:
         """Czy kod służby jest realną służbą, która nie może dublować się w jednym dniu."""
         norm_code = self.normalize_code(str(code or ""))
-        if not norm_code:
+        if not norm_code.isdigit():
             return False
         if norm_code in {"WG", "W", "UW", "UO", "CH", "SZK", "BO", "UB", "BHP", "ZAGLEBIE", "R", "R2", "RN", "NAJEM", "NAJEM2", "REZ", "REZERWACJA"}:
             return False
