@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v517_new_year_eve_leave_visibility"
+APP_VERSION = "v518_barborka_duty_type"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -11335,6 +11335,16 @@ class DutyPlannerApp(tk.Tk):
                 command=self.save_new_year_eve_duty_type,
             ).pack(side="left", padx=(0, 8))
         self.refresh_new_year_eve_duty_type()
+        self.barborka_box = ttk.Frame(auto_box)
+        self.barborka_box.grid(row=5, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        ttk.Label(self.barborka_box, text="4 grudnia (Barbórka) – planuj służby jak:").pack(side="left", padx=(0, 8))
+        self.barborka_choice = tk.StringVar(master=self)
+        for label, value in NEW_YEAR_EVE_DUTY_TYPES.items():
+            ttk.Radiobutton(
+                self.barborka_box, text=label, value=value, variable=self.barborka_choice,
+                command=self.save_barborka_duty_type,
+            ).pack(side="left", padx=(0, 8))
+        self.refresh_barborka_duty_type()
         auto_box.columnconfigure(5, weight=1)
 
         proposals_box = ttk.LabelFrame(tab, text="Propozycje zmian po ręcznych rezerwacjach", padding=10)
@@ -12650,6 +12660,7 @@ class DutyPlannerApp(tk.Tk):
             self.set_default_weekend_override_date()
             self.load_weekend_duty_overrides_tree()
         self.refresh_new_year_eve_duty_type()
+        self.refresh_barborka_duty_type()
         self.set_status(f"Ustawiono miesiąc {month_key}. Gotowy plan i rbh ustawiono na ten miesiąc.", "Good.TLabel")
 
     def each_date(self, start: str, end: str) -> list[str]:
@@ -14195,12 +14206,56 @@ class DutyPlannerApp(tk.Tk):
         self.apply_target_month_changed()
         self.set_status(f"31 grudnia {year}: {label}. Ustawienie obowiązuje przy planowaniu.", "Good.TLabel")
 
+    def barborka_duty_type(self, year: int) -> str:
+        cache = self.__dict__.setdefault("_barborka_types", {})
+        if year not in cache:
+            cache[year] = (
+                self.get_meta(f"barborka_duty_type_{year}", "saturday")
+                if "conn" in self.__dict__ else "saturday"
+            )
+        return cache[year]
+
+    def refresh_barborka_duty_type(self) -> None:
+        if "barborka_choice" not in self.__dict__:
+            return
+        target = self.get_target_year_month()
+        if target is None or target[1] != 12:
+            self.barborka_box.grid_remove()
+            return
+        value = self.barborka_duty_type(target[0])
+        self.barborka_choice.set(value if value in NEW_YEAR_EVE_DUTY_TYPES.values() else "saturday")
+        self.barborka_box.grid()
+
+    def save_barborka_duty_type(self, _event=None) -> None:
+        target = self.get_target_year_month()
+        if target is None or target[1] != 12:
+            return
+        year = target[0]
+        value = self.barborka_choice.get()
+        label = next((label for label, key in NEW_YEAR_EVE_DUTY_TYPES.items() if key == value), None)
+        if label is None:
+            return
+        self.set_meta(f"barborka_duty_type_{year}", value)
+        self.conn.commit()
+        self.__dict__.setdefault("_barborka_types", {})[year] = value
+        self.apply_target_month_changed()
+        self.set_status(f"4 grudnia (Barbórka) {year}: {label}. Ustawienie obowiązuje przy planowaniu.", "Good.TLabel")
+
     def planning_weekday(self, day: date) -> int:
         """25 i 26 grudnia mają służby niedzielne, inne święta sobotnie.
 
         0-4 = pon.-pt., 5 = sobota, 6 = niedziela.
         Wyjątek v512: pierwszy i drugi dzień Bożego Narodzenia to niedziela.
         """
+        if (day.month, day.day) == (12, 4):
+            override = self.barborka_duty_type(day.year)
+            if override == "workday":
+                return day.weekday() if day.weekday() < 5 else 0
+            if override == "saturday":
+                return 5
+            if override == "sunday":
+                return 6
+
         if (day.month, day.day) == (12, 31):
             override = self.new_year_eve_duty_type(day.year)
             if override == "workday":
