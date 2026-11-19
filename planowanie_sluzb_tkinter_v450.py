@@ -37,7 +37,7 @@ NEW_YEAR_EVE_DUTY_TYPES = {
     "Niedziela": "sunday",
 }
 
-APP_VERSION = "v520_repeatable_text_duties"
+APP_VERSION = "v521_strict_weekly_shifts"
 # v504: RN pozostaje obowiazkowa takze wtedy, gdy zabraknie nowych kierowcow
 # dla kolejnego bloku niedziela-piatek. Najpierw dziala zwykla rotacja, a dopiero
 # przy niepelnej obsadzie wolno ponownie uzyc kierowcy z wczesniejszego bloku
@@ -21584,7 +21584,7 @@ class DutyPlannerApp(tk.Tk):
                 start_shift_reason = direct_month_start_shift_block_reason(int(driver_id), int(duty_id), target_day_obj)
                 if start_shift_reason:
                     has_explicit_start_shift = int(driver_id) in direct_month_start_shifts
-                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch:
+                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch or start_shift_reason.startswith("kolejność zmian kierowcy:"):
                         return False
                 if pair_same_shift_block_reason(int(driver_id), int(duty_id), str(target_date)):
                     return False
@@ -21884,6 +21884,13 @@ class DutyPlannerApp(tk.Tk):
 
             def direct_month_start_shift_block_reason(driver_id: int, duty_id: int, day_obj: date) -> str | None:
                 """Twardo zachowaj ręczny wybór w pierwszym tygodniu lub przy pierwszej pracy."""
+                duty = duty_rows_by_id.get(int(duty_id))
+                if duty is not None and self.normalize_code(duty["code"]).isdigit():
+                    if not duty_matches_week_shift(int(driver_id), int(duty_id), day_obj):
+                        return "kolejność zmian kierowcy: wymagana " + self.preferred_shift_label(
+                            effective_preferred_shift_for_date(int(driver_id), day_obj)
+                        )
+
                 # Bezposredni wpis oraz zmiana odziedziczona z poprzedniego
                 # miesiaca sa rownie wiazace w pierwszym tygodniu planu.
                 preferred = getattr(self, "_active_month_start_shifts", {}).get(int(driver_id))
@@ -22193,7 +22200,7 @@ class DutyPlannerApp(tk.Tk):
                 start_shift_reason = direct_month_start_shift_block_reason(driver_id, duty_id, target_day_obj)
                 if start_shift_reason:
                     has_explicit_start_shift = int(driver_id) in direct_month_start_shifts
-                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch:
+                    if has_explicit_start_shift or not allow_inherited_month_start_shift_mismatch or start_shift_reason.startswith("kolejność zmian kierowcy:"):
                         if is_required:
                             duty_code = str(duty_for_duplicate_check["code"] or duty_id) if duty_for_duplicate_check is not None else str(duty_id)
                             unfilled_duties.append((target_date, duty_id, duty_code, start_shift_reason))
@@ -27539,7 +27546,7 @@ class DutyPlannerApp(tk.Tk):
             # v389: ten etap był martwy, bo full_coverage_allow_shift_change nigdy
             # nie było przełączane na True. Uruchom go po głównym etapie wysokich
             # priorytetów, żeby puste komórki/zmiana służby mogły ratować braki.
-            full_coverage_allow_shift_change = True
+            full_coverage_allow_shift_change = False
             prune_resolved_unfilled_duties()
             fill_remaining_services_allowing_shift_changes()
 
